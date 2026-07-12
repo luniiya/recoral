@@ -24,7 +24,7 @@ import {
 	userStorageBytes
 } from "./recordings";
 import { getSettings, updateSettings } from "./settings";
-import { createTag, deleteTag, listTags, updateTag } from "./tags";
+import { createTag, deleteTagForever, listTags, purgeExpiredTagTrash, updateTag } from "./tags";
 
 const webDir = new URL("../../web/build/", import.meta.url);
 const MAX_AVATAR_LENGTH = 2_000_000; // ~1.5MB decoded, generous for a small profile picture
@@ -164,7 +164,9 @@ const server = Bun.serve({
 		"/api/tags": {
 			GET: (req) => {
 				try {
-					return Response.json(listTags(requireUser(req).id));
+					const user = requireUser(req);
+					purgeExpiredTagTrash();
+					return Response.json(listTags(user.id));
 				} catch {
 					return new Response(null, { status: 401 });
 				}
@@ -188,9 +190,10 @@ const server = Bun.serve({
 				try {
 					const user = requireUser(req);
 					const body = await req.json();
-					const updates: { name?: string; hue?: number } = {};
+					const updates: { name?: string; hue?: number; trashed?: boolean } = {};
 					if (typeof body.name === "string") updates.name = body.name;
 					if (typeof body.hue === "number") updates.hue = body.hue;
+					if (typeof body.trashed === "boolean") updates.trashed = body.trashed;
 					return Response.json(updateTag(user.id, req.params.id, updates));
 				} catch (err) {
 					if (err instanceof UnauthorizedError) return new Response(null, { status: 401 });
@@ -200,7 +203,7 @@ const server = Bun.serve({
 			DELETE: (req) => {
 				try {
 					const user = requireUser(req);
-					deleteTag(user.id, req.params.id);
+					deleteTagForever(user.id, req.params.id);
 					return new Response(null, { status: 204 });
 				} catch {
 					return new Response(null, { status: 401 });

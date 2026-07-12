@@ -96,7 +96,7 @@
 		</div>
 	</div>
 
-	<div class="flex flex-col gap-3 border-b border-gray-200 px-5 py-4 dark:border-white/10">
+	<div class="flex flex-col gap-3 px-5 py-4">
 		<div class="flex items-baseline justify-between gap-3">
 			<input
 				class="min-w-0 flex-1 truncate bg-transparent text-lg font-semibold text-gray-900 outline-none dark:text-gray-100"
@@ -105,7 +105,9 @@
 				onchange={(e) => recordingsStore.updateTitle(recording.id, e.currentTarget.value)}
 				aria-label="Recording title"
 			/>
-			<span class="shrink-0 text-xs text-gray-400">{formatDate(recording.createdAt)}</span>
+			{#if recording.title}
+				<span class="shrink-0 text-xs text-gray-400">{formatDate(recording.createdAt)}</span>
+			{/if}
 		</div>
 
 		<input
@@ -119,6 +121,7 @@
 		<div class="relative flex flex-wrap items-center gap-1.5">
 			<TagChips
 				tags={tagsStore.list.filter((t) => recording.tagIds.includes(t.id))}
+				allTags={tagsStore.list}
 				selected={recording.tagIds}
 				ontoggle={(tagId) => recordingsStore.toggleRecordingTag(recording.id, tagId)}
 			/>
@@ -138,6 +141,7 @@
 				<div class="card absolute top-full left-0 z-20 mt-1 w-56 p-3">
 					<TagChips
 						tags={tagsStore.list}
+						allTags={tagsStore.list}
 						selected={recording.tagIds}
 						ontoggle={(tagId) => recordingsStore.toggleRecordingTag(recording.id, tagId)}
 					/>
@@ -146,45 +150,49 @@
 		</div>
 	</div>
 
-	<div class="flex px-5">
-		<button
-			class="border-b-2 px-3 py-2.5 text-sm font-medium transition
-				{activeTab === 'audio'
-				? 'border-accent-500 text-accent-600 dark:text-accent-400'
-				: 'border-transparent text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'}"
-			onclick={() => (activeTab = 'audio')}
-		>
-			Audio
-		</button>
-		<button
-			class="border-b-2 px-3 py-2.5 text-sm font-medium transition
-				{activeTab === 'transcription'
-				? 'border-accent-500 text-accent-600 dark:text-accent-400'
-				: 'border-transparent text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'}"
-			onclick={() => (activeTab = 'transcription')}
-		>
-			Transcription
-		</button>
-	</div>
-
-	<div class="flex-1 overflow-y-auto px-5 py-8">
-		{#if activeTab === 'audio'}
-			<div class="flex h-full flex-col items-center justify-center gap-3 text-gray-300 dark:text-gray-600">
-				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" class="size-16">
-					<path
-						stroke-linecap="round"
-						d="M4 12h2l2-6 3 14 2-10 2 6h5"
-					/>
-				</svg>
+	<div class="mx-5 my-4 flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl bg-accent-50 dark:bg-accent-500/10">
+		<div class="flex justify-center pt-3">
+			<div class="inline-flex rounded-full bg-black/5 p-1 dark:bg-white/10">
+				<button
+					class="rounded-full px-4 py-1.5 text-sm font-medium transition
+						{activeTab === 'audio'
+						? 'bg-accent-500 text-white'
+						: 'text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white'}"
+					onclick={() => (activeTab = 'audio')}
+				>
+					Audio
+				</button>
+				<button
+					class="rounded-full px-4 py-1.5 text-sm font-medium transition
+						{activeTab === 'transcription'
+						? 'bg-accent-500 text-white'
+						: 'text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white'}"
+					onclick={() => (activeTab = 'transcription')}
+				>
+					Transcription
+				</button>
 			</div>
-		{:else if recording.transcript}
-			<p class="text-sm whitespace-pre-wrap text-gray-700 dark:text-gray-300">{recording.transcript}</p>
-		{:else}
-			<div class="flex h-full items-center justify-center text-sm text-gray-400">No transcription yet</div>
-		{/if}
+		</div>
+
+		<div class="flex-1 overflow-y-auto px-5 py-6">
+			{#if activeTab === 'audio'}
+				<div class="flex h-full flex-col items-center justify-center gap-3 text-gray-300 dark:text-gray-600">
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" class="size-16">
+						<path
+							stroke-linecap="round"
+							d="M4 12h2l2-6 3 14 2-10 2 6h5"
+						/>
+					</svg>
+				</div>
+			{:else if recording.transcript}
+				<p class="text-sm whitespace-pre-wrap text-gray-700 dark:text-gray-300">{recording.transcript}</p>
+			{:else}
+				<div class="flex h-full items-center justify-center text-sm text-gray-400">No transcription yet</div>
+			{/if}
+		</div>
 	</div>
 
-	<div class="border-t border-gray-200 px-5 py-4 dark:border-white/10">
+	<div class="px-5 py-4">
 		<AudioPlayer src={recordingsStore.audioUrl(recording.id)} />
 	</div>
 </div>

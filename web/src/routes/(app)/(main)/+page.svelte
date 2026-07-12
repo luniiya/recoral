@@ -1,6 +1,8 @@
 <script lang="ts">
 	import RecordingDetail from '$lib/components/RecordingDetail.svelte';
+	import TagChip from '$lib/components/TagChip.svelte';
 	import { recordingsStore } from '$lib/recordings.svelte';
+	import { parentTag } from '$lib/tagPath';
 	import { tagsStore } from '$lib/tags.svelte';
 
 	let isRecording = $state(false);
@@ -102,11 +104,7 @@
 					{#if isRecording}
 						<span class="size-4 rounded-sm bg-white"></span>
 					{:else}
-						<svg viewBox="0 0 24 24" fill="currentColor" class="size-6">
-							<path
-								d="M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-2.08A7 7 0 0 0 19 12h-2Z"
-							/>
-						</svg>
+						<span class="size-6 rounded-full bg-white"></span>
 					{/if}
 				</button>
 				<div class="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
@@ -141,16 +139,7 @@
 							{#if recording.tagIds.length > 0}
 								<div class="mt-2 flex flex-wrap gap-1">
 									{#each tagsStore.list.filter((t) => recording.tagIds.includes(t.id)) as tag (tag.id)}
-										<span
-											class="flex items-center gap-1 rounded-full py-0.5 pr-2 pl-1 text-[11px] font-medium text-gray-700 dark:text-gray-200"
-											style:background-color={`oklch(94% 0.045 ${tag.hue})`}
-										>
-											<span
-												class="size-1.5 shrink-0 rounded-full"
-												style:background-color={`oklch(60% 0.17 ${tag.hue})`}
-											></span>
-											{tag.name}
-										</span>
+										<TagChip {tag} interactive={false} parentHue={parentTag(tag, tagsStore.list)?.hue ?? null} />
 									{/each}
 								</div>
 							{/if}

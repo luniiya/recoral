@@ -45,9 +45,34 @@ db.run(`
 		name TEXT NOT NULL,
 		hue INTEGER NOT NULL,
 		created_at TEXT NOT NULL,
-		UNIQUE(user_id, name)
+		trashed_at TEXT
 	)
 `);
+
+// Older databases created `tags` with an inline UNIQUE(user_id, name), which
+// would block reusing a trashed tag's name for a new active tag. bun:sqlite
+// can't ALTER a constraint away, so rebuild the table without it the one time
+// it's found, then rely on the partial index below for active-only uniqueness.
+const tagsTableSql = db
+	.query<{ sql: string }, []>("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'tags'")
+	.get();
+if (tagsTableSql?.sql.includes("UNIQUE(user_id, name)")) {
+	db.run("ALTER TABLE tags RENAME TO tags_old");
+	db.run(`
+		CREATE TABLE tags (
+			id TEXT PRIMARY KEY,
+			user_id TEXT NOT NULL REFERENCES users(id),
+			name TEXT NOT NULL,
+			hue INTEGER NOT NULL,
+			created_at TEXT NOT NULL,
+			trashed_at TEXT
+		)
+	`);
+	db.run("INSERT INTO tags (id, user_id, name, hue, created_at) SELECT id, user_id, name, hue, created_at FROM tags_old");
+	db.run("DROP TABLE tags_old");
+}
+ensureColumn("tags", "trashed_at", "trashed_at TEXT");
+db.run("CREATE UNIQUE INDEX IF NOT EXISTS idx_tags_active_name ON tags(user_id, name) WHERE trashed_at IS NULL");
 
 db.run(`
 	CREATE TABLE IF NOT EXISTS settings (

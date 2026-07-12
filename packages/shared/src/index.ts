@@ -29,6 +29,7 @@ export interface Tag {
 	name: string;
 	hue: number;
 	createdAt: string;
+	trashedAt: string | null;
 }
 
 export interface Settings {

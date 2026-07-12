@@ -44,6 +44,7 @@
 			</div>
 			<TagChips
 				tags={tagsStore.list}
+				allTags={tagsStore.list}
 				selected={recordingsStore.selectedTagIds}
 				ontoggle={recordingsStore.toggleFilterTag}
 			/>

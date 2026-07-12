@@ -162,6 +162,15 @@ function daysLeft(recording: Recording) {
 	return Math.max(0, Math.ceil(TRASH_RETENTION_DAYS - elapsedDays));
 }
 
+// Non-trashed recordings only, so a tag's count reflects what's actually
+// browsable right now, not recordings sitting in the bin. Accepts multiple
+// tag ids so a parent tag's count can include its subtags without
+// double-counting a recording that carries both.
+function taggedCount(tagIds: string | string[]) {
+	const ids = Array.isArray(tagIds) ? tagIds : [tagIds];
+	return all.filter((r) => r.trashedAt === null && r.tagIds.some((id) => ids.includes(id))).length;
+}
+
 export const recordingsStore = {
 	get active() {
 		return active;
@@ -204,5 +213,6 @@ export const recordingsStore = {
 	trash,
 	restore,
 	deleteForever,
-	daysLeft
+	daysLeft,
+	taggedCount
 };
