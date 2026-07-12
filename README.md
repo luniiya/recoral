@@ -2,6 +2,8 @@
 
 Self-hostable voice recorder, a Google Recorder replacement, the vision is pretty much [Immich](https://github.com/immich-app/immich)'s architecture but for audio instead of photos.
 
+<img width="2256" height="1504" alt="image" src="https://github.com/user-attachments/assets/bca40b4c-ef9b-47ef-95f8-5eaf728b1ab8" />
+
 ## What it will do
 
 - Record audio on your phone or from the browser
