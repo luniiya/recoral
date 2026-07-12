@@ -2,6 +2,7 @@
 	import type { Recording } from '@recoral/shared';
 	import AudioPlayer from './AudioPlayer.svelte';
 	import TagChips from './TagChips.svelte';
+	import Waveform from './Waveform.svelte';
 	import { recordingsStore } from '$lib/recordings.svelte';
 	import { tagsStore } from '$lib/tags.svelte';
 
@@ -14,6 +15,9 @@
 
 	let activeTab = $state<'audio' | 'transcription'>('audio');
 	let tagPickerOpen = $state(false);
+	let playbackTime = $state(0);
+	let playbackPlaying = $state(false);
+	let playbackEl = $state<HTMLAudioElement | undefined>(undefined);
 
 	function formatDate(iso: string) {
 		return new Date(iso).toLocaleString(undefined, {
@@ -23,6 +27,27 @@
 			minute: '2-digit'
 		});
 	}
+
+	function downloadRecording() {
+		const a = document.createElement('a');
+		a.href = recordingsStore.audioUrl(recording.id);
+		a.download = (recording.title || formatDate(recording.createdAt)).replace(/[\\/:*?"<>|]/g, '_');
+		document.body.appendChild(a);
+		a.click();
+		a.remove();
+	}
+
+	$effect(() => {
+		function onKeydown(event: KeyboardEvent) {
+			if (!event.shiftKey || event.key.toLowerCase() !== 'd') return;
+			const target = event.target as HTMLElement;
+			if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return;
+			event.preventDefault();
+			downloadRecording();
+		}
+		window.addEventListener('keydown', onKeydown);
+		return () => window.removeEventListener('keydown', onKeydown);
+	});
 </script>
 
 <div class="flex h-full flex-col">
@@ -32,7 +57,7 @@
 			aria-label="Close"
 			onclick={onclose}
 		>
-			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="size-4.5">
+			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="size-4">
 				<path stroke-linecap="round" stroke-linejoin="round" d="M18 6 6 18M6 6l12 12" />
 			</svg>
 		</button>
@@ -56,6 +81,20 @@
 						stroke-linecap="round"
 						stroke-linejoin="round"
 						d="M11.48 3.499a.562.562 0 0 1 1.04 0l2.125 5.111a.563.563 0 0 0 .475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 0 0-.182.557l1.285 5.385a.562.562 0 0 1-.84.61l-4.725-2.885a.562.562 0 0 0-.586 0L6.982 20.54a.562.562 0 0 1-.84-.61l1.285-5.386a.562.562 0 0 0-.182-.557l-4.204-3.602a.562.562 0 0 1 .321-.988l5.518-.442a.563.563 0 0 0 .475-.345L11.48 3.5Z"
+					/>
+				</svg>
+			</button>
+			<button
+				class="flex size-8 items-center justify-center rounded-full text-gray-400 transition hover:bg-gray-100 hover:text-accent-600 dark:hover:bg-white/5"
+				aria-label="Download"
+				title="Download (Shift+D)"
+				onclick={downloadRecording}
+			>
+				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="size-4">
+					<path
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						d="M12 4v12m0 0 4-4m-4 4-4-4M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"
 					/>
 				</svg>
 			</button>
@@ -151,7 +190,24 @@
 	</div>
 
 	<div class="mx-5 my-4 flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl bg-accent-50 dark:bg-accent-500/10">
-		<div class="flex justify-center pt-3">
+		<div class="flex-1 overflow-y-auto px-5 py-6">
+			{#if activeTab === 'audio'}
+				<div class="flex h-full w-full items-center">
+					<Waveform
+						src={recordingsStore.audioUrl(recording.id)}
+						currentTime={playbackTime}
+						playing={playbackPlaying}
+						audioEl={playbackEl}
+					/>
+				</div>
+			{:else if recording.transcript}
+				<p class="text-sm whitespace-pre-wrap text-gray-700 dark:text-gray-300">{recording.transcript}</p>
+			{:else}
+				<div class="flex h-full items-center justify-center text-sm text-gray-400">No transcription yet</div>
+			{/if}
+		</div>
+
+		<div class="flex justify-center pb-3">
 			<div class="inline-flex rounded-full bg-black/5 p-1 dark:bg-white/10">
 				<button
 					class="rounded-full px-4 py-1.5 text-sm font-medium transition
@@ -173,26 +229,14 @@
 				</button>
 			</div>
 		</div>
-
-		<div class="flex-1 overflow-y-auto px-5 py-6">
-			{#if activeTab === 'audio'}
-				<div class="flex h-full flex-col items-center justify-center gap-3 text-gray-300 dark:text-gray-600">
-					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" class="size-16">
-						<path
-							stroke-linecap="round"
-							d="M4 12h2l2-6 3 14 2-10 2 6h5"
-						/>
-					</svg>
-				</div>
-			{:else if recording.transcript}
-				<p class="text-sm whitespace-pre-wrap text-gray-700 dark:text-gray-300">{recording.transcript}</p>
-			{:else}
-				<div class="flex h-full items-center justify-center text-sm text-gray-400">No transcription yet</div>
-			{/if}
-		</div>
 	</div>
 
 	<div class="px-5 py-4">
-		<AudioPlayer src={recordingsStore.audioUrl(recording.id)} />
+		<AudioPlayer
+			src={recordingsStore.audioUrl(recording.id)}
+			bind:currentTime={playbackTime}
+			bind:playing={playbackPlaying}
+			bind:audioEl={playbackEl}
+		/>
 	</div>
 </div>

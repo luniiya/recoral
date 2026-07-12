@@ -1,4 +1,5 @@
 <script lang="ts">
+	import LiveRecordingPanel from '$lib/components/LiveRecordingPanel.svelte';
 	import RecordingDetail from '$lib/components/RecordingDetail.svelte';
 	import TagChip from '$lib/components/TagChip.svelte';
 	import { recordingsStore } from '$lib/recordings.svelte';
@@ -8,6 +9,8 @@
 	let isRecording = $state(false);
 	let elapsedSeconds = $state(0);
 	let selectedId = $state<string | null>(null);
+	let recordingStream = $state<MediaStream | null>(null);
+	let savingRecording = $state(false);
 
 	let mediaRecorder: MediaRecorder | null = null;
 	let chunks: Blob[] = [];
@@ -45,7 +48,9 @@
 	}
 
 	async function startRecording() {
+		selectedId = null;
 		const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+		recordingStream = stream;
 		chunks = [];
 		mediaRecorder = new MediaRecorder(stream);
 
@@ -53,13 +58,18 @@
 			if (event.data.size > 0) chunks.push(event.data);
 		};
 
-		mediaRecorder.onstop = () => {
+		mediaRecorder.onstop = async () => {
 			const blob = new Blob(chunks, { type: mediaRecorder?.mimeType ?? 'audio/webm' });
 			const durationSeconds = (Date.now() - recordingStart) / 1000;
 
-			recordingsStore.addRecording(blob, '', durationSeconds);
-
 			for (const track of stream.getTracks()) track.stop();
+			recordingStream = null;
+			savingRecording = true;
+
+			const recording = await recordingsStore.addRecording(blob, '', durationSeconds);
+
+			savingRecording = false;
+			if (recording) selectedId = recording.id;
 		};
 
 		recordingStart = Date.now();
@@ -89,7 +99,9 @@
 
 <div class="flex h-full">
 	<div
-		class="h-full overflow-y-auto transition-[width] duration-300 {selectedRecording
+		class="h-full overflow-y-auto transition-[width] duration-300 {selectedRecording ||
+		isRecording ||
+		savingRecording
 			? 'w-[26rem] shrink-0'
 			: 'w-full'}"
 	>
@@ -154,7 +166,16 @@
 		</div>
 	</div>
 
-	{#if selectedRecording}
+	{#if isRecording || savingRecording}
+		<div class="min-w-0 flex-1 border-l border-gray-200 dark:border-white/10">
+			<LiveRecordingPanel
+				stream={recordingStream}
+				{elapsedSeconds}
+				saving={savingRecording}
+				onStop={stopRecording}
+			/>
+		</div>
+	{:else if selectedRecording}
 		<div class="min-w-0 flex-1 border-l border-gray-200 dark:border-white/10">
 			<RecordingDetail recording={selectedRecording} onclose={() => (selectedId = null)} />
 		</div>

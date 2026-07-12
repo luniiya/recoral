@@ -2,6 +2,7 @@
 	import '../app.css';
 	import { auth } from '$lib/auth.svelte';
 	import { themeStore } from '$lib/theme.svelte';
+	import { wavySeekStore } from '$lib/wavySeek.svelte';
 	import { onMount } from 'svelte';
 
 	let { children } = $props();
@@ -9,6 +10,7 @@
 	onMount(() => {
 		auth.refresh();
 		themeStore.init();
+		wavySeekStore.init();
 
 		if ('serviceWorker' in navigator) {
 			navigator.serviceWorker.register('/service-worker.js');

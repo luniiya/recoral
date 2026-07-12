@@ -2,6 +2,8 @@
 	import { auth } from '$lib/auth.svelte';
 	import Avatar from '$lib/components/Avatar.svelte';
 	import ColorPicker from '$lib/components/ColorPicker.svelte';
+	import Toggle from '$lib/components/Toggle.svelte';
+	import { wavySeekStore } from '$lib/wavySeek.svelte';
 
 	let saving = $state(false);
 	let error = $state('');
@@ -81,10 +83,23 @@
 		{/if}
 	</div>
 
-	<div class="card p-6">
+	<div class="card mb-6 p-6">
 		<h2 class="mb-1 text-sm font-semibold text-gray-900 dark:text-gray-100">Accent color</h2>
 		<p class="mb-4 text-sm text-gray-500 dark:text-gray-400">Applies across the whole app, on every device.</p>
 		<ColorPicker value={auth.user.accentHue} onselect={onHueSelected} />
+	</div>
+
+	<div class="card p-6">
+		<h2 class="mb-4 text-sm font-semibold text-gray-900 dark:text-gray-100">Appearance</h2>
+		<div class="flex items-center justify-between gap-4">
+			<div>
+				<p class="text-sm text-gray-900 dark:text-gray-100">Wavy playback indicator</p>
+				<p class="text-sm text-gray-500 dark:text-gray-400">
+					Wobble the seek bar's played portion while audio is playing.
+				</p>
+			</div>
+			<Toggle checked={wavySeekStore.enabled} onchange={(checked) => wavySeekStore.set(checked)} />
+		</div>
 	</div>
 
 	{#if error}
