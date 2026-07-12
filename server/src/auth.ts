@@ -2,16 +2,27 @@ import type { User } from "@recoral/shared";
 import { db } from "./db";
 
 const SESSION_COOKIE = "recoral_session";
+const DEFAULT_ACCENT_HUE = 26;
 
 interface UserRow {
 	id: string;
-	email: string;
+	username: string;
+	email: string | null;
 	password_hash: string;
 	created_at: string;
+	accent_hue: number;
+	avatar: string | null;
 }
 
 function toUser(row: UserRow): User {
-	return { id: row.id, email: row.email, createdAt: row.created_at };
+	return {
+		id: row.id,
+		username: row.username,
+		email: row.email,
+		createdAt: row.created_at,
+		accentHue: row.accent_hue,
+		avatar: row.avatar
+	};
 }
 
 export function parseCookies(header: string | null): Record<string, string> {
@@ -48,32 +59,66 @@ export function userFromRequest(req: Request): User | null {
 	return row ? toUser(row) : null;
 }
 
-export async function register(email: string, password: string): Promise<{ user: User; token: string }> {
-	const existing = db.query<{ id: string }, [string]>("SELECT id FROM users WHERE email = ?").get(email);
-	if (existing) throw new Error("An account with that email already exists");
+export async function register(
+	username: string,
+	password: string,
+	email: string | null,
+	accentHue = DEFAULT_ACCENT_HUE
+): Promise<{ user: User; token: string }> {
+	if (!username) throw new Error("Username is required");
+
+	const existingUsername = db
+		.query<{ id: string }, [string]>("SELECT id FROM users WHERE username = ?")
+		.get(username);
+	if (existingUsername) throw new Error("That username is already taken");
+
+	if (email) {
+		const existingEmail = db.query<{ id: string }, [string]>("SELECT id FROM users WHERE email = ?").get(email);
+		if (existingEmail) throw new Error("An account with that email already exists");
+	}
 
 	const id = crypto.randomUUID();
 	const createdAt = new Date().toISOString();
 	const passwordHash = await Bun.password.hash(password);
+	const hue = Math.round(((accentHue % 360) + 360) % 360);
 
-	db.run("INSERT INTO users (id, email, password_hash, created_at) VALUES (?, ?, ?, ?)", [
-		id,
-		email,
-		passwordHash,
-		createdAt
-	]);
+	db.run(
+		"INSERT INTO users (id, username, email, password_hash, created_at, accent_hue) VALUES (?, ?, ?, ?, ?, ?)",
+		[id, username, email, passwordHash, createdAt, hue]
+	);
 
-	return startSession({ id, email, createdAt } satisfies User);
+	return startSession({ id, username, email, createdAt, accentHue: hue, avatar: null } satisfies User);
 }
 
-export async function login(email: string, password: string): Promise<{ user: User; token: string }> {
-	const row = db.query<UserRow, [string]>("SELECT * FROM users WHERE email = ?").get(email);
-	if (!row) throw new Error("Invalid email or password");
+export async function login(identifier: string, password: string): Promise<{ user: User; token: string }> {
+	const row = db
+		.query<UserRow, [string, string]>("SELECT * FROM users WHERE username = ? OR email = ?")
+		.get(identifier, identifier);
+	if (!row) throw new Error("Invalid username/email or password");
 
 	const valid = await Bun.password.verify(password, row.password_hash);
-	if (!valid) throw new Error("Invalid email or password");
+	if (!valid) throw new Error("Invalid username/email or password");
 
 	return startSession(toUser(row));
+}
+
+export function updateAccount(userId: string, updates: { accentHue?: number; avatar?: string | null }): User {
+	if (updates.accentHue !== undefined) {
+		const hue = Math.round(((updates.accentHue % 360) + 360) % 360);
+		db.run("UPDATE users SET accent_hue = ? WHERE id = ?", [hue, userId]);
+	}
+	if (updates.avatar !== undefined) {
+		db.run("UPDATE users SET avatar = ? WHERE id = ?", [updates.avatar, userId]);
+	}
+
+	const row = db.query<UserRow, [string]>("SELECT * FROM users WHERE id = ?").get(userId);
+	if (!row) throw new Error("User not found");
+	return toUser(row);
+}
+
+export function listUsers(): User[] {
+	const rows = db.query<UserRow, []>("SELECT * FROM users ORDER BY created_at").all();
+	return rows.map(toUser);
 }
 
 function startSession(user: User) {

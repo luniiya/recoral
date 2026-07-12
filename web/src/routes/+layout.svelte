@@ -9,6 +9,10 @@
 	onMount(() => {
 		auth.refresh();
 		themeStore.init();
+
+		if ('serviceWorker' in navigator) {
+			navigator.serviceWorker.register('/service-worker.js');
+		}
 	});
 </script>
 

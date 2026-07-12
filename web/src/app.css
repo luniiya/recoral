@@ -3,12 +3,14 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
-	--color-coral-50: oklch(97% 0.02 28);
-	--color-coral-100: oklch(93% 0.05 28);
-	--color-coral-400: oklch(75% 0.15 27);
-	--color-coral-500: oklch(69% 0.17 26);
-	--color-coral-600: oklch(60% 0.17 25);
-	--color-coral-700: oklch(50% 0.16 24);
+	/* resolved through --accent-* custom properties (see :root) so a user's
+	   chosen accent hue can be swapped at runtime without recompiling CSS */
+	--color-accent-50: var(--accent-50);
+	--color-accent-100: var(--accent-100);
+	--color-accent-400: var(--accent-400);
+	--color-accent-500: var(--accent-500);
+	--color-accent-600: var(--accent-600);
+	--color-accent-700: var(--accent-700);
 }
 
 @layer base {
@@ -19,6 +21,12 @@
 
 	:root {
 		color-scheme: light;
+		--accent-50: oklch(97% 0.02 26);
+		--accent-100: oklch(93% 0.05 26);
+		--accent-400: oklch(75% 0.15 26);
+		--accent-500: oklch(69% 0.17 26);
+		--accent-600: oklch(60% 0.17 26);
+		--accent-700: oklch(50% 0.16 26);
 	}
 
 	:root.dark {
@@ -31,7 +39,7 @@
 }
 
 @utility form-input {
-	@apply flex w-full items-center rounded-lg bg-gray-100 px-3.5 py-2.5 text-sm text-gray-900 outline-none ring-1 ring-gray-200 transition focus-within:ring-2 focus-within:ring-coral-500 dark:bg-white/5 dark:text-gray-100 dark:ring-white/10;
+	@apply flex w-full items-center rounded-lg bg-gray-100 px-3.5 py-2.5 text-sm text-gray-900 outline-none ring-1 ring-gray-200 transition focus-within:ring-2 focus-within:ring-accent-500 dark:bg-white/5 dark:text-gray-100 dark:ring-white/10;
 }
 
 @utility form-label {

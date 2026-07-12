@@ -1,11 +1,16 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
+	import { applyAccentHue } from '$lib/accent';
 	import { auth } from '$lib/auth.svelte';
+	import ColorPicker from '$lib/components/ColorPicker.svelte';
 	import ThemeToggle from '$lib/components/ThemeToggle.svelte';
 
 	let mode = $state<'login' | 'register'>('login');
+	let identifier = $state('');
+	let username = $state('');
 	let email = $state('');
 	let password = $state('');
+	let accentHue = $state(26);
 	let error = $state('');
 	let submitting = $state(false);
 
@@ -13,13 +18,17 @@
 		if (auth.user) goto('/');
 	});
 
+	$effect(() => {
+		if (mode === 'register') applyAccentHue(accentHue);
+	});
+
 	async function submit(event: SubmitEvent) {
 		event.preventDefault();
 		error = '';
 		submitting = true;
 		try {
-			if (mode === 'login') await auth.login(email, password);
-			else await auth.register(email, password);
+			if (mode === 'login') await auth.login(identifier, password);
+			else await auth.register(username, password, email, accentHue);
 			goto('/');
 		} catch (err) {
 			error = (err as Error).message;
@@ -49,16 +58,30 @@
 				</p>
 			{/if}
 
-			<label class="flex flex-col gap-1.5">
-				<span class="form-label">Email</span>
-				<input
-					class="form-input"
-					type="email"
-					bind:value={email}
-					required
-					autocomplete="email"
-				/>
-			</label>
+			{#if mode === 'login'}
+				<label class="flex flex-col gap-1.5">
+					<span class="form-label">Username or email</span>
+					<input class="form-input" bind:value={identifier} required autocomplete="username" />
+				</label>
+			{:else}
+				<label class="flex flex-col gap-1.5">
+					<span class="form-label">Username</span>
+					<input
+						class="form-input"
+						bind:value={username}
+						required
+						minlength="3"
+						maxlength="32"
+						pattern="[a-zA-Z0-9_.-]+"
+						autocomplete="username"
+					/>
+				</label>
+
+				<label class="flex flex-col gap-1.5">
+					<span class="form-label">Email <span class="text-gray-400">(optional)</span></span>
+					<input class="form-input" type="email" bind:value={email} autocomplete="email" />
+				</label>
+			{/if}
 
 			<label class="flex flex-col gap-1.5">
 				<span class="form-label">Password</span>
@@ -67,14 +90,21 @@
 					type="password"
 					bind:value={password}
 					required
-					autocomplete="current-password"
+					autocomplete={mode === 'login' ? 'current-password' : 'new-password'}
 				/>
 			</label>
+
+			{#if mode === 'register'}
+				<div class="flex flex-col gap-1.5">
+					<span class="form-label">Accent color</span>
+					<ColorPicker value={accentHue} onselect={(hue) => (accentHue = hue)} />
+				</div>
+			{/if}
 
 			<button
 				type="submit"
 				disabled={submitting}
-				class="mt-2 rounded-full bg-coral-500 py-2.5 text-sm font-semibold text-white transition hover:bg-coral-600 disabled:opacity-60"
+				class="mt-2 rounded-full bg-accent-500 py-2.5 text-sm font-semibold text-white transition hover:bg-accent-600 disabled:opacity-60"
 			>
 				{mode === 'login' ? 'Log in' : 'Create account'}
 			</button>
@@ -82,7 +112,7 @@
 
 		<button
 			type="button"
-			class="mt-6 w-full text-center text-sm text-coral-600 hover:underline dark:text-coral-400"
+			class="mt-6 w-full text-center text-sm text-accent-600 hover:underline dark:text-accent-400"
 			onclick={() => (mode = mode === 'login' ? 'register' : 'login')}
 		>
 			{mode === 'login' ? "Don't have an account? Sign up" : 'Already have an account? Log in'}
