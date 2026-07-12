@@ -1,3 +1,5 @@
+export const APP_VERSION = "0.1.0";
+
 export interface Recording {
 	id: string;
 	title: string;
@@ -14,6 +16,8 @@ export interface User {
 	createdAt: string;
 	accentHue: number;
 	avatar: string | null;
+	isAdmin: boolean;
+	storageLimitMb: number | null;
 }
 
 export interface Tag {
@@ -21,4 +25,9 @@ export interface Tag {
 	name: string;
 	hue: number;
 	createdAt: string;
+}
+
+export interface Settings {
+	defaultAccentHue: number | null;
+	signupEnabled: boolean;
 }

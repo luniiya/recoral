@@ -12,14 +12,14 @@
 	let open = $state(false);
 </script>
 
-<div class="grid grid-cols-4 gap-3 sm:grid-cols-9">
+<div class="grid grid-cols-9 gap-1.5">
 	{#each ACCENT_PRESETS as preset (preset.hue)}
 		<button
 			type="button"
 			title={preset.name}
 			aria-label={preset.name}
 			aria-pressed={value === preset.hue}
-			class="size-9 rounded-full transition dark:ring-offset-neutral-900"
+			class="aspect-square w-full min-w-0 rounded-full transition dark:ring-offset-neutral-900"
 			class:ring-2={value === preset.hue}
 			class:ring-offset-2={value === preset.hue}
 			class:ring-gray-400={value === preset.hue}
@@ -28,19 +28,19 @@
 		></button>
 	{/each}
 
-	<div class="relative">
+	<div class="relative aspect-square w-full min-w-0">
 		<button
 			type="button"
 			title="Custom color"
 			aria-label="Custom color"
 			aria-pressed={!isPreset}
-			class="flex size-9 items-center justify-center rounded-full bg-gray-200 text-gray-500 transition dark:bg-white/10 dark:text-gray-400 dark:ring-offset-neutral-900"
+			class="flex size-full items-center justify-center rounded-full bg-gray-200 text-gray-500 transition dark:bg-white/10 dark:text-gray-400 dark:ring-offset-neutral-900"
 			class:ring-2={!isPreset}
 			class:ring-offset-2={!isPreset}
 			class:ring-gray-400={!isPreset}
 			onclick={() => (open = !open)}
 		>
-			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="size-4">
+			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="size-1/2">
 				<path
 					stroke-linecap="round"
 					stroke-linejoin="round"

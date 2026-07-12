@@ -13,7 +13,7 @@
 	let recordingStart = 0;
 
 	let visibleRecordings = $derived(
-		recordingsStore.list.filter((r) => {
+		recordingsStore.active.filter((r) => {
 			const query = recordingsStore.search.trim().toLowerCase();
 			const matchesQuery =
 				!query || r.title.toLowerCase().includes(query) || r.description.toLowerCase().includes(query);
@@ -55,7 +55,7 @@
 			const durationSeconds = (Date.now() - recordingStart) / 1000;
 
 			recordingsStore.add({
-				title: `Recording ${recordingsStore.list.length + 1}`,
+				title: `Recording ${recordingsStore.active.length + 1}`,
 				description: '',
 				url,
 				createdAt: new Date(),
@@ -85,6 +85,10 @@
 		else startRecording();
 	}
 </script>
+
+<svelte:head>
+	<title>recoral</title>
+</svelte:head>
 
 <div class="flex flex-col items-center gap-3 pb-10">
 	<button
@@ -121,6 +125,20 @@
 					aria-label="Recording title"
 				/>
 				<span class="shrink-0 text-xs tabular-nums text-gray-400">{formatDuration(recording.durationSeconds)}</span>
+				<button
+					class="flex size-6 shrink-0 items-center justify-center rounded-full text-gray-400 transition hover:bg-gray-100 hover:text-red-500 dark:hover:bg-white/5"
+					aria-label="Move to bin"
+					title="Move to bin"
+					onclick={() => recordingsStore.trash(recording.id)}
+				>
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="size-3.5">
+						<path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							d="M4 7h16M9 7V4h6v3m-8 0 .8 12.4a2 2 0 0 0 2 1.6h4.4a2 2 0 0 0 2-1.6L18 7"
+						/>
+					</svg>
+				</button>
 			</div>
 			<p class="mb-2 text-xs text-gray-400">{formatTimestamp(recording.createdAt)}</p>
 			<input
@@ -162,7 +180,7 @@
 		</li>
 	{:else}
 		<li class="card border-dashed p-8 text-center text-sm text-gray-400">
-			{recordingsStore.list.length > 0 ? 'No recordings match your search' : 'No recordings yet'}
+			{recordingsStore.active.length > 0 ? 'No recordings match your search' : 'No recordings yet'}
 		</li>
 	{/each}
 </ul>

@@ -1,16 +1,19 @@
 <script lang="ts">
+	import type { Settings } from '@recoral/shared';
 	import { goto } from '$app/navigation';
 	import { applyAccentHue } from '$lib/accent';
 	import { auth } from '$lib/auth.svelte';
 	import ColorPicker from '$lib/components/ColorPicker.svelte';
 	import ThemeToggle from '$lib/components/ThemeToggle.svelte';
+	import { onMount } from 'svelte';
 
 	let mode = $state<'login' | 'register'>('login');
 	let identifier = $state('');
 	let username = $state('');
 	let email = $state('');
 	let password = $state('');
-	let accentHue = $state(26);
+	let accentHue = $state(Math.floor(Math.random() * 360));
+	let signupEnabled = $state(true);
 	let error = $state('');
 	let submitting = $state(false);
 
@@ -18,8 +21,20 @@
 		if (auth.user) goto('/');
 	});
 
+	// Random accent while logged out unless the admin pinned a fixed one, previewed
+	// live once you're picking your own at signup. The moment auth succeeds, auth.svelte
+	// applies the account's own saved hue instead.
 	$effect(() => {
-		if (mode === 'register') applyAccentHue(accentHue);
+		applyAccentHue(accentHue);
+	});
+
+	onMount(async () => {
+		const res = await fetch('/api/settings');
+		if (!res.ok) return;
+		const settings: Settings = await res.json();
+		signupEnabled = settings.signupEnabled;
+		if (settings.defaultAccentHue !== null) accentHue = settings.defaultAccentHue;
+		if (!signupEnabled) mode = 'login';
 	});
 
 	async function submit(event: SubmitEvent) {
@@ -110,12 +125,14 @@
 			</button>
 		</form>
 
-		<button
-			type="button"
-			class="mt-6 w-full text-center text-sm text-accent-600 hover:underline dark:text-accent-400"
-			onclick={() => (mode = mode === 'login' ? 'register' : 'login')}
-		>
-			{mode === 'login' ? "Don't have an account? Sign up" : 'Already have an account? Log in'}
-		</button>
+		{#if signupEnabled}
+			<button
+				type="button"
+				class="mt-6 w-full text-center text-sm text-accent-600 hover:underline dark:text-accent-400"
+				onclick={() => (mode = mode === 'login' ? 'register' : 'login')}
+			>
+				{mode === 'login' ? "Don't have an account? Sign up" : 'Already have an account? Log in'}
+			</button>
+		{/if}
 	</div>
 </section>

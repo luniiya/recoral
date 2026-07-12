@@ -43,6 +43,31 @@ export function createTag(userId: string, name: string, hue: number): Tag {
 	return { id, name: trimmed, hue: normalizedHue, createdAt };
 }
 
+export function updateTag(userId: string, tagId: string, updates: { name?: string; hue?: number }): Tag {
+	const existing = db
+		.query<TagRow, [string, string]>("SELECT id, name, hue, created_at FROM tags WHERE id = ? AND user_id = ?")
+		.get(tagId, userId);
+	if (!existing) throw new Error("Tag not found");
+
+	let name = existing.name;
+	if (updates.name !== undefined) {
+		name = updates.name.trim();
+		if (!name) throw new Error("Tag name is required");
+
+		const clash = db
+			.query<{ id: string }, [string, string, string]>(
+				"SELECT id FROM tags WHERE user_id = ? AND name = ? AND id != ?"
+			)
+			.get(userId, name, tagId);
+		if (clash) throw new Error("A tag with that name already exists");
+	}
+
+	const hue = updates.hue !== undefined ? Math.round(((updates.hue % 360) + 360) % 360) : existing.hue;
+
+	db.run("UPDATE tags SET name = ?, hue = ? WHERE id = ?", [name, hue, tagId]);
+	return { id: tagId, name, hue, createdAt: existing.created_at };
+}
+
 export function deleteTag(userId: string, tagId: string) {
 	db.run("DELETE FROM tags WHERE id = ? AND user_id = ?", [tagId, userId]);
 }

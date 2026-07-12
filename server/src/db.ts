@@ -27,6 +27,8 @@ function ensureColumn(table: string, column: string, ddl: string) {
 }
 ensureColumn("users", "accent_hue", "accent_hue INTEGER NOT NULL DEFAULT 26");
 ensureColumn("users", "avatar", "avatar TEXT");
+ensureColumn("users", "is_admin", "is_admin INTEGER NOT NULL DEFAULT 0");
+ensureColumn("users", "storage_limit_mb", "storage_limit_mb INTEGER");
 
 db.run(`
 	CREATE TABLE IF NOT EXISTS sessions (
@@ -46,3 +48,12 @@ db.run(`
 		UNIQUE(user_id, name)
 	)
 `);
+
+db.run(`
+	CREATE TABLE IF NOT EXISTS settings (
+		id INTEGER PRIMARY KEY CHECK (id = 1),
+		default_accent_hue INTEGER,
+		signup_enabled INTEGER NOT NULL DEFAULT 1
+	)
+`);
+db.run("INSERT OR IGNORE INTO settings (id, default_accent_hue, signup_enabled) VALUES (1, NULL, 1)");

@@ -12,6 +12,7 @@ interface UserRow {
 	created_at: string;
 	accent_hue: number;
 	avatar: string | null;
+	is_admin: number;
 }
 
 function toUser(row: UserRow): User {
@@ -21,7 +22,8 @@ function toUser(row: UserRow): User {
 		email: row.email,
 		createdAt: row.created_at,
 		accentHue: row.accent_hue,
-		avatar: row.avatar
+		avatar: row.avatar,
+		isAdmin: row.is_admin === 1
 	};
 }
 
@@ -77,17 +79,28 @@ export async function register(
 		if (existingEmail) throw new Error("An account with that email already exists");
 	}
 
+	const { count } = db.query<{ count: number }, []>("SELECT COUNT(*) as count FROM users").get()!;
+	const isFirstUser = count === 0;
+
 	const id = crypto.randomUUID();
 	const createdAt = new Date().toISOString();
 	const passwordHash = await Bun.password.hash(password);
 	const hue = Math.round(((accentHue % 360) + 360) % 360);
 
 	db.run(
-		"INSERT INTO users (id, username, email, password_hash, created_at, accent_hue) VALUES (?, ?, ?, ?, ?, ?)",
-		[id, username, email, passwordHash, createdAt, hue]
+		"INSERT INTO users (id, username, email, password_hash, created_at, accent_hue, is_admin) VALUES (?, ?, ?, ?, ?, ?, ?)",
+		[id, username, email, passwordHash, createdAt, hue, isFirstUser ? 1 : 0]
 	);
 
-	return startSession({ id, username, email, createdAt, accentHue: hue, avatar: null } satisfies User);
+	return startSession({
+		id,
+		username,
+		email,
+		createdAt,
+		accentHue: hue,
+		avatar: null,
+		isAdmin: isFirstUser
+	} satisfies User);
 }
 
 export async function login(identifier: string, password: string): Promise<{ user: User; token: string }> {
@@ -111,6 +124,13 @@ export function updateAccount(userId: string, updates: { accentHue?: number; ava
 		db.run("UPDATE users SET avatar = ? WHERE id = ?", [updates.avatar, userId]);
 	}
 
+	const row = db.query<UserRow, [string]>("SELECT * FROM users WHERE id = ?").get(userId);
+	if (!row) throw new Error("User not found");
+	return toUser(row);
+}
+
+export function setAdmin(userId: string, isAdmin: boolean): User {
+	db.run("UPDATE users SET is_admin = ? WHERE id = ?", [isAdmin ? 1 : 0, userId]);
 	const row = db.query<UserRow, [string]>("SELECT * FROM users WHERE id = ?").get(userId);
 	if (!row) throw new Error("User not found");
 	return toUser(row);

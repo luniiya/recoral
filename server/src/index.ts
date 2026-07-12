@@ -6,10 +6,12 @@ import {
 	login,
 	register,
 	sessionCookie,
+	setAdmin,
 	updateAccount,
 	userFromRequest
 } from "./auth";
-import { createTag, deleteTag, listTags } from "./tags";
+import { getSettings, updateSettings } from "./settings";
+import { createTag, deleteTag, listTags, updateTag } from "./tags";
 
 const webDir = new URL("../../web/build/", import.meta.url);
 const MAX_AVATAR_LENGTH = 2_000_000; // ~1.5MB decoded, generous for a small profile picture
@@ -45,7 +47,20 @@ function requireUser(req: Request) {
 	return user;
 }
 
+function requireAdmin(req: Request) {
+	const user = requireUser(req);
+	if (!user.isAdmin) throw new ForbiddenError();
+	return user;
+}
+
 class UnauthorizedError extends Error {}
+class ForbiddenError extends Error {}
+
+function authErrorResponse(err: unknown) {
+	if (err instanceof ForbiddenError) return new Response(null, { status: 403 });
+	if (err instanceof UnauthorizedError) return new Response(null, { status: 401 });
+	return null;
+}
 
 const server = Bun.serve({
 	port: 3000,
@@ -55,6 +70,9 @@ const server = Bun.serve({
 		"/api/auth/register": {
 			POST: async (req) => {
 				try {
+					if (!getSettings().signupEnabled) {
+						return Response.json({ error: "Sign ups are currently disabled" }, { status: 403 });
+					}
 					const { username, email, password, accentHue } = await readRegisterBody(req);
 					const { user, token } = await register(username, password, email, accentHue);
 					return Response.json(user, { headers: { "Set-Cookie": sessionCookie(token) } });
@@ -135,6 +153,19 @@ const server = Bun.serve({
 		},
 
 		"/api/tags/:id": {
+			PATCH: async (req) => {
+				try {
+					const user = requireUser(req);
+					const body = await req.json();
+					const updates: { name?: string; hue?: number } = {};
+					if (typeof body.name === "string") updates.name = body.name;
+					if (typeof body.hue === "number") updates.hue = body.hue;
+					return Response.json(updateTag(user.id, req.params.id, updates));
+				} catch (err) {
+					if (err instanceof UnauthorizedError) return new Response(null, { status: 401 });
+					return Response.json({ error: (err as Error).message }, { status: 400 });
+				}
+			},
 			DELETE: (req) => {
 				try {
 					const user = requireUser(req);
@@ -147,9 +178,51 @@ const server = Bun.serve({
 		},
 
 		"/api/admin/users": (req) => {
-			const user = userFromRequest(req);
-			if (!user) return new Response(null, { status: 401 });
-			return Response.json(listUsers());
+			try {
+				requireAdmin(req);
+				return Response.json(listUsers());
+			} catch (err) {
+				return authErrorResponse(err) ?? new Response(null, { status: 401 });
+			}
+		},
+
+		"/api/admin/users/:id": {
+			PATCH: async (req) => {
+				try {
+					const admin = requireAdmin(req);
+					const body = await req.json();
+					if (typeof body.isAdmin !== "boolean") {
+						return Response.json({ error: "isAdmin must be a boolean" }, { status: 400 });
+					}
+					if (req.params.id === admin.id && body.isAdmin === false) {
+						return Response.json({ error: "You can't remove your own admin access" }, { status: 400 });
+					}
+					return Response.json(setAdmin(req.params.id, body.isAdmin));
+				} catch (err) {
+					return authErrorResponse(err) ?? new Response(null, { status: 401 });
+				}
+			}
+		},
+
+		"/api/settings": () => Response.json(getSettings()),
+
+		"/api/admin/settings": {
+			PATCH: async (req) => {
+				try {
+					requireAdmin(req);
+					const body = await req.json();
+					const updates: { defaultAccentHue?: number | null; signupEnabled?: boolean } = {};
+
+					if (body.defaultAccentHue === null || typeof body.defaultAccentHue === "number") {
+						updates.defaultAccentHue = body.defaultAccentHue;
+					}
+					if (typeof body.signupEnabled === "boolean") updates.signupEnabled = body.signupEnabled;
+
+					return Response.json(updateSettings(updates));
+				} catch (err) {
+					return authErrorResponse(err) ?? new Response(null, { status: 401 });
+				}
+			}
 		},
 
 		"/api/recordings": (req) => {

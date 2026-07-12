@@ -22,6 +22,19 @@ async function create(name: string, hue: number): Promise<Tag> {
 	return body;
 }
 
+async function update(id: string, updates: { name?: string; hue?: number }): Promise<Tag> {
+	const res = await fetch(`/api/tags/${id}`, {
+		method: 'PATCH',
+		headers: { 'Content-Type': 'application/json' },
+		credentials: 'include',
+		body: JSON.stringify(updates)
+	});
+	const body = await res.json();
+	if (!res.ok) throw new Error(body.error ?? 'Something went wrong');
+	list = list.map((t) => (t.id === id ? body : t)).sort((a, b) => a.name.localeCompare(b.name));
+	return body;
+}
+
 async function remove(id: string) {
 	list = list.filter((t) => t.id !== id);
 	await fetch(`/api/tags/${id}`, { method: 'DELETE', credentials: 'include' });
@@ -36,5 +49,6 @@ export const tagsStore = {
 	},
 	load,
 	create,
+	update,
 	remove
 };

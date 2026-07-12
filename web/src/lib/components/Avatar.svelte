@@ -12,7 +12,7 @@
 	{#if avatar}
 		<img src={avatar} alt={name} class="size-full object-cover" />
 	{:else}
-		<span class="flex size-full items-center justify-center font-medium uppercase">
+		<span class="flex size-full items-center justify-center text-center leading-none font-medium uppercase">
 			{name[0] ?? '?'}
 		</span>
 	{/if}

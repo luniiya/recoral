@@ -12,7 +12,9 @@
 
 ## Accounts / auth
 
-- [ ] Account system on the server (signup, login, sessions/tokens)
+- [x] Account system on the server (signup, login, sessions/tokens). Username required, email optional, login works with either. Per-user accent color (custom hue picker), avatar upload.
+- [x] Admin page (`/admin`, reachable via avatar menu): server status, registered users list, "allow sign ups" toggle, and an optional fixed accent color for the logged-out login page (random per visit by default).
+- [ ] Real admin/role concept. Right now `/api/admin/*` just requires *any* logged-in user, there's no actual admin flag, fine for a single-person instance, not fine the moment there's more than one real account.
 - [ ] Server picker + login screen on mobile first launch (Immich-style)
 - [ ] "Go offline" option on first launch, skips server/account entirely
 
@@ -25,9 +27,19 @@
 
 ## Recording
 
-- [ ] Web/browser mic recording (desktop webUI)
+- [x] Web/browser mic recording (desktop webUI), plus importing existing audio files (mp3 etc.)
+- [ ] Recordings are still client-memory-only, nothing persists to the server yet. Needs a `recordings` table + upload endpoint before any of this survives a refresh or syncs across devices.
 - [ ] Native mic recording on mobile via `capacitor-audio-recorder`
 - [ ] Background recording support (Android foreground service, iOS Background Modes)
+
+## Tags
+
+- [x] Tags: name + configurable color, full CRUD (create/rename/recolor/delete), assignable per recording, filterable from the header
+- [ ] **Subtags idea** (brainstormed, not built): let a tag name itself encode hierarchy, e.g. `voiceacting/certainvoice` instead of a flat `certainvoice`. Recommendation from that discussion:
+  - Don't add a schema change (no `parent_id` column) yet. Keep `name` a plain string and just allow `/` in it, same `tags` table as today.
+  - UI parses the `/` client-side to render hierarchy: an indented tree on the Tags page, breadcrumb-style chips elsewhere (`voiceacting › certainvoice`), grouping headers, etc. Purely presentational, no new API shape.
+  - Cheap and reversible. If it turns out real hierarchy is needed (rename a parent and cascade to children, move a subtree, etc.), migrate to a proper `parent_id` self-reference then, not before.
+  - Not yet started: no `/` parsing anywhere in the current Tags UI or `TagChips`, tag names are treated as flat strings today.
 
 ## Transcription
 
