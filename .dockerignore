@@ -1,0 +1,8 @@
+immich/
+node_modules/
+web/build/
+web/.svelte-kit/
+.git/
+CLAUDE.md
+TODO.md
+README.md

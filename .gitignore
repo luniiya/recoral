@@ -1,0 +1,19 @@
+immich/
+CLAUDE.md
+
+# deps
+node_modules/
+
+# bun
+bun.lockb
+
+# build output
+dist/
+build/
+
+# env
+.env
+.env.local
+
+# os
+.DS_Store
