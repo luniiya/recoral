@@ -13,6 +13,7 @@ interface UserRow {
 	accent_hue: number;
 	avatar: string | null;
 	is_admin: number;
+	storage_limit_mb: number | null;
 }
 
 function toUser(row: UserRow): User {
@@ -23,7 +24,8 @@ function toUser(row: UserRow): User {
 		createdAt: row.created_at,
 		accentHue: row.accent_hue,
 		avatar: row.avatar,
-		isAdmin: row.is_admin === 1
+		isAdmin: row.is_admin === 1,
+		storageLimitMb: row.storage_limit_mb
 	};
 }
 
@@ -99,7 +101,8 @@ export async function register(
 		createdAt,
 		accentHue: hue,
 		avatar: null,
-		isAdmin: isFirstUser
+		isAdmin: isFirstUser,
+		storageLimitMb: null
 	} satisfies User);
 }
 
@@ -129,8 +132,17 @@ export function updateAccount(userId: string, updates: { accentHue?: number; ava
 	return toUser(row);
 }
 
-export function setAdmin(userId: string, isAdmin: boolean): User {
-	db.run("UPDATE users SET is_admin = ? WHERE id = ?", [isAdmin ? 1 : 0, userId]);
+export function adminUpdateUser(
+	userId: string,
+	updates: { isAdmin?: boolean; storageLimitMb?: number | null }
+): User {
+	if (updates.isAdmin !== undefined) {
+		db.run("UPDATE users SET is_admin = ? WHERE id = ?", [updates.isAdmin ? 1 : 0, userId]);
+	}
+	if (updates.storageLimitMb !== undefined) {
+		db.run("UPDATE users SET storage_limit_mb = ? WHERE id = ?", [updates.storageLimitMb, userId]);
+	}
+
 	const row = db.query<UserRow, [string]>("SELECT * FROM users WHERE id = ?").get(userId);
 	if (!row) throw new Error("User not found");
 	return toUser(row);

@@ -8,6 +8,8 @@ const STEPS: Record<string, [lightness: number, chroma: number]> = {
 	'700': [50, 0.16]
 };
 
+const CACHE_KEY = 'recoral-accent-hue';
+
 export const ACCENT_PRESETS: { name: string; hue: number }[] = [
 	{ name: 'Coral', hue: 26 },
 	{ name: 'Amber', hue: 70 },
@@ -24,4 +26,19 @@ export function applyAccentHue(hue: number) {
 	for (const [step, [l, c]] of Object.entries(STEPS)) {
 		root.style.setProperty(`--accent-${step}`, `oklch(${l}% ${c} ${hue})`);
 	}
+}
+
+// Remembers the last known "correct" hue (a user's own color, or the admin's
+// pinned login-page default) so the next page load can apply it in app.html
+// before hydration, instead of flashing a random or default color first.
+export function cacheAccentHue(hue: number | null) {
+	if (hue === null) localStorage.removeItem(CACHE_KEY);
+	else localStorage.setItem(CACHE_KEY, String(hue));
+}
+
+export function readCachedAccentHue(): number | null {
+	const raw = localStorage.getItem(CACHE_KEY);
+	if (raw === null) return null;
+	const hue = Number(raw);
+	return Number.isFinite(hue) ? hue : null;
 }

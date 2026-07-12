@@ -14,6 +14,26 @@
 					var dark = stored ? stored === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
 					if (dark) document.documentElement.classList.add('dark');
 				} catch (e) {}
+
+				try {
+					var hue = localStorage.getItem('recoral-accent-hue');
+					if (hue !== null) {
+						var steps = {
+							50: [97, 0.02],
+							100: [93, 0.05],
+							400: [75, 0.15],
+							500: [69, 0.17],
+							600: [60, 0.17],
+							700: [50, 0.16]
+						};
+						var root = document.documentElement;
+						for (var step in steps) {
+							var l = steps[step][0];
+							var c = steps[step][1];
+							root.style.setProperty('--accent-' + step, 'oklch(' + l + '% ' + c + ' ' + hue + ')');
+						}
+					}
+				} catch (e) {}
 			})();
 		</script>
 		%sveltekit.head%

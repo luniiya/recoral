@@ -13,8 +13,9 @@
 ## Accounts / auth
 
 - [x] Account system on the server (signup, login, sessions/tokens). Username required, email optional, login works with either. Per-user accent color (custom hue picker), avatar upload.
-- [x] Admin page (`/admin`, reachable via avatar menu): server status, registered users list, "allow sign ups" toggle, and an optional fixed accent color for the logged-out login page (random per visit by default).
-- [ ] Real admin/role concept. Right now `/api/admin/*` just requires *any* logged-in user, there's no actual admin flag, fine for a single-person instance, not fine the moment there's more than one real account.
+- [x] Real `isAdmin` flag on users, first registered account becomes admin automatically, `/api/admin/*` requires it server-side (403 otherwise), Administration button hidden client-side for non-admins too. Admins can promote/demote other users and set a per-user storage quota (MB, "Unlimited" if unset) from `/admin`; can't remove their own admin access.
+- [x] Admin page (`/admin`, reachable via avatar menu, own layout with no sidebar): server status + version, users list, "allow sign ups" toggle, optional fixed accent color for the logged-out login page (random per visit by default), optional login page background image upload.
+- [ ] First-run setup screen (Immich-style): when a fresh server has zero users, the webUI should show a dedicated "set up your server" flow instead of the normal login/signup form, create the first (admin) account there. Right now the first registered user silently becomes admin with no distinct onboarding experience.
 - [ ] Server picker + login screen on mobile first launch (Immich-style)
 - [ ] "Go offline" option on first launch, skips server/account entirely
 
@@ -40,6 +41,13 @@
   - UI parses the `/` client-side to render hierarchy: an indented tree on the Tags page, breadcrumb-style chips elsewhere (`voiceacting › certainvoice`), grouping headers, etc. Purely presentational, no new API shape.
   - Cheap and reversible. If it turns out real hierarchy is needed (rename a parent and cascade to children, move a subtree, etc.), migrate to a proper `parent_id` self-reference then, not before.
   - Not yet started: no `/` parsing anywhere in the current Tags UI or `TagChips`, tag names are treated as flat strings today.
+
+## Data export / import
+
+- [ ] "Export your data" button (Settings): downloads everything for the current account, recordings, transcripts, tags, descriptions, in recoral's own format. Depends on recordings actually being persisted server-side first.
+- [ ] "Import your data" button (Settings), with a choice of source format:
+  - recoral's own export format (round-trips with the export above)
+  - Google Takeout data (Google Recorder's export), since recoral is explicitly a Google Recorder replacement, letting people migrate their existing recordings in is a natural onboarding path. Needs research into what Google Takeout actually ships for Recorder (audio file format, transcript format, metadata layout) before this can be scoped properly.
 
 ## Transcription
 

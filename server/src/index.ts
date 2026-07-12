@@ -1,20 +1,33 @@
-import type { Recording } from "@recoral/shared";
+import { APP_VERSION } from "@recoral/shared";
 import {
+	adminUpdateUser,
 	clearSessionCookie,
 	endSession,
 	listUsers,
 	login,
 	register,
 	sessionCookie,
-	setAdmin,
 	updateAccount,
 	userFromRequest
 } from "./auth";
+import {
+	attachTag as attachRecordingTag,
+	createRecording,
+	deleteRecording,
+	detachTag as detachRecordingTag,
+	DuplicateError,
+	getAudioFile,
+	globalStorageBytes,
+	listRecordings,
+	updateRecording,
+	userStorageBytes
+} from "./recordings";
 import { getSettings, updateSettings } from "./settings";
 import { createTag, deleteTag, listTags, updateTag } from "./tags";
 
 const webDir = new URL("../../web/build/", import.meta.url);
 const MAX_AVATAR_LENGTH = 2_000_000; // ~1.5MB decoded, generous for a small profile picture
+const MAX_BACKGROUND_LENGTH = 8_000_000; // ~6MB decoded, a full-bleed page background needs more room
 
 const USERNAME_PATTERN = /^[a-zA-Z0-9_.-]{3,32}$/;
 
@@ -55,6 +68,7 @@ function requireAdmin(req: Request) {
 
 class UnauthorizedError extends Error {}
 class ForbiddenError extends Error {}
+class QuotaError extends Error {}
 
 function authErrorResponse(err: unknown) {
 	if (err instanceof ForbiddenError) return new Response(null, { status: 403 });
@@ -62,10 +76,26 @@ function authErrorResponse(err: unknown) {
 	return null;
 }
 
+// A user's own limit (if set) caps them individually. Otherwise everyone draws
+// from the one shared server-wide pool.
+function checkStorageQuota(userId: string, userStorageLimitMb: number | null, incomingBytes: number) {
+	if (userStorageLimitMb !== null) {
+		if (userStorageBytes(userId) + incomingBytes > userStorageLimitMb * 1024 * 1024) {
+			throw new QuotaError("You've reached your storage limit");
+		}
+		return;
+	}
+
+	const serverLimitMb = getSettings().serverStorageLimitMb;
+	if (serverLimitMb !== null && globalStorageBytes() + incomingBytes > serverLimitMb * 1024 * 1024) {
+		throw new QuotaError("The server has reached its storage limit");
+	}
+}
+
 const server = Bun.serve({
 	port: 3000,
 	routes: {
-		"/api/health": () => Response.json({ status: "ok" }),
+		"/api/health": () => Response.json({ status: "ok", version: APP_VERSION }),
 
 		"/api/auth/register": {
 			POST: async (req) => {
@@ -191,13 +221,19 @@ const server = Bun.serve({
 				try {
 					const admin = requireAdmin(req);
 					const body = await req.json();
-					if (typeof body.isAdmin !== "boolean") {
-						return Response.json({ error: "isAdmin must be a boolean" }, { status: 400 });
+					const updates: { isAdmin?: boolean; storageLimitMb?: number | null } = {};
+
+					if (typeof body.isAdmin === "boolean") {
+						if (req.params.id === admin.id && body.isAdmin === false) {
+							return Response.json({ error: "You can't remove your own admin access" }, { status: 400 });
+						}
+						updates.isAdmin = body.isAdmin;
 					}
-					if (req.params.id === admin.id && body.isAdmin === false) {
-						return Response.json({ error: "You can't remove your own admin access" }, { status: 400 });
+					if (body.storageLimitMb === null || typeof body.storageLimitMb === "number") {
+						updates.storageLimitMb = body.storageLimitMb;
 					}
-					return Response.json(setAdmin(req.params.id, body.isAdmin));
+
+					return Response.json(adminUpdateUser(req.params.id, updates));
 				} catch (err) {
 					return authErrorResponse(err) ?? new Response(null, { status: 401 });
 				}
@@ -211,12 +247,27 @@ const server = Bun.serve({
 				try {
 					requireAdmin(req);
 					const body = await req.json();
-					const updates: { defaultAccentHue?: number | null; signupEnabled?: boolean } = {};
+					const updates: {
+						defaultAccentHue?: number | null;
+						signupEnabled?: boolean;
+						backgroundImage?: string | null;
+						serverStorageLimitMb?: number | null;
+					} = {};
 
 					if (body.defaultAccentHue === null || typeof body.defaultAccentHue === "number") {
 						updates.defaultAccentHue = body.defaultAccentHue;
 					}
 					if (typeof body.signupEnabled === "boolean") updates.signupEnabled = body.signupEnabled;
+					if (body.backgroundImage === null) updates.backgroundImage = null;
+					else if (typeof body.backgroundImage === "string") {
+						if (body.backgroundImage.length > MAX_BACKGROUND_LENGTH) {
+							return Response.json({ error: "Image is too large" }, { status: 413 });
+						}
+						updates.backgroundImage = body.backgroundImage;
+					}
+					if (body.serverStorageLimitMb === null || typeof body.serverStorageLimitMb === "number") {
+						updates.serverStorageLimitMb = body.serverStorageLimitMb;
+					}
 
 					return Response.json(updateSettings(updates));
 				} catch (err) {
@@ -225,12 +276,107 @@ const server = Bun.serve({
 			}
 		},
 
-		"/api/recordings": (req) => {
+		"/api/recordings": {
+			GET: (req) => {
+				try {
+					return Response.json(listRecordings(requireUser(req).id));
+				} catch {
+					return new Response(null, { status: 401 });
+				}
+			},
+			POST: async (req) => {
+				try {
+					const user = requireUser(req);
+					const form = await req.formData();
+					const file = form.get("file");
+					const title = form.get("title");
+					const durationSeconds = Number(form.get("durationSeconds") ?? 0);
+
+					if (!(file instanceof File)) return Response.json({ error: "A file is required" }, { status: 400 });
+
+					checkStorageQuota(user.id, user.storageLimitMb, file.size);
+
+					const recording = await createRecording({
+						userId: user.id,
+						title: typeof title === "string" && title.trim() ? title.trim() : file.name,
+						file,
+						durationSeconds
+					});
+					return Response.json(recording, { status: 201 });
+				} catch (err) {
+					if (err instanceof DuplicateError) {
+						return Response.json({ error: err.message, existing: err.existing }, { status: 409 });
+					}
+					if (err instanceof QuotaError) return Response.json({ error: err.message }, { status: 413 });
+					return authErrorResponse(err) ?? Response.json({ error: (err as Error).message }, { status: 400 });
+				}
+			}
+		},
+
+		"/api/recordings/:id": {
+			PATCH: async (req) => {
+				try {
+					const user = requireUser(req);
+					const body = await req.json();
+					const updates: {
+						title?: string;
+						description?: string;
+						favorite?: boolean;
+						archived?: boolean;
+						trashed?: boolean;
+					} = {};
+
+					if (typeof body.title === "string") updates.title = body.title;
+					if (typeof body.description === "string") updates.description = body.description;
+					if (typeof body.favorite === "boolean") updates.favorite = body.favorite;
+					if (typeof body.archived === "boolean") updates.archived = body.archived;
+					if (typeof body.trashed === "boolean") updates.trashed = body.trashed;
+
+					return Response.json(updateRecording(user.id, req.params.id, updates));
+				} catch (err) {
+					return authErrorResponse(err) ?? Response.json({ error: (err as Error).message }, { status: 400 });
+				}
+			},
+			DELETE: (req) => {
+				try {
+					const user = requireUser(req);
+					deleteRecording(user.id, req.params.id);
+					return new Response(null, { status: 204 });
+				} catch {
+					return new Response(null, { status: 401 });
+				}
+			}
+		},
+
+		"/api/recordings/:id/audio": (req) => {
 			const user = userFromRequest(req);
 			if (!user) return new Response(null, { status: 401 });
 
-			const recordings: Recording[] = [];
-			return Response.json(recordings);
+			const audio = getAudioFile(user.id, req.params.id);
+			if (!audio) return new Response(null, { status: 404 });
+
+			return new Response(Bun.file(audio.path), { headers: { "Content-Type": audio.mimeType } });
+		},
+
+		"/api/recordings/:id/tags/:tagId": {
+			POST: (req) => {
+				try {
+					const user = requireUser(req);
+					attachRecordingTag(user.id, req.params.id, req.params.tagId);
+					return new Response(null, { status: 204 });
+				} catch (err) {
+					return authErrorResponse(err) ?? Response.json({ error: (err as Error).message }, { status: 400 });
+				}
+			},
+			DELETE: (req) => {
+				try {
+					const user = requireUser(req);
+					detachRecordingTag(user.id, req.params.id, req.params.tagId);
+					return new Response(null, { status: 204 });
+				} catch (err) {
+					return authErrorResponse(err) ?? Response.json({ error: (err as Error).message }, { status: 400 });
+				}
+			}
 		}
 	},
 	async fetch(req) {

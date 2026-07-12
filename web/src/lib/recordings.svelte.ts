@@ -9,14 +9,20 @@ export type LocalRecording = {
 	durationSeconds: number;
 	tagIds: string[];
 	trashedAt: Date | null;
+	archivedAt: Date | null;
+	favorite: boolean;
+	contentHash: string | null;
 };
 
 let all = $state<LocalRecording[]>([]);
 let search = $state('');
 let selectedTagIds = $state<string[]>([]);
+let importError = $state<string | null>(null);
 
-let active = $derived(all.filter((r) => r.trashedAt === null));
+let active = $derived(all.filter((r) => r.trashedAt === null && r.archivedAt === null));
+let archived = $derived(all.filter((r) => r.trashedAt === null && r.archivedAt !== null));
 let trashed = $derived(all.filter((r) => r.trashedAt !== null));
+let favorites = $derived(all.filter((r) => r.trashedAt === null && r.favorite));
 
 function readDuration(url: string): Promise<number> {
 	return new Promise((resolve) => {
@@ -30,13 +36,46 @@ function stripExtension(filename: string) {
 	return filename.replace(/\.[^./]+$/, '');
 }
 
-function add(entry: Omit<LocalRecording, 'id' | 'tagIds' | 'trashedAt'>) {
-	all = [{ id: crypto.randomUUID(), tagIds: [], trashedAt: null, ...entry }, ...all];
+function add(
+	entry: Omit<LocalRecording, 'id' | 'tagIds' | 'trashedAt' | 'archivedAt' | 'favorite' | 'contentHash'> & {
+		contentHash?: string | null;
+	}
+) {
+	all = [
+		{
+			id: crypto.randomUUID(),
+			tagIds: [],
+			trashedAt: null,
+			archivedAt: null,
+			favorite: false,
+			contentHash: null,
+			...entry
+		},
+		...all
+	];
+}
+
+async function hashFile(file: Blob): Promise<string> {
+	const buffer = await file.arrayBuffer();
+	const digest = await crypto.subtle.digest('SHA-256', buffer);
+	return Array.from(new Uint8Array(digest))
+		.map((b) => b.toString(16).padStart(2, '0'))
+		.join('');
 }
 
 async function importFiles(files: FileList | File[]) {
+	const duplicates: string[] = [];
+
 	for (const file of Array.from(files)) {
 		if (!file.type.startsWith('audio/')) continue;
+
+		const hash = await hashFile(file);
+		const isDuplicate = all.some((r) => r.trashedAt === null && r.contentHash === hash);
+		if (isDuplicate) {
+			duplicates.push(file.name);
+			continue;
+		}
+
 		const url = URL.createObjectURL(file);
 		const durationSeconds = await readDuration(url);
 		add({
@@ -44,9 +83,21 @@ async function importFiles(files: FileList | File[]) {
 			description: '',
 			url,
 			createdAt: new Date(),
-			durationSeconds
+			durationSeconds,
+			contentHash: hash
 		});
 	}
+
+	if (duplicates.length > 0) {
+		importError =
+			duplicates.length === 1
+				? `"${duplicates[0]}" is already in your library`
+				: `${duplicates.length} of those files are already in your library`;
+	}
+}
+
+function dismissImportError() {
+	importError = null;
 }
 
 function toggleRecordingTag(recordingId: string, tagId: string) {
@@ -69,6 +120,21 @@ function clearFilters() {
 
 function setSearch(value: string) {
 	search = value;
+}
+
+function toggleFavorite(id: string) {
+	const recording = all.find((r) => r.id === id);
+	if (recording) recording.favorite = !recording.favorite;
+}
+
+function archive(id: string) {
+	const recording = all.find((r) => r.id === id);
+	if (recording) recording.archivedAt = new Date();
+}
+
+function unarchive(id: string) {
+	const recording = all.find((r) => r.id === id);
+	if (recording) recording.archivedAt = null;
 }
 
 function trash(id: string) {
@@ -104,8 +170,14 @@ export const recordingsStore = {
 	get active() {
 		return active;
 	},
+	get archived() {
+		return archived;
+	},
 	get trashed() {
 		return trashed;
+	},
+	get favorites() {
+		return favorites;
 	},
 	get search() {
 		return search;
@@ -113,12 +185,19 @@ export const recordingsStore = {
 	get selectedTagIds() {
 		return selectedTagIds;
 	},
+	get importError() {
+		return importError;
+	},
 	add,
 	importFiles,
+	dismissImportError,
 	toggleRecordingTag,
 	toggleFilterTag,
 	clearFilters,
 	setSearch,
+	toggleFavorite,
+	archive,
+	unarchive,
 	trash,
 	restore,
 	deleteForever,

@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { Settings } from '@recoral/shared';
 	import { goto } from '$app/navigation';
-	import { applyAccentHue } from '$lib/accent';
+	import { applyAccentHue, cacheAccentHue, readCachedAccentHue } from '$lib/accent';
 	import { auth } from '$lib/auth.svelte';
 	import ColorPicker from '$lib/components/ColorPicker.svelte';
 	import ThemeToggle from '$lib/components/ThemeToggle.svelte';
@@ -12,8 +12,11 @@
 	let username = $state('');
 	let email = $state('');
 	let password = $state('');
-	let accentHue = $state(Math.floor(Math.random() * 360));
+	// Bootstrap from whatever app.html already painted (cached fixed color, or a
+	// prior random pick) so there's nothing to correct visually once JS runs.
+	let accentHue = $state(readCachedAccentHue() ?? Math.floor(Math.random() * 360));
 	let signupEnabled = $state(true);
+	let backgroundImage = $state<string | null>(null);
 	let error = $state('');
 	let submitting = $state(false);
 
@@ -33,8 +36,15 @@
 		if (!res.ok) return;
 		const settings: Settings = await res.json();
 		signupEnabled = settings.signupEnabled;
-		if (settings.defaultAccentHue !== null) accentHue = settings.defaultAccentHue;
+		if (settings.defaultAccentHue !== null) {
+			accentHue = settings.defaultAccentHue;
+			cacheAccentHue(settings.defaultAccentHue);
+		} else {
+			cacheAccentHue(null);
+			accentHue = Math.floor(Math.random() * 360);
+		}
 		if (!signupEnabled) mode = 'login';
+		backgroundImage = settings.backgroundImage;
 	});
 
 	async function submit(event: SubmitEvent) {
@@ -53,12 +63,23 @@
 	}
 </script>
 
-<section class="relative flex min-h-dvh items-center justify-center bg-gray-50 px-4 dark:bg-neutral-950">
-	<div class="absolute top-4 right-4">
+<svelte:head>
+	<title>{mode === 'login' ? 'Log in to recoral' : 'Sign up for recoral'}</title>
+</svelte:head>
+
+<section class="relative flex min-h-dvh items-center justify-center bg-white px-4 dark:bg-black">
+	{#if backgroundImage}
+		<div class="absolute inset-0 overflow-hidden">
+			<img src={backgroundImage} alt="" class="size-full object-cover" />
+			<div class="absolute inset-0 bg-black/60 backdrop-blur-sm"></div>
+		</div>
+	{/if}
+
+	<div class="absolute top-4 right-4 z-10">
 		<ThemeToggle />
 	</div>
 
-	<div class="card w-full max-w-sm p-8">
+	<div class="card relative z-10 w-full max-w-sm p-8">
 		<div class="mb-8 flex flex-col items-center gap-2">
 			<img src="/logo.png" alt="recoral" class="size-12 rounded-full object-cover" />
 			<h1 class="text-lg font-semibold text-gray-900 dark:text-gray-100">

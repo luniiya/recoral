@@ -126,6 +126,41 @@
 				/>
 				<span class="shrink-0 text-xs tabular-nums text-gray-400">{formatDuration(recording.durationSeconds)}</span>
 				<button
+					class="flex size-6 shrink-0 items-center justify-center rounded-full transition hover:bg-gray-100 dark:hover:bg-white/5
+						{recording.favorite ? 'text-accent-500' : 'text-gray-400 hover:text-accent-500'}"
+					aria-label={recording.favorite ? 'Unfavourite' : 'Favourite'}
+					title={recording.favorite ? 'Unfavourite' : 'Favourite'}
+					onclick={() => recordingsStore.toggleFavorite(recording.id)}
+				>
+					<svg
+						viewBox="0 0 24 24"
+						fill={recording.favorite ? 'currentColor' : 'none'}
+						stroke="currentColor"
+						stroke-width="1.8"
+						class="size-3.5"
+					>
+						<path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							d="M12 6.3C10.4 4.6 8 4 6.2 5.5 4.4 7 4.1 9.7 5.6 11.5L12 19l6.4-7.5c1.5-1.8 1.2-4.5-.6-6C16 4 13.6 4.6 12 6.3Z"
+						/>
+					</svg>
+				</button>
+				<button
+					class="flex size-6 shrink-0 items-center justify-center rounded-full text-gray-400 transition hover:bg-gray-100 hover:text-accent-600 dark:hover:bg-white/5"
+					aria-label="Archive"
+					title="Archive"
+					onclick={() => recordingsStore.archive(recording.id)}
+				>
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="size-3.5">
+						<path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							d="M4 4h16v4H4V4Zm1 4v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8M10 13h4"
+						/>
+					</svg>
+				</button>
+				<button
 					class="flex size-6 shrink-0 items-center justify-center rounded-full text-gray-400 transition hover:bg-gray-100 hover:text-red-500 dark:hover:bg-white/5"
 					aria-label="Move to bin"
 					title="Move to bin"

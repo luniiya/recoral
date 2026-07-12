@@ -1,5 +1,5 @@
 import type { User } from '@recoral/shared';
-import { applyAccentHue } from './accent';
+import { applyAccentHue, cacheAccentHue } from './accent';
 
 let user = $state<User | null>(null);
 let loading = $state(true);
@@ -7,6 +7,7 @@ let loading = $state(true);
 function setUser(next: User | null) {
 	user = next;
 	applyAccentHue(next?.accentHue ?? 26);
+	if (next) cacheAccentHue(next.accentHue);
 }
 
 async function refresh() {

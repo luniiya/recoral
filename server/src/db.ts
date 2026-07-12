@@ -53,7 +53,39 @@ db.run(`
 	CREATE TABLE IF NOT EXISTS settings (
 		id INTEGER PRIMARY KEY CHECK (id = 1),
 		default_accent_hue INTEGER,
-		signup_enabled INTEGER NOT NULL DEFAULT 1
+		signup_enabled INTEGER NOT NULL DEFAULT 1,
+		background_image TEXT,
+		server_storage_limit_mb INTEGER DEFAULT 204800
 	)
 `);
 db.run("INSERT OR IGNORE INTO settings (id, default_accent_hue, signup_enabled) VALUES (1, NULL, 1)");
+ensureColumn("settings", "background_image", "background_image TEXT");
+// 204800 MB = 200 GiB, the default total pool shared across every user on the server.
+ensureColumn("settings", "server_storage_limit_mb", "server_storage_limit_mb INTEGER DEFAULT 204800");
+
+db.run(`
+	CREATE TABLE IF NOT EXISTS recordings (
+		id TEXT PRIMARY KEY,
+		user_id TEXT NOT NULL REFERENCES users(id),
+		title TEXT NOT NULL,
+		description TEXT NOT NULL DEFAULT '',
+		file_path TEXT NOT NULL,
+		content_hash TEXT NOT NULL,
+		duration_seconds REAL NOT NULL,
+		file_size_bytes INTEGER NOT NULL,
+		mime_type TEXT NOT NULL,
+		favorite INTEGER NOT NULL DEFAULT 0,
+		archived_at TEXT,
+		trashed_at TEXT,
+		created_at TEXT NOT NULL,
+		transcript TEXT
+	)
+`);
+
+db.run(`
+	CREATE TABLE IF NOT EXISTS recording_tags (
+		recording_id TEXT NOT NULL REFERENCES recordings(id),
+		tag_id TEXT NOT NULL REFERENCES tags(id),
+		PRIMARY KEY (recording_id, tag_id)
+	)
+`);

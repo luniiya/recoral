@@ -50,22 +50,24 @@
 						</svg>
 						Account settings
 					</button>
-					<button
-						class="flex w-full items-center justify-center gap-2 rounded-full border border-gray-200 py-2 text-sm text-gray-700 transition hover:bg-gray-100 dark:border-white/10 dark:text-gray-200 dark:hover:bg-white/5"
-						onclick={() => {
-							open = false;
-							goto('/admin');
-						}}
-					>
-						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="size-4">
-							<path
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94Z"
-							/>
-						</svg>
-						Administration
-					</button>
+					{#if auth.user.isAdmin}
+						<button
+							class="flex w-full items-center justify-center gap-2 rounded-full border border-gray-200 py-2 text-sm text-gray-700 transition hover:bg-gray-100 dark:border-white/10 dark:text-gray-200 dark:hover:bg-white/5"
+							onclick={() => {
+								open = false;
+								goto('/admin');
+							}}
+						>
+							<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="size-4">
+								<path
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94Z"
+								/>
+							</svg>
+							Administration
+						</button>
+					{/if}
 					<button
 						class="w-full rounded-full py-2 text-sm text-gray-500 transition hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-white/5"
 						onclick={() => auth.logout()}

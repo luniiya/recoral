@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { Settings, User } from '@recoral/shared';
+	import { auth } from '$lib/auth.svelte';
 	import Avatar from '$lib/components/Avatar.svelte';
 	import ColorPicker from '$lib/components/ColorPicker.svelte';
 	import Toggle from '$lib/components/Toggle.svelte';
@@ -8,8 +9,12 @@
 	let users = $state<User[]>([]);
 	let settings = $state<Settings | null>(null);
 	let serverOnline = $state<boolean | null>(null);
+	let serverVersion = $state('');
 	let loading = $state(true);
 	let lastPickedHue = $state(26);
+	let usersError = $state('');
+	let bgFileInput: HTMLInputElement | undefined = $state();
+	let bgUploading = $state(false);
 
 	onMount(async () => {
 		const [usersRes, healthRes, settingsRes] = await Promise.all([
@@ -19,7 +24,13 @@
 		]);
 		if (usersRes.ok) users = await usersRes.json();
 		if (settingsRes.ok) settings = await settingsRes.json();
-		serverOnline = healthRes.ok;
+		if (healthRes.ok) {
+			const health = await healthRes.json();
+			serverOnline = true;
+			serverVersion = health.version;
+		} else {
+			serverOnline = false;
+		}
 		loading = false;
 	});
 
@@ -32,16 +43,60 @@
 		});
 		if (res.ok) settings = await res.json();
 	}
+
+	function readAsDataUrl(file: File) {
+		return new Promise<string>((resolve, reject) => {
+			const reader = new FileReader();
+			reader.onload = () => resolve(reader.result as string);
+			reader.onerror = () => reject(reader.error);
+			reader.readAsDataURL(file);
+		});
+	}
+
+	async function onBackgroundSelected(event: Event) {
+		const file = (event.target as HTMLInputElement).files?.[0];
+		if (!file) return;
+		bgUploading = true;
+		try {
+			const dataUrl = await readAsDataUrl(file);
+			await patchSettings({ backgroundImage: dataUrl });
+		} finally {
+			bgUploading = false;
+		}
+	}
+
+	async function patchUser(id: string, updates: { isAdmin?: boolean; storageLimitMb?: number | null }) {
+		usersError = '';
+		const res = await fetch(`/api/admin/users/${id}`, {
+			method: 'PATCH',
+			headers: { 'Content-Type': 'application/json' },
+			credentials: 'include',
+			body: JSON.stringify(updates)
+		});
+		const body = await res.json();
+		if (!res.ok) {
+			usersError = body.error ?? 'Something went wrong';
+			return;
+		}
+		users = users.map((u) => (u.id === id ? body : u));
+	}
 </script>
+
+<svelte:head>
+	<title>recoral - Administration</title>
+</svelte:head>
 
 <h1 class="mb-6 text-lg font-semibold text-gray-900 dark:text-gray-100">Administration</h1>
 
-{#if !loading}
+{#if !loading && auth.user && !auth.user.isAdmin}
+	<div class="card p-8 text-center text-sm text-gray-400">You don't have access to this page.</div>
+{:else if !loading}
 	<div class="card mb-6 flex items-center justify-between p-5">
 		<span class="text-sm font-medium text-gray-900 dark:text-gray-100">Server</span>
 		<span class="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
 			<span class="size-2 rounded-full {serverOnline ? 'bg-green-500' : 'bg-red-500'}"></span>
 			{serverOnline ? 'Online' : 'Unreachable'}
+			{#if serverVersion}<span class="text-gray-300 dark:text-gray-600">v{serverVersion}</span>{/if}
 		</span>
 	</div>
 
@@ -84,6 +139,76 @@
 					/>
 				{/if}
 			</div>
+
+			<div class="flex flex-col gap-3 border-t border-gray-100 pt-5 dark:border-white/10">
+				<div class="flex items-center justify-between gap-4">
+					<div>
+						<p class="text-sm text-gray-900 dark:text-gray-100">Limit total storage</p>
+						<p class="text-xs text-gray-400">
+							Shared across every user. A user without their own limit falls back to this.
+						</p>
+					</div>
+					<Toggle
+						checked={settings.serverStorageLimitMb !== null}
+						onchange={(checked) => patchSettings({ serverStorageLimitMb: checked ? 204800 : null })}
+						label="Limit total storage"
+					/>
+				</div>
+
+				{#if settings.serverStorageLimitMb !== null}
+					<label class="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
+						<input
+							type="number"
+							min="1"
+							value={Math.round(settings.serverStorageLimitMb / 1024)}
+							class="w-24 rounded-lg bg-gray-100 px-2 py-1 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-accent-500 dark:bg-white/5 dark:text-gray-100"
+							onchange={(e) => {
+								const gb = Number(e.currentTarget.value);
+								if (gb > 0) patchSettings({ serverStorageLimitMb: Math.round(gb * 1024) });
+							}}
+						/>
+						GB
+					</label>
+				{/if}
+			</div>
+
+			<div class="flex flex-col gap-3 border-t border-gray-100 pt-5 dark:border-white/10">
+				<div class="flex items-center justify-between gap-4">
+					<div>
+						<p class="text-sm text-gray-900 dark:text-gray-100">Login page background</p>
+						<p class="text-xs text-gray-400">Shown behind the login card instead of a plain background.</p>
+					</div>
+					{#if settings.backgroundImage}
+						<button
+							class="shrink-0 rounded-full border border-gray-200 px-3.5 py-1.5 text-xs text-gray-600 transition hover:bg-gray-100 dark:border-white/10 dark:text-gray-300 dark:hover:bg-white/5"
+							onclick={() => patchSettings({ backgroundImage: null })}
+						>
+							Remove
+						</button>
+					{/if}
+				</div>
+
+				{#if settings.backgroundImage}
+					<div class="h-28 w-full overflow-hidden rounded-lg">
+						<img src={settings.backgroundImage} alt="Login background" class="size-full object-cover" />
+					</div>
+				{:else}
+					<button
+						class="self-start rounded-full border border-gray-200 px-4 py-2 text-sm text-gray-600 transition hover:bg-gray-100 disabled:opacity-60 dark:border-white/10 dark:text-gray-300 dark:hover:bg-white/5"
+						onclick={() => bgFileInput?.click()}
+						disabled={bgUploading}
+					>
+						{bgUploading ? 'Uploading…' : 'Upload image'}
+					</button>
+				{/if}
+				<input
+					bind:this={bgFileInput}
+					type="file"
+					accept="image/*"
+					class="hidden"
+					onchange={onBackgroundSelected}
+				/>
+			</div>
 		</div>
 	{/if}
 
@@ -91,19 +216,51 @@
 		<h2 class="mb-4 text-sm font-semibold text-gray-900 dark:text-gray-100">
 			Users <span class="text-gray-400">({users.length})</span>
 		</h2>
-		<ul class="flex flex-col gap-3">
+
+		{#if usersError}
+			<p class="mb-3 text-sm text-red-600 dark:text-red-400">{usersError}</p>
+		{/if}
+
+		<ul class="flex flex-col gap-4">
 			{#each users as user (user.id)}
-				<li class="flex items-center gap-3">
+				<li class="flex flex-wrap items-center gap-3">
 					<Avatar name={user.username} avatar={user.avatar} />
-					<div class="min-w-0">
+					<div class="min-w-0 flex-1">
 						<p class="truncate text-sm text-gray-900 dark:text-gray-100">
 							{user.username}
+							{#if user.id === auth.user?.id}<span class="text-gray-400">(you)</span>{/if}
 							{#if user.email}<span class="text-gray-400">{user.email}</span>{/if}
 						</p>
 						<p class="text-xs text-gray-400">
 							Joined {new Date(user.createdAt).toLocaleDateString()}
 						</p>
 					</div>
+
+					<label class="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
+						Storage limit
+						<input
+							type="number"
+							min="0"
+							placeholder="Unlimited"
+							value={user.storageLimitMb ?? ''}
+							class="w-24 rounded-lg bg-gray-100 px-2 py-1 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-accent-500 dark:bg-white/5 dark:text-gray-100"
+							onchange={(e) => {
+								const raw = e.currentTarget.value.trim();
+								patchUser(user.id, { storageLimitMb: raw === '' ? null : Number(raw) });
+							}}
+						/>
+						MB
+					</label>
+
+					<label class="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
+						Admin
+						<Toggle
+							checked={user.isAdmin}
+							disabled={user.id === auth.user?.id}
+							onchange={(checked) => patchUser(user.id, { isAdmin: checked })}
+							label={`Admin access for ${user.username}`}
+						/>
+					</label>
 				</li>
 			{/each}
 		</ul>

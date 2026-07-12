@@ -3,10 +3,14 @@ export const APP_VERSION = "0.1.0";
 export interface Recording {
 	id: string;
 	title: string;
-	description: string | null;
+	description: string;
 	createdAt: string;
 	durationSeconds: number;
 	transcript: string | null;
+	favorite: boolean;
+	archivedAt: string | null;
+	trashedAt: string | null;
+	tagIds: string[];
 }
 
 export interface User {
@@ -30,4 +34,6 @@ export interface Tag {
 export interface Settings {
 	defaultAccentHue: number | null;
 	signupEnabled: boolean;
+	backgroundImage: string | null;
+	serverStorageLimitMb: number | null;
 }

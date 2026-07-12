@@ -44,6 +44,10 @@
 	}
 </script>
 
+<svelte:head>
+	<title>recoral - Settings</title>
+</svelte:head>
+
 <h1 class="mb-6 text-lg font-semibold text-gray-900 dark:text-gray-100">Account settings</h1>
 
 {#if auth.user}

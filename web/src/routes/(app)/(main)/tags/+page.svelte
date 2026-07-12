@@ -41,6 +41,10 @@
 	}
 </script>
 
+<svelte:head>
+	<title>recoral - Tags</title>
+</svelte:head>
+
 <h1 class="mb-6 text-lg font-semibold text-gray-900 dark:text-gray-100">Tags</h1>
 
 <form onsubmit={createTag} class="card mb-8 flex flex-col gap-4 p-5">
