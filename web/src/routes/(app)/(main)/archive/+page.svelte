@@ -23,7 +23,7 @@
 				</span>
 				<span class="shrink-0 text-xs tabular-nums text-gray-400">{formatDuration(recording.durationSeconds)}</span>
 			</div>
-			<audio controls src={recording.url} class="mb-3 w-full"></audio>
+			<audio controls src={recordingsStore.audioUrl(recording.id)} class="mb-3 w-full"></audio>
 			<button
 				class="rounded-full border border-gray-200 px-3.5 py-1.5 text-xs text-gray-600 transition hover:bg-gray-100 dark:border-white/10 dark:text-gray-300 dark:hover:bg-white/5"
 				onclick={() => recordingsStore.unarchive(recording.id)}

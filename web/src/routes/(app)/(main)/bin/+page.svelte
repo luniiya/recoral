@@ -29,7 +29,7 @@
 			<p class="mb-3 text-xs text-gray-400">
 				{recordingsStore.daysLeft(recording)} day{recordingsStore.daysLeft(recording) === 1 ? '' : 's'} left
 			</p>
-			<audio controls src={recording.url} class="mb-3 w-full"></audio>
+			<audio controls src={recordingsStore.audioUrl(recording.id)} class="mb-3 w-full"></audio>
 			<div class="flex gap-2">
 				<button
 					class="flex-1 rounded-full bg-accent-500 py-1.5 text-xs font-semibold text-white transition hover:bg-accent-600"

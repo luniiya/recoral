@@ -38,9 +38,12 @@
 
 	let version = $state('');
 	let serverOnline = $state<boolean | null>(null);
-	let serverStorageLimitMb = $state<number | null>(null);
+	let usedBytes = $state(0);
+	let limitMb = $state<number | null>(null);
 
-	let effectiveLimitMb = $derived(auth.user?.storageLimitMb ?? serverStorageLimitMb);
+	let usedGb = $derived(usedBytes / 1024 ** 3);
+	let limitGb = $derived(limitMb !== null ? limitMb / 1024 : null);
+	let usedPercent = $derived(limitGb !== null && limitGb > 0 ? Math.min(100, (usedGb / limitGb) * 100) : 0);
 
 	onMount(async () => {
 		try {
@@ -51,8 +54,12 @@
 			serverOnline = false;
 		}
 
-		const settingsRes = await fetch('/api/settings');
-		if (settingsRes.ok) serverStorageLimitMb = (await settingsRes.json()).serverStorageLimitMb;
+		const storageRes = await fetch('/api/storage', { credentials: 'include' });
+		if (storageRes.ok) {
+			const usage = await storageRes.json();
+			usedBytes = usage.usedBytes;
+			limitMb = usage.limitMb;
+		}
 	});
 </script>
 
@@ -86,14 +93,14 @@
 	{#if auth.user}
 		<div class="mb-3 rounded-lg bg-gray-100 p-3 dark:bg-white/5">
 			<p class="mb-1.5 text-xs text-gray-600 dark:text-gray-300">
-				{#if effectiveLimitMb}
-					0 GB of {(effectiveLimitMb / 1024).toFixed(1)} GB used
+				{#if limitGb !== null}
+					{usedGb.toFixed(1)} GB of {limitGb.toFixed(1)} GB used
 				{:else}
-					Storage unlimited
+					{usedGb.toFixed(1)} GB used, unlimited
 				{/if}
 			</p>
 			<div class="h-1.5 overflow-hidden rounded-full bg-gray-200 dark:bg-white/10">
-				<div class="h-full rounded-full bg-accent-500" style:width="0%"></div>
+				<div class="h-full rounded-full bg-accent-500" style:width="{usedPercent}%"></div>
 			</div>
 		</div>
 	{/if}

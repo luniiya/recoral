@@ -31,8 +31,8 @@
 		return `${minutes}:${seconds.toString().padStart(2, '0')}`;
 	}
 
-	function formatTimestamp(date: Date) {
-		return date.toLocaleString(undefined, {
+	function formatTimestamp(iso: string) {
+		return new Date(iso).toLocaleString(undefined, {
 			month: 'short',
 			day: 'numeric',
 			hour: 'numeric',
@@ -51,16 +51,9 @@
 
 		mediaRecorder.onstop = () => {
 			const blob = new Blob(chunks, { type: mediaRecorder?.mimeType ?? 'audio/webm' });
-			const url = URL.createObjectURL(blob);
 			const durationSeconds = (Date.now() - recordingStart) / 1000;
 
-			recordingsStore.add({
-				title: `Recording ${recordingsStore.active.length + 1}`,
-				description: '',
-				url,
-				createdAt: new Date(),
-				durationSeconds
-			});
+			recordingsStore.addRecording(blob, `Recording ${recordingsStore.active.length + 1}`, durationSeconds);
 
 			for (const track of stream.getTracks()) track.stop();
 		};
@@ -121,7 +114,8 @@
 			<div class="mb-1 flex items-baseline justify-between gap-3">
 				<input
 					class="min-w-0 flex-1 truncate bg-transparent text-sm font-medium text-gray-900 outline-none focus:underline dark:text-gray-100"
-					bind:value={recording.title}
+					value={recording.title}
+					onchange={(e) => recordingsStore.updateTitle(recording.id, e.currentTarget.value)}
 					aria-label="Recording title"
 				/>
 				<span class="shrink-0 text-xs tabular-nums text-gray-400">{formatDuration(recording.durationSeconds)}</span>
@@ -179,10 +173,11 @@
 			<input
 				class="mb-3 w-full bg-transparent text-sm text-gray-500 outline-none focus:underline dark:text-gray-400"
 				placeholder="Add a description…"
-				bind:value={recording.description}
+				value={recording.description}
+				onchange={(e) => recordingsStore.updateDescription(recording.id, e.currentTarget.value)}
 				aria-label="Recording description"
 			/>
-			<audio controls src={recording.url} class="mb-3 w-full"></audio>
+			<audio controls src={recordingsStore.audioUrl(recording.id)} class="mb-3 w-full"></audio>
 
 			<div class="relative flex flex-wrap items-center gap-1.5">
 				<TagChips

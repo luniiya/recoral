@@ -13,7 +13,7 @@
 
 	onMount(() => {
 		tagsStore.load();
-		recordingsStore.purgeExpired();
+		recordingsStore.load();
 	});
 </script>
 

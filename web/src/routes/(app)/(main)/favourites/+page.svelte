@@ -35,7 +35,7 @@
 					</svg>
 				</button>
 			</div>
-			<audio controls src={recording.url} class="w-full"></audio>
+			<audio controls src={recordingsStore.audioUrl(recording.id)} class="w-full"></audio>
 		</li>
 	{:else}
 		<li class="card border-dashed p-8 text-center text-sm text-gray-400">No favourites yet</li>

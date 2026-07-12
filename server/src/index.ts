@@ -19,6 +19,7 @@ import {
 	getAudioFile,
 	globalStorageBytes,
 	listRecordings,
+	purgeExpiredTrash,
 	updateRecording,
 	userStorageBytes
 } from "./recordings";
@@ -279,7 +280,9 @@ const server = Bun.serve({
 		"/api/recordings": {
 			GET: (req) => {
 				try {
-					return Response.json(listRecordings(requireUser(req).id));
+					const user = requireUser(req);
+					purgeExpiredTrash();
+					return Response.json(listRecordings(user.id));
 				} catch {
 					return new Response(null, { status: 401 });
 				}
@@ -376,6 +379,21 @@ const server = Bun.serve({
 				} catch (err) {
 					return authErrorResponse(err) ?? Response.json({ error: (err as Error).message }, { status: 400 });
 				}
+			}
+		},
+
+		"/api/storage": (req) => {
+			try {
+				const user = requireUser(req);
+				if (user.storageLimitMb !== null) {
+					return Response.json({ usedBytes: userStorageBytes(user.id), limitMb: user.storageLimitMb });
+				}
+				return Response.json({
+					usedBytes: globalStorageBytes(),
+					limitMb: getSettings().serverStorageLimitMb
+				});
+			} catch {
+				return new Response(null, { status: 401 });
 			}
 		}
 	},

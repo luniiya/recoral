@@ -29,9 +29,12 @@
 ## Recording
 
 - [x] Web/browser mic recording (desktop webUI), plus importing existing audio files (mp3 etc.)
-- [ ] Recordings are still client-memory-only, nothing persists to the server yet. Needs a `recordings` table + upload endpoint before any of this survives a refresh or syncs across devices.
+- [x] Recordings now persist server-side. `recordings` + `recording_tags` tables, audio files stored on disk under `DATA_DIR/recordings/<userId>/<id>.<ext>` (metadata in SQLite, blobs on the filesystem, same split Immich uses). Full CRUD (`GET/POST /api/recordings`, `PATCH/DELETE /api/recordings/:id`, `GET /api/recordings/:id/audio`, tag attach/detach), survives refreshes and is shared across devices/sessions for the same account now.
+- [x] Server-side duplicate detection: SHA-256 content hash on upload, rejects true duplicates (409) regardless of filename. Client still does a quick local check too before even uploading, for instant feedback, but the server is authoritative.
+- [x] Storage quota enforcement wired to real usage: uploads are rejected (413) once a user's own override limit or the shared global pool is exceeded. Trash auto-purges after 30 days on every list fetch (server-side, no cron needed at this scale) and actually deletes the file from disk.
 - [ ] Native mic recording on mobile via `capacitor-audio-recorder`
 - [ ] Background recording support (Android foreground service, iOS Background Modes)
+- [ ] `docker-compose.yml` was fixed to actually set `DATA_DIR=/data` so the mounted volume is used, this was found and patched during the persistence work but is worth a mention: verify a real container restart preserves data before calling this solid.
 
 ## Tags
 
@@ -44,7 +47,7 @@
 
 ## Data export / import
 
-- [ ] "Export your data" button (Settings): downloads everything for the current account, recordings, transcripts, tags, descriptions, in recoral's own format. Depends on recordings actually being persisted server-side first.
+- [ ] "Export your data" button (Settings): downloads everything for the current account, recordings, transcripts, tags, descriptions, in recoral's own format. Recordings now persist server-side so this is unblocked, not yet built.
 - [ ] "Import your data" button (Settings), with a choice of source format:
   - recoral's own export format (round-trips with the export above)
   - Google Takeout data (Google Recorder's export), since recoral is explicitly a Google Recorder replacement, letting people migrate their existing recordings in is a natural onboarding path. Needs research into what Google Takeout actually ships for Recorder (audio file format, transcript format, metadata layout) before this can be scoped properly.

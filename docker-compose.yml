@@ -7,6 +7,7 @@ services:
       - "3000:3000"
     environment:
       - PORT=3000
+      - DATA_DIR=/data
     volumes:
       - recoral-data:/data
     restart: unless-stopped

@@ -37,3 +37,8 @@ export interface Settings {
 	backgroundImage: string | null;
 	serverStorageLimitMb: number | null;
 }
+
+export interface StorageUsage {
+	usedBytes: number;
+	limitMb: number | null;
+}
