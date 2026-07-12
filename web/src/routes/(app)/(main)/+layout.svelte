@@ -65,7 +65,7 @@
 </script>
 
 <div class="flex h-dvh flex-col overflow-hidden bg-white dark:bg-black">
-	<header class="flex items-center gap-3 border-b border-gray-200 px-6 py-3 dark:border-white/10">
+	<header class="flex h-16 shrink-0 items-center gap-3 border-b border-gray-200 px-6 dark:border-white/10">
 		<a href="/" class="flex items-center gap-2.5">
 			<img src="/logo.png" alt="recoral" class="size-7 rounded-full object-cover" />
 			<span class="font-semibold text-gray-900 dark:text-gray-100">recoral</span>
@@ -125,7 +125,7 @@
 	<div class="flex min-h-0 flex-1">
 		<Sidebar />
 
-		<main class="mx-auto w-full max-w-xl overflow-y-auto px-6 py-10">
+		<main class="min-h-0 flex-1 overflow-hidden">
 			{@render children()}
 		</main>
 	</div>

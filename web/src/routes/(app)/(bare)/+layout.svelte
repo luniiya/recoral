@@ -6,9 +6,9 @@
 </script>
 
 <div class="min-h-dvh bg-white dark:bg-black">
-	<header class="flex items-center gap-3 border-b border-gray-200 px-6 py-3 dark:border-white/10">
+	<header class="flex h-16 shrink-0 items-center gap-3 border-b border-gray-200 px-6 dark:border-white/10">
 		<a href="/" class="flex flex-1 items-center gap-2.5">
-			<img src="/logo.png" alt="recoral" class="size-6 rounded-full object-cover" />
+			<img src="/logo.png" alt="recoral" class="size-7 rounded-full object-cover" />
 			<span class="font-semibold text-gray-900 dark:text-gray-100">recoral</span>
 		</a>
 

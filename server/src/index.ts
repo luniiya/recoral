@@ -301,7 +301,7 @@ const server = Bun.serve({
 
 					const recording = await createRecording({
 						userId: user.id,
-						title: typeof title === "string" && title.trim() ? title.trim() : file.name,
+						title: typeof title === "string" ? title.trim() : "",
 						file,
 						durationSeconds
 					});

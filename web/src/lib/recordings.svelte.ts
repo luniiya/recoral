@@ -73,7 +73,7 @@ async function importFiles(files: FileList | File[]) {
 }
 
 async function addRecording(blob: Blob, title: string, durationSeconds: number) {
-	const result = await upload(blob, title, title, durationSeconds);
+	const result = await upload(blob, 'recording.webm', title, durationSeconds);
 	if (result.error) importError = result.error;
 }
 

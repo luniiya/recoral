@@ -45,9 +45,10 @@
 	<title>recoral - Tags</title>
 </svelte:head>
 
-<h1 class="mb-6 text-lg font-semibold text-gray-900 dark:text-gray-100">Tags</h1>
+<div class="mx-auto h-full max-w-xl overflow-y-auto px-6 py-10">
+	<h1 class="mb-6 text-lg font-semibold text-gray-900 dark:text-gray-100">Tags</h1>
 
-<form onsubmit={createTag} class="card mb-8 flex flex-col gap-4 p-5">
+	<form onsubmit={createTag} class="card mb-8 flex flex-col gap-4 p-5">
 	<label class="flex flex-col gap-1.5">
 		<span class="form-label">Name</span>
 		<input class="form-input" bind:value={name} placeholder="e.g. Ideas" required />
@@ -134,4 +135,5 @@
 			<li class="card w-full border-dashed p-8 text-center text-sm text-gray-400">No tags yet</li>
 		{/each}
 	</ul>
-{/if}
+	{/if}
+</div>
