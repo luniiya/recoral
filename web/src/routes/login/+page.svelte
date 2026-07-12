@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { auth } from '$lib/auth.svelte';
+	import ThemeToggle from '$lib/components/ThemeToggle.svelte';
 
 	let mode = $state<'login' | 'register'>('login');
 	let email = $state('');
@@ -28,103 +29,63 @@
 	}
 </script>
 
-<main>
-	<h1>recoral</h1>
+<section class="relative flex min-h-dvh items-center justify-center bg-gray-50 px-4 dark:bg-neutral-950">
+	<div class="absolute top-4 right-4">
+		<ThemeToggle />
+	</div>
 
-	<form onsubmit={submit}>
-		<label>
-			Email
-			<input type="email" bind:value={email} required autocomplete="email" />
-		</label>
-		<label>
-			Password
-			<input type="password" bind:value={password} required autocomplete="current-password" />
-		</label>
+	<div class="card w-full max-w-sm p-8">
+		<div class="mb-8 flex flex-col items-center gap-2">
+			<img src="/logo.png" alt="recoral" class="size-12 rounded-full object-cover" />
+			<h1 class="text-lg font-semibold text-gray-900 dark:text-gray-100">
+				{mode === 'login' ? 'Log in to recoral' : 'Create your recoral account'}
+			</h1>
+		</div>
 
-		{#if error}<p class="error">{error}</p>{/if}
+		<form onsubmit={submit} class="flex flex-col gap-4">
+			{#if error}
+				<p class="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600 dark:bg-red-950/40 dark:text-red-400">
+					{error}
+				</p>
+			{/if}
 
-		<button type="submit" disabled={submitting}>
-			{mode === 'login' ? 'Log in' : 'Create account'}
+			<label class="flex flex-col gap-1.5">
+				<span class="form-label">Email</span>
+				<input
+					class="form-input"
+					type="email"
+					bind:value={email}
+					required
+					autocomplete="email"
+				/>
+			</label>
+
+			<label class="flex flex-col gap-1.5">
+				<span class="form-label">Password</span>
+				<input
+					class="form-input"
+					type="password"
+					bind:value={password}
+					required
+					autocomplete="current-password"
+				/>
+			</label>
+
+			<button
+				type="submit"
+				disabled={submitting}
+				class="mt-2 rounded-full bg-coral-500 py-2.5 text-sm font-semibold text-white transition hover:bg-coral-600 disabled:opacity-60"
+			>
+				{mode === 'login' ? 'Log in' : 'Create account'}
+			</button>
+		</form>
+
+		<button
+			type="button"
+			class="mt-6 w-full text-center text-sm text-coral-600 hover:underline dark:text-coral-400"
+			onclick={() => (mode = mode === 'login' ? 'register' : 'login')}
+		>
+			{mode === 'login' ? "Don't have an account? Sign up" : 'Already have an account? Log in'}
 		</button>
-	</form>
-
-	<button
-		class="switch"
-		type="button"
-		onclick={() => (mode = mode === 'login' ? 'register' : 'login')}
-	>
-		{mode === 'login' ? "Don't have an account? Sign up" : 'Already have an account? Log in'}
-	</button>
-</main>
-
-<style>
-	main {
-		max-width: 22rem;
-		margin: 4rem auto;
-		padding: 0 1.5rem;
-		font-family: system-ui, sans-serif;
-		color: #3a2e2a;
-	}
-
-	h1 {
-		text-align: center;
-		color: #ff7f5e;
-	}
-
-	form {
-		display: flex;
-		flex-direction: column;
-		gap: 1rem;
-		background: #fff;
-		border: 1px solid #ffe1d6;
-		border-radius: 0.75rem;
-		padding: 1.5rem;
-	}
-
-	label {
-		display: flex;
-		flex-direction: column;
-		gap: 0.35rem;
-		font-size: 0.9rem;
-		color: #8a746c;
-	}
-
-	input {
-		padding: 0.5rem 0.65rem;
-		border: 1px solid #ffe1d6;
-		border-radius: 0.5rem;
-		font-size: 1rem;
-	}
-
-	button[type='submit'] {
-		margin-top: 0.25rem;
-		padding: 0.6rem;
-		border: none;
-		border-radius: 0.5rem;
-		background: #ff7f5e;
-		color: #fff;
-		font-weight: 600;
-		cursor: pointer;
-	}
-
-	button[type='submit']:disabled {
-		opacity: 0.6;
-		cursor: default;
-	}
-
-	.switch {
-		display: block;
-		margin: 1rem auto 0;
-		background: none;
-		border: none;
-		color: #ff7f5e;
-		cursor: pointer;
-		font-size: 0.9rem;
-	}
-
-	.error {
-		color: #e8483a;
-		font-size: 0.85rem;
-		margin: 0;
-	}
-</style>
+	</div>
+</section>

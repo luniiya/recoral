@@ -1,32 +1,23 @@
 <script lang="ts">
-	import favicon from '$lib/assets/favicon.svg';
+	import '../app.css';
 	import { auth } from '$lib/auth.svelte';
+	import { themeStore } from '$lib/theme.svelte';
 	import { onMount } from 'svelte';
 
 	let { children } = $props();
 
 	onMount(() => {
 		auth.refresh();
+		themeStore.init();
 	});
 </script>
 
 <svelte:head>
-	<link rel="icon" href={favicon} />
+	<link rel="icon" type="image/png" href="/logo.png" />
 </svelte:head>
 
 {#if auth.loading}
-	<div class="auth-loading">Loading&hellip;</div>
+	<div class="flex min-h-dvh items-center justify-center text-sm text-gray-400">Loading&hellip;</div>
 {:else}
 	{@render children()}
 {/if}
-
-<style>
-	.auth-loading {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		min-height: 100vh;
-		color: #b8a49c;
-		font-family: system-ui, sans-serif;
-	}
-</style>

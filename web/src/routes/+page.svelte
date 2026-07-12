@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { auth } from '$lib/auth.svelte';
+	import ThemeToggle from '$lib/components/ThemeToggle.svelte';
 
 	$effect(() => {
 		if (!auth.user) goto('/login');
@@ -27,6 +28,15 @@
 		const minutes = Math.floor(totalSeconds / 60);
 		const seconds = Math.floor(totalSeconds % 60);
 		return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+	}
+
+	function formatTimestamp(date: Date) {
+		return date.toLocaleString(undefined, {
+			month: 'short',
+			day: 'numeric',
+			hour: 'numeric',
+			minute: '2-digit'
+		});
 	}
 
 	async function startRecording() {
@@ -79,156 +89,63 @@
 </script>
 
 {#if auth.user}
-<main>
-	<header>
-		<h1>recoral</h1>
-		<button class="logout" onclick={() => auth.logout()}>Log out</button>
-	</header>
+	<div class="min-h-dvh bg-gray-50 dark:bg-neutral-950">
+		<header class="flex items-center justify-between border-b border-gray-200 px-6 py-4 dark:border-white/10">
+			<div class="flex items-center gap-2.5">
+				<img src="/logo.png" alt="recoral" class="size-8 rounded-full object-cover" />
+				<span class="font-semibold text-gray-900 dark:text-gray-100">recoral</span>
+			</div>
+			<div class="flex items-center gap-2">
+				<ThemeToggle />
+				<button
+					class="rounded-full border border-gray-200 px-3.5 py-1.5 text-sm text-gray-600 transition hover:bg-gray-100 dark:border-white/10 dark:text-gray-300 dark:hover:bg-white/5"
+					onclick={() => auth.logout()}
+				>
+					Log out
+				</button>
+			</div>
+		</header>
 
-	<div class="record-panel">
-		<button
-			class="record-button"
-			class:recording={isRecording}
-			onclick={toggleRecording}
-			aria-label={isRecording ? 'Stop recording' : 'Start recording'}
-		></button>
-		<span class="timer">{isRecording ? formatDuration(elapsedSeconds) : 'Tap to record'}</span>
-	</div>
-
-	<ul class="recordings">
-		{#each recordings as recording (recording.id)}
-			<li>
-				<div class="recording-meta">
-					<span class="title">{recording.title}</span>
-					<span class="duration">{formatDuration(recording.durationSeconds)}</span>
+		<main class="mx-auto max-w-xl px-6 py-10">
+			<div class="flex flex-col items-center gap-3 pb-10">
+				<button
+					class="flex size-16 items-center justify-center rounded-full text-white shadow-sm transition
+						{isRecording ? 'bg-coral-700' : 'bg-coral-500 hover:bg-coral-600'}"
+					onclick={toggleRecording}
+					aria-label={isRecording ? 'Stop recording' : 'Start recording'}
+				>
+					{#if isRecording}
+						<span class="size-4 rounded-sm bg-white"></span>
+					{:else}
+						<svg viewBox="0 0 24 24" fill="currentColor" class="size-6">
+							<path
+								d="M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-2.08A7 7 0 0 0 19 12h-2Z"
+							/>
+						</svg>
+					{/if}
+				</button>
+				<div class="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
+					{#if isRecording}
+						<span class="size-1.5 animate-pulse rounded-full bg-coral-500"></span>
+					{/if}
+					<span class="tabular-nums">{isRecording ? formatDuration(elapsedSeconds) : 'Tap to record'}</span>
 				</div>
-				<audio controls src={recording.url}></audio>
-			</li>
-		{:else}
-			<li class="empty">No recordings yet</li>
-		{/each}
-	</ul>
-</main>
+			</div>
+
+			<ul class="flex flex-col gap-3">
+				{#each recordings as recording (recording.id)}
+					<li class="card p-4">
+						<div class="mb-2 flex items-baseline justify-between">
+							<span class="text-sm font-medium text-gray-900 dark:text-gray-100">{recording.title}</span>
+							<span class="text-xs tabular-nums text-gray-400">{formatDuration(recording.durationSeconds)}</span>
+						</div>
+						<p class="mb-2 text-xs text-gray-400">{formatTimestamp(recording.createdAt)}</p>
+						<audio controls src={recording.url} class="w-full"></audio>
+					</li>
+				{:else}
+					<li class="card border-dashed p-8 text-center text-sm text-gray-400">No recordings yet</li>
+				{/each}
+			</ul>
+		</main>
+	</div>
 {/if}
-
-<style>
-	:global(body) {
-		margin: 0;
-		background: #fff8f5;
-		color: #3a2e2a;
-		font-family:
-			system-ui,
-			-apple-system,
-			sans-serif;
-	}
-
-	main {
-		max-width: 32rem;
-		margin: 0 auto;
-		padding: 2rem 1.5rem 4rem;
-	}
-
-	header {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-	}
-
-	h1 {
-		color: #ff7f5e;
-		letter-spacing: 0.02em;
-	}
-
-	.logout {
-		background: none;
-		border: 1px solid #ffe1d6;
-		border-radius: 0.5rem;
-		padding: 0.4rem 0.75rem;
-		color: #8a746c;
-		cursor: pointer;
-		font-size: 0.85rem;
-	}
-
-	.record-panel {
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		gap: 0.75rem;
-		margin: 2.5rem 0;
-	}
-
-	.record-button {
-		width: 5rem;
-		height: 5rem;
-		border-radius: 50%;
-		border: none;
-		background: #ff7f5e;
-		cursor: pointer;
-		box-shadow: 0 4px 16px rgba(255, 127, 94, 0.35);
-		transition:
-			transform 0.15s ease,
-			background 0.15s ease;
-	}
-
-	.record-button:hover {
-		transform: scale(1.05);
-	}
-
-	.record-button.recording {
-		background: #e8483a;
-		border-radius: 1rem;
-		animation: pulse 1.4s ease-in-out infinite;
-	}
-
-	@keyframes pulse {
-		0%,
-		100% {
-			box-shadow: 0 4px 16px rgba(232, 72, 58, 0.4);
-		}
-		50% {
-			box-shadow: 0 4px 28px rgba(232, 72, 58, 0.7);
-		}
-	}
-
-	.timer {
-		font-variant-numeric: tabular-nums;
-		color: #8a746c;
-	}
-
-	.recordings {
-		list-style: none;
-		padding: 0;
-		display: flex;
-		flex-direction: column;
-		gap: 0.75rem;
-	}
-
-	.recordings li {
-		background: #fff;
-		border: 1px solid #ffe1d6;
-		border-radius: 0.75rem;
-		padding: 0.75rem 1rem;
-	}
-
-	.recordings li.empty {
-		text-align: center;
-		color: #b8a49c;
-		border-style: dashed;
-	}
-
-	.recording-meta {
-		display: flex;
-		justify-content: space-between;
-		margin-bottom: 0.5rem;
-		font-size: 0.9rem;
-	}
-
-	.duration {
-		color: #b8a49c;
-		font-variant-numeric: tabular-nums;
-	}
-
-	audio {
-		width: 100%;
-	}
-</style>
