@@ -12,6 +12,11 @@ build/
 # local sqlite data
 server/data/
 
+# personal Google Takeout export, never commit this
+takeout*.zip
+Takeout/
+*.zip
+
 # env
 .env
 .env.local

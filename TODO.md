@@ -56,12 +56,18 @@
 - [ ] "Import your data" button (Settings), with a choice of source format:
   - recoral's own export format (round-trips with the export above)
   - Google Takeout data (Google Recorder's export), since recoral is explicitly a Google Recorder replacement, letting people migrate their existing recordings in is a natural onboarding path. Needs research into what Google Takeout actually ships for Recorder (audio file format, transcript format, metadata layout) before this can be scoped properly.
+  - **Promoted to top priority**: this is a personal-necessity feature for the user, whose own Google Recorder app is bricked from too many recordings, not just a nice-to-have for other users. User requested their own Takeout export (2026-07-12), expected to land ~2026-07-13. Once it arrives, the actual `.zip`/folder structure needs reverse-engineering (Google doesn't document the Recorder export format) before anything can be built against it.
+  - Rough shape of the plan so far (not decided, just brainstormed): a dedicated Import/Export section in Settings, drag-and-drop (or file picker) upload of the Takeout archive, server-side processing of the archive after upload (not client-side, since these can be large). Explicit concern raised: a single Takeout export could contain a very large number of recordings, so the backend needs to process this in a memory-safe/streaming way (e.g. stream-unzip and import recordings one at a time or in small batches, not load the whole archive into memory at once) rather than assuming small/typical upload sizes like the existing single-file `POST /api/recordings` path does.
 
 ## Transcription
 
 - [ ] Pick transcription approach on the server (model, chunking for long recordings)
 - [ ] Decide on speaker diarization, yes or no
 - [ ] Decide if local/on-device transcription is ever supported in offline mode, or always server-only
+  - Confirmed technically feasible via phone NPU: iOS `SFSpeechRecognizer` with `requiresOnDeviceRecognition = true` (built-in, free, Apple maintains the model), Android via ML Kit on-device speech-to-text or a bundled quantized Whisper (`whisper.cpp`/`whisper.tflite`, `tiny`/`base` models run fast on modern NPUs). Precedent: Google's own Pixel Recorder app already transcribes fully on-device via the Tensor NPU.
+  - Real-time word-by-word streaming isn't required, fast on-device batch transcription right after recording covers the voice-memo use case fine and is much simpler.
+  - Needs a custom Capacitor native plugin (Swift + Kotlin) bridging to the platform ASR API or bundled model runtime, not reachable from the WebView/JS layer directly. Same shape of native work as the `capacitor-audio-recorder` plugin already planned for background recording, but a second plugin specific to transcription.
+  - On-device is the only way fully-offline-mode users (no account, no server, ever) get transcripts at all, fits the "offline is first-class" principle hard. But it doesn't help the desktop webUI (no NPU access from a browser), so a server-side transcription path is still needed regardless, meaning two pipelines to maintain if both are built, not one.
 
 ## Later / unsorted
 
