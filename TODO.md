@@ -2,12 +2,13 @@
 
 ## Scaffolding
 
-- [ ] Root `package.json` with Bun workspaces (`server`, `web`, `packages/*`)
-- [ ] `server/` skeleton, Bun HTTP server, basic routing
-- [ ] `web/` skeleton, pick a frontend framework
-- [ ] `packages/shared` for shared TS types/DTOs
+- [x] Root `package.json` with Bun workspaces (`server`, `web`, `packages/*`)
+- [x] `server/` skeleton, Bun HTTP server, basic routing, serves `web/build` with SPA fallback
+- [x] `web/` skeleton, SvelteKit with `adapter-static`
+- [x] `packages/shared` for shared TS types/DTOs
 - [ ] `mobile/` Capacitor project wrapping `web/`
-- [ ] `docker/` Dockerfile + docker-compose for the server
+- [x] Dockerfile (multi-stage, builds web then ships a slim Bun runtime image) + docker-compose for the server
+- [x] `start-dev.sh` to run server + web dev servers together
 
 ## Accounts / auth
 

@@ -1,0 +1,9 @@
+{
+  "name": "recoral",
+  "private": true,
+  "workspaces": [
+    "server",
+    "web",
+    "packages/*"
+  ]
+}

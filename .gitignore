@@ -4,12 +4,13 @@ CLAUDE.md
 # deps
 node_modules/
 
-# bun
-bun.lockb
-
 # build output
 dist/
 build/
+.svelte-kit/
+
+# local sqlite data
+server/data/
 
 # env
 .env

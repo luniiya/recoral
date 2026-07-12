@@ -1,0 +1,15 @@
+name: recoral
+
+services:
+  recoral:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+    volumes:
+      - recoral-data:/data
+    restart: unless-stopped
+
+volumes:
+  recoral-data:
