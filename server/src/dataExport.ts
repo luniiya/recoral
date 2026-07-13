@@ -1,5 +1,5 @@
 import { extname } from "node:path";
-import archiver from "archiver";
+import { ZipArchive } from "archiver";
 import { getAudioFile, listRecordings } from "./recordings";
 import { listTags } from "./tags";
 
@@ -29,10 +29,26 @@ export interface ExportManifest {
 	recordings: ExportManifestRecording[];
 }
 
+export interface ExportStats {
+	recordingCount: number;
+	tagCount: number;
+	totalDurationSeconds: number;
+}
+
+export function getExportStats(userId: string): ExportStats {
+	const tags = listTags(userId).filter((t) => t.trashedAt === null);
+	const recordings = listRecordings(userId).filter((r) => r.trashedAt === null);
+	return {
+		recordingCount: recordings.length,
+		tagCount: tags.length,
+		totalDurationSeconds: recordings.reduce((sum, r) => sum + r.durationSeconds, 0)
+	};
+}
+
 // Trashed tags/recordings are deliberately left out: this is a backup of your
 // active library, not a way to resurrect things you already threw away.
 export function buildExportArchive(userId: string) {
-	const archive = archiver("zip", { zlib: { level: 6 } });
+	const archive = new ZipArchive({ zlib: { level: 6 } });
 
 	const tags = listTags(userId).filter((t) => t.trashedAt === null);
 	const recordings = listRecordings(userId).filter((r) => r.trashedAt === null);

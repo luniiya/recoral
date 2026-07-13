@@ -2,7 +2,7 @@
 	import Confetti from '$lib/components/Confetti.svelte';
 
 	type Step = 'format' | 'upload' | 'confirm' | 'progress';
-	type Format = 'takeout';
+	type Format = 'takeout' | 'recoral';
 
 	interface ImportJob {
 		id: string;
@@ -73,16 +73,17 @@
 
 	// The upload just hands the file to the server; every bit of parsing,
 	// date/transcript extraction, and recording creation happens server-side
-	// (see server/src/takeoutImport.ts) so this stays a thin client.
+	// (see server/src/takeoutImport.ts and server/src/recoralImport.ts) so
+	// this stays a thin client regardless of format.
 	async function confirmImport() {
-		if (!selectedFile) return;
+		if (!selectedFile || !format) return;
 		uploadError = '';
 		step = 'progress';
 
 		const form = new FormData();
 		form.append('file', selectedFile);
 
-		const res = await fetch('/api/import/takeout', { method: 'POST', credentials: 'include', body: form });
+		const res = await fetch(`/api/import/${format}`, { method: 'POST', credentials: 'include', body: form });
 		if (!res.ok) {
 			const body = await res.json().catch(() => ({}));
 			uploadError = body.error ?? 'Something went wrong';
@@ -97,7 +98,7 @@
 	function pollJob(jobId: string) {
 		if (pollHandle) clearInterval(pollHandle);
 		pollHandle = setInterval(async () => {
-			const res = await fetch(`/api/import/takeout/${jobId}`, { credentials: 'include' });
+			const res = await fetch(`/api/import/${format}/${jobId}`, { credentials: 'include' });
 			if (!res.ok) return;
 			job = await res.json();
 			if (job && job.status !== 'processing' && pollHandle) {
@@ -158,31 +159,52 @@
 
 	{#if step === 'format'}
 		<p class="mb-4 text-sm text-gray-500 dark:text-gray-400">What would you like to import?</p>
-		<button
-			class="card flex w-full items-center gap-4 p-4 text-left transition hover:bg-gray-50 dark:hover:bg-white/5"
-			onclick={() => chooseFormat('takeout')}
-		>
-			<div class="flex size-10 shrink-0 items-center justify-center">
-				<img src="/google-recorder.svg" alt="" class="size-9" />
-			</div>
-			<div class="min-w-0 flex-1">
-				<p class="text-sm font-medium text-gray-900 dark:text-gray-100">Google Takeout</p>
-				<p class="text-sm text-gray-500 dark:text-gray-400">Google Recorder's data export</p>
-			</div>
-			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="size-4 shrink-0 text-gray-300 dark:text-gray-600">
-				<path stroke-linecap="round" stroke-linejoin="round" d="M9 18l6-6-6-6" />
-			</svg>
-		</button>
+		<div class="flex flex-col gap-3">
+			<button
+				class="card flex w-full items-center gap-4 p-4 text-left transition hover:bg-gray-50 dark:hover:bg-white/5"
+				onclick={() => chooseFormat('recoral')}
+			>
+				<div class="flex size-10 shrink-0 items-center justify-center">
+					<img src="/logo.png" alt="" class="size-9 rounded-full object-cover" />
+				</div>
+				<div class="min-w-0 flex-1">
+					<p class="text-sm font-medium text-gray-900 dark:text-gray-100">recoral export</p>
+					<p class="text-sm text-gray-500 dark:text-gray-400">A backup made with recoral's own Export button</p>
+				</div>
+				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="size-4 shrink-0 text-gray-300 dark:text-gray-600">
+					<path stroke-linecap="round" stroke-linejoin="round" d="M9 18l6-6-6-6" />
+				</svg>
+			</button>
+			<button
+				class="card flex w-full items-center gap-4 p-4 text-left transition hover:bg-gray-50 dark:hover:bg-white/5"
+				onclick={() => chooseFormat('takeout')}
+			>
+				<div class="flex size-10 shrink-0 items-center justify-center">
+					<img src="/google-recorder.svg" alt="" class="size-9" />
+				</div>
+				<div class="min-w-0 flex-1">
+					<p class="text-sm font-medium text-gray-900 dark:text-gray-100">Google Takeout</p>
+					<p class="text-sm text-gray-500 dark:text-gray-400">Google Recorder's data export</p>
+				</div>
+				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="size-4 shrink-0 text-gray-300 dark:text-gray-600">
+					<path stroke-linecap="round" stroke-linejoin="round" d="M9 18l6-6-6-6" />
+				</svg>
+			</button>
+		</div>
 	{:else if step === 'upload'}
 		<p class="mb-4 text-sm text-gray-500 dark:text-gray-400">
-			Upload the <code>.zip</code> file Google emailed you from Takeout.
+			{#if format === 'takeout'}
+				Upload the <code>.zip</code> file Google emailed you from Takeout.
+			{:else}
+				Upload a <code>.zip</code> file exported from recoral's own Settings &gt; Export.
+			{/if}
 		</p>
 		<button
 			type="button"
 			class="flex w-full cursor-pointer flex-col items-center rounded-xl border-2 border-dashed text-center transition
 				{dragging ? 'border-accent-400 bg-accent-50 dark:bg-accent-500/10' : 'border-gray-200 dark:border-white/10'}"
 			style="padding-top: 96px; padding-bottom: 96px; padding-left: 40px; padding-right: 40px; gap: 14px;"
-			aria-label="Takeout import drop zone, click or drop a file here"
+			aria-label="Import drop zone, click or drop a file here"
 			onclick={() => fileInput?.click()}
 			ondragover={(e) => {
 				e.preventDefault();

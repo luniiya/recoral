@@ -110,10 +110,12 @@ export async function createRecording(params: {
 	title: string;
 	file: File;
 	durationSeconds: number;
-	// Overrides for imported recordings (e.g. Google Takeout), which arrive
-	// with their own real creation date and possibly an existing transcript,
-	// instead of "now" and null like a freshly-recorded upload.
+	// Overrides for imported recordings (Google Takeout or recoral's own
+	// export format), which arrive with their own real creation date and
+	// possibly a description/transcript already, instead of "now"/''/null
+	// like a freshly-recorded upload.
 	createdAt?: string;
+	description?: string;
 	transcript?: string | null;
 }): Promise<Recording> {
 	const buffer = await params.file.arrayBuffer();
@@ -133,11 +135,12 @@ export async function createRecording(params: {
 	db.run(
 		`INSERT INTO recordings
 			(id, user_id, title, description, file_path, content_hash, duration_seconds, file_size_bytes, mime_type, created_at, transcript)
-		 VALUES (?, ?, ?, '', ?, ?, ?, ?, ?, ?, ?)`,
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		[
 			id,
 			params.userId,
 			params.title,
+			params.description ?? "",
 			filePath,
 			contentHash,
 			params.durationSeconds,

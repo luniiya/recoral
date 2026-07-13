@@ -49,6 +49,14 @@
 			: 'w-full'}"
 	>
 		<div class="mx-auto max-w-xl px-6 py-10">
+			<p class="mb-3 text-xs font-medium text-gray-400">
+				{#if recordingsStore.search.trim() || recordingsStore.selectedTagIds.length > 0}
+					{visibleRecordings.length} {visibleRecordings.length === 1 ? 'result' : 'results'}
+				{:else}
+					{recordingsStore.favorites.length} {recordingsStore.favorites.length === 1 ? 'favourite' : 'favourites'}
+				{/if}
+			</p>
+
 			<ul class="flex flex-col gap-3">
 				{#each visibleRecordings as recording (recording.id)}
 					<li>

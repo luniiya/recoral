@@ -1,6 +1,7 @@
 import { APP_VERSION } from "@recoral/shared";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { Readable } from "node:stream";
 import {
 	adminUpdateUser,
 	clearSessionCookie,
@@ -27,6 +28,8 @@ import {
 	updateRecording,
 	userStorageBytes
 } from "./recordings";
+import { buildExportArchive, getExportStats } from "./dataExport";
+import { getRecoralImportJob, startRecoralImport } from "./recoralImport";
 import { getSettings, updateSettings } from "./settings";
 import { getImportJob, startTakeoutImport } from "./takeoutImport";
 import { createTag, deleteTagForever, listTags, purgeExpiredTagTrash, updateTag } from "./tags";
@@ -438,6 +441,79 @@ const server = Bun.serve({
 					const job = getImportJob(user.id, req.params.jobId);
 					if (!job) return new Response(null, { status: 404 });
 					return Response.json(job);
+				} catch {
+					return new Response(null, { status: 401 });
+				}
+			}
+		},
+
+		"/api/import/recoral": {
+			POST: async (req) => {
+				try {
+					const user = requireUser(req);
+
+					const contentLength = Number(req.headers.get("content-length") ?? 0);
+					const maxImportSizeMb = getSettings().maxImportSizeMb;
+					if (contentLength > maxImportSizeMb * 1024 * 1024) {
+						return Response.json(
+							{ error: `That file is larger than the ${maxImportSizeMb}MB import limit set by your server admin` },
+							{ status: 413 }
+						);
+					}
+
+					const form = await req.formData();
+					const file = form.get("file");
+					if (!(file instanceof File)) {
+						return Response.json({ error: "A recoral export .zip file is required" }, { status: 400 });
+					}
+
+					const zipPath = join(tmpdir(), `recoral-import-${crypto.randomUUID()}.zip`);
+					await Bun.write(zipPath, file);
+
+					const jobId = startRecoralImport(user.id, user.storageLimitMb, zipPath);
+					return Response.json({ jobId }, { status: 202 });
+				} catch (err) {
+					return authErrorResponse(err) ?? Response.json({ error: (err as Error).message }, { status: 400 });
+				}
+			}
+		},
+
+		"/api/import/recoral/:jobId": {
+			GET: (req) => {
+				try {
+					const user = requireUser(req);
+					const job = getRecoralImportJob(user.id, req.params.jobId);
+					if (!job) return new Response(null, { status: 404 });
+					return Response.json(job);
+				} catch {
+					return new Response(null, { status: 401 });
+				}
+			}
+		},
+
+		"/api/export/stats": {
+			GET: (req) => {
+				try {
+					const user = requireUser(req);
+					return Response.json(getExportStats(user.id));
+				} catch {
+					return new Response(null, { status: 401 });
+				}
+			}
+		},
+
+		"/api/export": {
+			GET: (req) => {
+				try {
+					const user = requireUser(req);
+					const archive = buildExportArchive(user.id);
+					const filename = `recoral-export-${new Date().toISOString().slice(0, 10)}.zip`;
+					return new Response(Readable.toWeb(archive) as ReadableStream, {
+						headers: {
+							"Content-Type": "application/zip",
+							"Content-Disposition": `attachment; filename="${filename}"`
+						}
+					});
 				} catch {
 					return new Response(null, { status: 401 });
 				}

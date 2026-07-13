@@ -127,6 +127,14 @@
 				</div>
 			</div>
 
+			<p class="mb-3 text-xs font-medium text-gray-400">
+				{#if recordingsStore.search.trim() || recordingsStore.selectedTagIds.length > 0}
+					{visibleRecordings.length} {visibleRecordings.length === 1 ? 'result' : 'results'}
+				{:else}
+					{recordingsStore.active.length} {recordingsStore.active.length === 1 ? 'recording' : 'recordings'}
+				{/if}
+			</p>
+
 			<ul class="flex flex-col gap-3">
 				{#each visibleRecordings as recording (recording.id)}
 					<li>
