@@ -1,6 +1,7 @@
 import type { Recording } from "@recoral/shared";
 import { mkdirSync, unlinkSync } from "node:fs";
 import { db } from "./db";
+import { getSettings } from "./settings";
 
 const dataDir = process.env.DATA_DIR ?? "./data";
 const RECORDINGS_DIR = `${dataDir}/recordings`;
@@ -28,6 +29,24 @@ export class DuplicateError extends Error {
 	constructor(existing: Recording) {
 		super(`"${existing.title}" is already in your library`);
 		this.existing = existing;
+	}
+}
+
+export class QuotaError extends Error {}
+
+// A user's own limit (if set) caps them individually. Otherwise everyone draws
+// from the one shared server-wide pool.
+export function checkStorageQuota(userId: string, userStorageLimitMb: number | null, incomingBytes: number) {
+	if (userStorageLimitMb !== null) {
+		if (userStorageBytes(userId) + incomingBytes > userStorageLimitMb * 1024 * 1024) {
+			throw new QuotaError("You've reached your storage limit");
+		}
+		return;
+	}
+
+	const serverLimitMb = getSettings().serverStorageLimitMb;
+	if (serverLimitMb !== null && globalStorageBytes() + incomingBytes > serverLimitMb * 1024 * 1024) {
+		throw new QuotaError("The server has reached its storage limit");
 	}
 }
 
@@ -91,6 +110,11 @@ export async function createRecording(params: {
 	title: string;
 	file: File;
 	durationSeconds: number;
+	// Overrides for imported recordings (e.g. Google Takeout), which arrive
+	// with their own real creation date and possibly an existing transcript,
+	// instead of "now" and null like a freshly-recorded upload.
+	createdAt?: string;
+	transcript?: string | null;
 }): Promise<Recording> {
 	const buffer = await params.file.arrayBuffer();
 	const contentHash = await hashBuffer(buffer);
@@ -105,11 +129,11 @@ export async function createRecording(params: {
 	const filePath = `${userDir}/${id}.${ext}`;
 	await Bun.write(filePath, buffer);
 
-	const createdAt = new Date().toISOString();
+	const createdAt = params.createdAt ?? new Date().toISOString();
 	db.run(
 		`INSERT INTO recordings
-			(id, user_id, title, description, file_path, content_hash, duration_seconds, file_size_bytes, mime_type, created_at)
-		 VALUES (?, ?, ?, '', ?, ?, ?, ?, ?, ?)`,
+			(id, user_id, title, description, file_path, content_hash, duration_seconds, file_size_bytes, mime_type, created_at, transcript)
+		 VALUES (?, ?, ?, '', ?, ?, ?, ?, ?, ?, ?)`,
 		[
 			id,
 			params.userId,
@@ -119,7 +143,8 @@ export async function createRecording(params: {
 			params.durationSeconds,
 			buffer.byteLength,
 			params.file.type || "audio/mpeg",
-			createdAt
+			createdAt,
+			params.transcript ?? null
 		]
 	);
 

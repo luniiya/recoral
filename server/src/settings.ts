@@ -7,6 +7,7 @@ interface SettingsRow {
 	signup_enabled: number;
 	background_image: string | null;
 	server_storage_limit_mb: number | null;
+	max_import_size_mb: number;
 }
 
 function toSettings(row: SettingsRow): Settings {
@@ -14,7 +15,8 @@ function toSettings(row: SettingsRow): Settings {
 		defaultAccentHue: row.default_accent_hue,
 		signupEnabled: row.signup_enabled === 1,
 		backgroundImage: row.background_image,
-		serverStorageLimitMb: row.server_storage_limit_mb
+		serverStorageLimitMb: row.server_storage_limit_mb,
+		maxImportSizeMb: row.max_import_size_mb
 	};
 }
 
@@ -22,7 +24,13 @@ export function getSettings(): Settings {
 	const row = db.query<SettingsRow, []>("SELECT * FROM settings WHERE id = 1").get();
 	return row
 		? toSettings(row)
-		: { defaultAccentHue: null, signupEnabled: true, backgroundImage: null, serverStorageLimitMb: 204800 };
+		: {
+				defaultAccentHue: null,
+				signupEnabled: true,
+				backgroundImage: null,
+				serverStorageLimitMb: 204800,
+				maxImportSizeMb: 1024
+			};
 }
 
 export function updateSettings(updates: {
@@ -30,6 +38,7 @@ export function updateSettings(updates: {
 	signupEnabled?: boolean;
 	backgroundImage?: string | null;
 	serverStorageLimitMb?: number | null;
+	maxImportSizeMb?: number;
 }): Settings {
 	if (updates.defaultAccentHue !== undefined) {
 		const hue =
@@ -46,6 +55,9 @@ export function updateSettings(updates: {
 	}
 	if (updates.serverStorageLimitMb !== undefined) {
 		db.run("UPDATE settings SET server_storage_limit_mb = ? WHERE id = 1", [updates.serverStorageLimitMb]);
+	}
+	if (updates.maxImportSizeMb !== undefined) {
+		db.run("UPDATE settings SET max_import_size_mb = ? WHERE id = 1", [updates.maxImportSizeMb]);
 	}
 	return getSettings();
 }

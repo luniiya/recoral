@@ -89,7 +89,7 @@
 		<ColorPicker value={auth.user.accentHue} onselect={onHueSelected} />
 	</div>
 
-	<div class="card p-6">
+	<div class="card mb-6 p-6">
 		<h2 class="mb-4 text-sm font-semibold text-gray-900 dark:text-gray-100">Appearance</h2>
 		<div class="flex items-center justify-between gap-4">
 			<div>
@@ -99,6 +99,26 @@
 				</p>
 			</div>
 			<Toggle checked={wavySeekStore.enabled} onchange={(checked) => wavySeekStore.set(checked)} />
+		</div>
+	</div>
+
+	<div class="card p-6">
+		<h2 class="mb-1 text-sm font-semibold text-gray-900 dark:text-gray-100">Import / Export</h2>
+		<p class="mb-4 text-sm text-gray-500 dark:text-gray-400">Move recordings in or out of recoral.</p>
+		<div class="flex gap-2">
+			<a
+				href="/settings/import"
+				class="rounded-full bg-accent-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-accent-600"
+			>
+				Import
+			</a>
+			<button
+				class="cursor-not-allowed rounded-full px-4 py-2 text-sm font-semibold text-gray-400 ring-1 ring-gray-200 dark:ring-white/10"
+				disabled
+				title="Coming soon"
+			>
+				Export
+			</button>
 		</div>
 	</div>
 

@@ -80,13 +80,16 @@ db.run(`
 		default_accent_hue INTEGER,
 		signup_enabled INTEGER NOT NULL DEFAULT 1,
 		background_image TEXT,
-		server_storage_limit_mb INTEGER DEFAULT 204800
+		server_storage_limit_mb INTEGER DEFAULT 204800,
+		max_import_size_mb INTEGER NOT NULL DEFAULT 1024
 	)
 `);
 db.run("INSERT OR IGNORE INTO settings (id, default_accent_hue, signup_enabled) VALUES (1, NULL, 1)");
 ensureColumn("settings", "background_image", "background_image TEXT");
 // 204800 MB = 200 GiB, the default total pool shared across every user on the server.
 ensureColumn("settings", "server_storage_limit_mb", "server_storage_limit_mb INTEGER DEFAULT 204800");
+// 1024 MB = 1 GiB, the default cap on a single Takeout/import upload.
+ensureColumn("settings", "max_import_size_mb", "max_import_size_mb INTEGER NOT NULL DEFAULT 1024");
 
 db.run(`
 	CREATE TABLE IF NOT EXISTS recordings (

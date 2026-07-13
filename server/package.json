@@ -8,9 +8,13 @@
     "start": "bun src/index.ts"
   },
   "dependencies": {
-    "@recoral/shared": "workspace:*"
+    "@recoral/shared": "workspace:*",
+    "archiver": "^8.0.0",
+    "yauzl": "^3.4.0"
   },
   "devDependencies": {
-    "@types/bun": "latest"
+    "@types/archiver": "^8.0.0",
+    "@types/bun": "latest",
+    "@types/yauzl": "^3.4.0"
   }
 }

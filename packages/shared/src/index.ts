@@ -37,6 +37,7 @@ export interface Settings {
 	signupEnabled: boolean;
 	backgroundImage: string | null;
 	serverStorageLimitMb: number | null;
+	maxImportSizeMb: number;
 }
 
 export interface StorageUsage {

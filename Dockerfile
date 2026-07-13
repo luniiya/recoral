@@ -13,6 +13,10 @@ RUN bun run --cwd web build
 FROM oven/bun:1-alpine
 WORKDIR /app
 
+# ffprobe (part of ffmpeg) reads the real creation date/duration out of
+# imported audio files (e.g. Google Takeout's .m4a exports), see takeoutImport.ts
+RUN apk add --no-cache ffmpeg
+
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/package.json ./package.json
 COPY --from=build /app/packages ./packages

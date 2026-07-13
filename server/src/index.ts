@@ -1,4 +1,6 @@
 import { APP_VERSION } from "@recoral/shared";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
 	adminUpdateUser,
 	clearSessionCookie,
@@ -12,6 +14,7 @@ import {
 } from "./auth";
 import {
 	attachTag as attachRecordingTag,
+	checkStorageQuota,
 	createRecording,
 	deleteRecording,
 	detachTag as detachRecordingTag,
@@ -20,10 +23,12 @@ import {
 	globalStorageBytes,
 	listRecordings,
 	purgeExpiredTrash,
+	QuotaError,
 	updateRecording,
 	userStorageBytes
 } from "./recordings";
 import { getSettings, updateSettings } from "./settings";
+import { getImportJob, startTakeoutImport } from "./takeoutImport";
 import { createTag, deleteTagForever, listTags, purgeExpiredTagTrash, updateTag } from "./tags";
 
 const webDir = new URL("../../web/build/", import.meta.url);
@@ -69,7 +74,6 @@ function requireAdmin(req: Request) {
 
 class UnauthorizedError extends Error {}
 class ForbiddenError extends Error {}
-class QuotaError extends Error {}
 
 function authErrorResponse(err: unknown) {
 	if (err instanceof ForbiddenError) return new Response(null, { status: 403 });
@@ -77,24 +81,13 @@ function authErrorResponse(err: unknown) {
 	return null;
 }
 
-// A user's own limit (if set) caps them individually. Otherwise everyone draws
-// from the one shared server-wide pool.
-function checkStorageQuota(userId: string, userStorageLimitMb: number | null, incomingBytes: number) {
-	if (userStorageLimitMb !== null) {
-		if (userStorageBytes(userId) + incomingBytes > userStorageLimitMb * 1024 * 1024) {
-			throw new QuotaError("You've reached your storage limit");
-		}
-		return;
-	}
-
-	const serverLimitMb = getSettings().serverStorageLimitMb;
-	if (serverLimitMb !== null && globalStorageBytes() + incomingBytes > serverLimitMb * 1024 * 1024) {
-		throw new QuotaError("The server has reached its storage limit");
-	}
-}
-
 const server = Bun.serve({
-	port: 3000,
+	port: Number(process.env.PORT) || 3000,
+	// Bun's default is 128MiB, which a real Google Takeout export (hundreds
+	// of recordings) blows past easily. This is just the hard technical
+	// ceiling; the actual admin-configurable limit (Settings.maxImportSizeMb,
+	// default 1GiB) is enforced in the /api/import/takeout route itself.
+	maxRequestBodySize: 10 * 1024 * 1024 * 1024,
 	routes: {
 		"/api/health": () => Response.json({ status: "ok", version: APP_VERSION }),
 
@@ -256,6 +249,7 @@ const server = Bun.serve({
 						signupEnabled?: boolean;
 						backgroundImage?: string | null;
 						serverStorageLimitMb?: number | null;
+						maxImportSizeMb?: number;
 					} = {};
 
 					if (body.defaultAccentHue === null || typeof body.defaultAccentHue === "number") {
@@ -271,6 +265,9 @@ const server = Bun.serve({
 					}
 					if (body.serverStorageLimitMb === null || typeof body.serverStorageLimitMb === "number") {
 						updates.serverStorageLimitMb = body.serverStorageLimitMb;
+					}
+					if (typeof body.maxImportSizeMb === "number" && body.maxImportSizeMb > 0) {
+						updates.maxImportSizeMb = Math.min(body.maxImportSizeMb, 10240);
 					}
 
 					return Response.json(updateSettings(updates));
@@ -397,6 +394,53 @@ const server = Bun.serve({
 				});
 			} catch {
 				return new Response(null, { status: 401 });
+			}
+		},
+
+		"/api/import/takeout": {
+			POST: async (req) => {
+				try {
+					const user = requireUser(req);
+
+					// Check Content-Length against the admin-configured limit before
+					// parsing the multipart body, so an oversized upload is rejected
+					// without first buffering the whole thing into memory.
+					const contentLength = Number(req.headers.get("content-length") ?? 0);
+					const maxImportSizeMb = getSettings().maxImportSizeMb;
+					if (contentLength > maxImportSizeMb * 1024 * 1024) {
+						return Response.json(
+							{ error: `That file is larger than the ${maxImportSizeMb}MB import limit set by your server admin` },
+							{ status: 413 }
+						);
+					}
+
+					const form = await req.formData();
+					const file = form.get("file");
+					if (!(file instanceof File)) {
+						return Response.json({ error: "A Google Takeout .zip file is required" }, { status: 400 });
+					}
+
+					const zipPath = join(tmpdir(), `recoral-takeout-${crypto.randomUUID()}.zip`);
+					await Bun.write(zipPath, file);
+
+					const jobId = startTakeoutImport(user.id, user.storageLimitMb, zipPath);
+					return Response.json({ jobId }, { status: 202 });
+				} catch (err) {
+					return authErrorResponse(err) ?? Response.json({ error: (err as Error).message }, { status: 400 });
+				}
+			}
+		},
+
+		"/api/import/takeout/:jobId": {
+			GET: (req) => {
+				try {
+					const user = requireUser(req);
+					const job = getImportJob(user.id, req.params.jobId);
+					if (!job) return new Response(null, { status: 404 });
+					return Response.json(job);
+				} catch {
+					return new Response(null, { status: 401 });
+				}
 			}
 		}
 	},

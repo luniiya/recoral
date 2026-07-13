@@ -173,6 +173,29 @@
 			</div>
 
 			<div class="flex flex-col gap-3 border-t border-gray-100 pt-5 dark:border-white/10">
+				<div>
+					<p class="text-sm text-gray-900 dark:text-gray-100">Max import upload size</p>
+					<p class="text-xs text-gray-400">
+						Caps a single import upload (e.g. a Google Takeout export) for every user. Up to 10GB.
+					</p>
+				</div>
+				<label class="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
+					<input
+						type="number"
+						min="1"
+						max="10240"
+						value={Math.round(settings.maxImportSizeMb / 1024)}
+						class="w-24 rounded-lg bg-gray-100 px-2 py-1 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-accent-500 dark:bg-white/5 dark:text-gray-100"
+						onchange={(e) => {
+							const gb = Number(e.currentTarget.value);
+							if (gb > 0) patchSettings({ maxImportSizeMb: Math.round(gb * 1024) });
+						}}
+					/>
+					GB
+				</label>
+			</div>
+
+			<div class="flex flex-col gap-3 border-t border-gray-100 pt-5 dark:border-white/10">
 				<div class="flex items-center justify-between gap-4">
 					<div>
 						<p class="text-sm text-gray-900 dark:text-gray-100">Login page background</p>
