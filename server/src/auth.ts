@@ -154,6 +154,10 @@ export function listUsers(): User[] {
 	return rows.map(toUser);
 }
 
+export function userCount(): number {
+	return db.query<{ count: number }, []>("SELECT COUNT(*) as count FROM users").get()!.count;
+}
+
 // Doesn't start a session for the new account, this is an admin creating an
 // account for someone else, not logging in as them.
 export async function adminCreateUser(

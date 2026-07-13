@@ -306,8 +306,12 @@
 						{/if}
 						{#if job.earliestDate && job.latestDate}
 							<div class="rounded-xl bg-accent-50 p-4 text-center dark:bg-accent-500/10">
-								<p class="text-sm font-semibold text-accent-600 dark:text-accent-400">
-									{formatDateStat(job.earliestDate)} → {formatDateStat(job.latestDate)}
+								<p class="flex items-center justify-center gap-1.5 text-sm font-semibold text-accent-600 dark:text-accent-400">
+									<span>{formatDateStat(job.earliestDate)}</span>
+									<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="size-3.5 shrink-0">
+										<path stroke-linecap="round" stroke-linejoin="round" d="M4 12h16m0 0-5-5m5 5-5 5" />
+									</svg>
+									<span>{formatDateStat(job.latestDate)}</span>
 								</p>
 								<p class="text-xs text-gray-500 dark:text-gray-400">oldest to newest</p>
 							</div>
@@ -332,7 +336,7 @@
 						Stopped early: storage quota reached before the whole export could be imported.
 					</p>
 				{/if}
-				<div class="mt-6 flex gap-2">
+				<div class="mt-6 flex justify-center gap-2">
 					<a
 						href="/"
 						class="rounded-full bg-accent-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-accent-600"

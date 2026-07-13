@@ -1,10 +1,9 @@
 <script lang="ts">
 	import LiveRecordingPanel from '$lib/components/LiveRecordingPanel.svelte';
+	import RecordingCard from '$lib/components/RecordingCard.svelte';
 	import RecordingDetail from '$lib/components/RecordingDetail.svelte';
-	import TagChip from '$lib/components/TagChip.svelte';
+	import { formatDuration } from '$lib/format';
 	import { recordingsStore } from '$lib/recordings.svelte';
-	import { parentTag } from '$lib/tagPath';
-	import { tagsStore } from '$lib/tags.svelte';
 
 	let isRecording = $state(false);
 	let elapsedSeconds = $state(0);
@@ -31,21 +30,6 @@
 	);
 
 	let selectedRecording = $derived(recordingsStore.active.find((r) => r.id === selectedId) ?? null);
-
-	function formatDuration(totalSeconds: number) {
-		const minutes = Math.floor(totalSeconds / 60);
-		const seconds = Math.floor(totalSeconds % 60);
-		return `${minutes}:${seconds.toString().padStart(2, '0')}`;
-	}
-
-	function formatTimestamp(iso: string) {
-		return new Date(iso).toLocaleString(undefined, {
-			month: 'short',
-			day: 'numeric',
-			hour: 'numeric',
-			minute: '2-digit'
-		});
-	}
 
 	async function startRecording() {
 		selectedId = null;
@@ -138,32 +122,7 @@
 			<ul class="flex flex-col gap-3">
 				{#each visibleRecordings as recording (recording.id)}
 					<li>
-						<button
-							class="card w-full p-4 text-left transition
-								{selectedId === recording.id
-								? 'border-accent-400 bg-accent-50 dark:bg-accent-500/10'
-								: 'hover:bg-gray-50 dark:hover:bg-white/5'}"
-							onclick={() => (selectedId = recording.id)}
-						>
-							<div class="flex items-baseline justify-between gap-3">
-								<span class="min-w-0 flex-1 truncate text-sm font-medium text-gray-900 dark:text-gray-100">
-									{recording.title || formatTimestamp(recording.createdAt)}
-								</span>
-								<span class="shrink-0 text-xs tabular-nums text-gray-400">
-									{formatDuration(recording.durationSeconds)}
-								</span>
-							</div>
-							{#if recording.title}
-								<p class="mt-1 text-xs text-gray-400">{formatTimestamp(recording.createdAt)}</p>
-							{/if}
-							{#if recording.tagIds.length > 0}
-								<div class="mt-2 flex flex-wrap gap-1">
-									{#each tagsStore.list.filter((t) => recording.tagIds.includes(t.id)) as tag (tag.id)}
-										<TagChip {tag} interactive={false} parentHue={parentTag(tag, tagsStore.list)?.hue ?? null} />
-									{/each}
-								</div>
-							{/if}
-						</button>
+						<RecordingCard {recording} selected={selectedId === recording.id} onselect={() => (selectedId = recording.id)} />
 					</li>
 				{:else}
 					<li class="card border-dashed p-8 text-center text-sm text-gray-400">

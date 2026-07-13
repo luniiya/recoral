@@ -13,6 +13,7 @@ import {
 	register,
 	sessionCookie,
 	updateAccount,
+	userCount,
 	userFromRequest
 } from "./auth";
 import {
@@ -284,6 +285,8 @@ const server = Bun.serve({
 		},
 
 		"/api/settings": () => Response.json(getSettings()),
+
+		"/api/setup-status": () => Response.json({ needsSetup: userCount() === 0 }),
 
 		"/api/admin/settings": {
 			PATCH: async (req) => {

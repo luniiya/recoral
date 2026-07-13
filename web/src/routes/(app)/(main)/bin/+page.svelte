@@ -1,5 +1,6 @@
 <script lang="ts">
 	import AudioPlayer from '$lib/components/AudioPlayer.svelte';
+	import RecordingCardHeader from '$lib/components/RecordingCardHeader.svelte';
 	import TagChip from '$lib/components/TagChip.svelte';
 	import { recordingsStore } from '$lib/recordings.svelte';
 	import { groupTrashedTags, type TrashedTagGroup } from '$lib/tagPath';
@@ -19,21 +20,6 @@
 			)
 		].sort((a, b) => b.trashedAt.localeCompare(a.trashedAt))
 	);
-
-	function formatDuration(totalSeconds: number) {
-		const minutes = Math.floor(totalSeconds / 60);
-		const seconds = Math.floor(totalSeconds % 60);
-		return `${minutes}:${seconds.toString().padStart(2, '0')}`;
-	}
-
-	function formatTimestamp(iso: string) {
-		return new Date(iso).toLocaleString(undefined, {
-			month: 'short',
-			day: 'numeric',
-			hour: 'numeric',
-			minute: '2-digit'
-		});
-	}
 </script>
 
 <svelte:head>
@@ -49,11 +35,8 @@
 			<li class="card p-4">
 				{#if item.kind === 'recording'}
 					{@const recording = item.recording}
-					<div class="mb-1 flex items-baseline justify-between gap-3">
-						<span class="min-w-0 flex-1 truncate text-sm font-medium text-gray-900 dark:text-gray-100">
-							{recording.title || formatTimestamp(recording.createdAt)}
-						</span>
-						<span class="shrink-0 text-xs tabular-nums text-gray-400">{formatDuration(recording.durationSeconds)}</span>
+					<div class="mb-1">
+						<RecordingCardHeader {recording} />
 					</div>
 					<p class="mb-3 text-xs text-gray-400">
 						{recordingsStore.daysLeft(recording)} day{recordingsStore.daysLeft(recording) === 1 ? '' : 's'} left

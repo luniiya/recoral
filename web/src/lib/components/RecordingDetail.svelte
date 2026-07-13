@@ -99,11 +99,13 @@
 				</svg>
 			</button>
 			<button
-				class="flex size-8 items-center justify-center rounded-full text-gray-400 transition hover:bg-gray-100 hover:text-accent-600 dark:hover:bg-white/5"
-				aria-label="Archive"
-				title="Archive"
+				class="flex size-8 items-center justify-center rounded-full transition hover:bg-gray-100 dark:hover:bg-white/5
+					{recording.archivedAt ? 'text-accent-500' : 'text-gray-400 hover:text-accent-600'}"
+				aria-label={recording.archivedAt ? 'Unarchive' : 'Archive'}
+				title={recording.archivedAt ? 'Unarchive' : 'Archive'}
 				onclick={() => {
-					recordingsStore.archive(recording.id);
+					if (recording.archivedAt) recordingsStore.unarchive(recording.id);
+					else recordingsStore.archive(recording.id);
 					onclose();
 				}}
 			>

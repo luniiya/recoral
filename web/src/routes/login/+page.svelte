@@ -19,6 +19,7 @@
 	let backgroundImage = $state<string | null>(null);
 	let error = $state('');
 	let submitting = $state(false);
+	let needsSetup = $state(false);
 
 	$effect(() => {
 		if (auth.user) goto('/');
@@ -32,9 +33,15 @@
 	});
 
 	onMount(async () => {
-		const res = await fetch('/api/settings');
-		if (!res.ok) return;
-		const settings: Settings = await res.json();
+		const [settingsRes, setupRes] = await Promise.all([fetch('/api/settings'), fetch('/api/setup-status')]);
+
+		if (setupRes.ok) {
+			const setup = await setupRes.json();
+			needsSetup = setup.needsSetup;
+		}
+
+		if (!settingsRes.ok) return;
+		const settings: Settings = await settingsRes.json();
 		signupEnabled = settings.signupEnabled;
 		if (settings.defaultAccentHue !== null) {
 			accentHue = settings.defaultAccentHue;
@@ -52,8 +59,8 @@
 		error = '';
 		submitting = true;
 		try {
-			if (mode === 'login') await auth.login(identifier, password);
-			else await auth.register(username, password, email, accentHue);
+			if (needsSetup || mode === 'register') await auth.register(username, password, email, accentHue);
+			else await auth.login(identifier, password);
 			goto('/');
 		} catch (err) {
 			error = (err as Error).message;
@@ -64,7 +71,7 @@
 </script>
 
 <svelte:head>
-	<title>{mode === 'login' ? 'Log in to recoral' : 'Sign up for recoral'}</title>
+	<title>{needsSetup ? 'Set up recoral' : mode === 'login' ? 'Log in to recoral' : 'Sign up for recoral'}</title>
 </svelte:head>
 
 <section class="relative flex min-h-dvh items-center justify-center bg-white px-4 dark:bg-black">
@@ -83,8 +90,17 @@
 		<div class="mb-8 flex flex-col items-center gap-2">
 			<img src="/logo.png" alt="recoral" class="size-12 rounded-full object-cover" />
 			<h1 class="text-lg font-semibold text-gray-900 dark:text-gray-100">
-				{mode === 'login' ? 'Log in to recoral' : 'Create your recoral account'}
+				{needsSetup
+					? 'Welcome to recoral'
+					: mode === 'login'
+						? 'Log in to recoral'
+						: 'Create your recoral account'}
 			</h1>
+			{#if needsSetup}
+				<p class="text-center text-sm text-gray-500 dark:text-gray-400">
+					This server doesn't have an account yet. Set up the first one, it'll be the admin.
+				</p>
+			{/if}
 		</div>
 
 		<form onsubmit={submit} class="flex flex-col gap-4">
@@ -94,7 +110,7 @@
 				</p>
 			{/if}
 
-			{#if mode === 'login'}
+			{#if !needsSetup && mode === 'login'}
 				<label class="flex flex-col gap-1.5">
 					<span class="form-label">Username or email</span>
 					<input class="form-input" bind:value={identifier} required autocomplete="username" />
@@ -126,11 +142,11 @@
 					type="password"
 					bind:value={password}
 					required
-					autocomplete={mode === 'login' ? 'current-password' : 'new-password'}
+					autocomplete={needsSetup || mode === 'register' ? 'new-password' : 'current-password'}
 				/>
 			</label>
 
-			{#if mode === 'register'}
+			{#if needsSetup || mode === 'register'}
 				<div class="flex flex-col gap-1.5">
 					<span class="form-label">Accent color</span>
 					<ColorPicker value={accentHue} onselect={(hue) => (accentHue = hue)} />
@@ -142,11 +158,11 @@
 				disabled={submitting}
 				class="mt-2 rounded-full bg-accent-500 py-2.5 text-sm font-semibold text-white transition hover:bg-accent-600 disabled:opacity-60"
 			>
-				{mode === 'login' ? 'Log in' : 'Create account'}
+				{needsSetup ? 'Create admin account' : mode === 'login' ? 'Log in' : 'Create account'}
 			</button>
 		</form>
 
-		{#if signupEnabled}
+		{#if !needsSetup && signupEnabled}
 			<button
 				type="button"
 				class="mt-6 w-full text-center text-sm text-accent-600 hover:underline dark:text-accent-400"
