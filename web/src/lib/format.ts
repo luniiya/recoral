@@ -15,3 +15,10 @@ export function formatTimestamp(iso: string, now = new Date()) {
 		minute: '2-digit'
 	});
 }
+
+// "July" for the current year, "2025 July" otherwise, same convention used
+// throughout the app wherever a year needs to be disambiguated.
+export function monthLabel(date: Date, now = new Date()) {
+	const monthName = date.toLocaleDateString(undefined, { month: 'long' });
+	return date.getFullYear() === now.getFullYear() ? monthName : `${date.getFullYear()} ${monthName}`;
+}

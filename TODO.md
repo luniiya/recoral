@@ -15,7 +15,8 @@
 - [x] Account system on the server (signup, login, sessions/tokens). Username required, email optional, login works with either. Per-user accent color (custom hue picker), avatar upload.
 - [x] Real `isAdmin` flag on users, first registered account becomes admin automatically, `/api/admin/*` requires it server-side (403 otherwise), Administration button hidden client-side for non-admins too. Admins can promote/demote other users and set a per-user storage quota (MB, "Unlimited" if unset) from `/admin`; can't remove their own admin access.
 - [x] Admin page (`/admin`, reachable via avatar menu, own layout with no sidebar): server status + version, users list, "allow sign ups" toggle, optional fixed accent color for the logged-out login page (random per visit by default), optional login page background image upload.
-- [ ] First-run setup screen (Immich-style): when a fresh server has zero users, the webUI should show a dedicated "set up your server" flow instead of the normal login/signup form, create the first (admin) account there. Right now the first registered user silently becomes admin with no distinct onboarding experience.
+- [x] First-run setup screen (Immich-style): `GET /api/setup-status` reports `needsSetup` (true when the server has zero users), the login page shows a dedicated "Welcome to recoral" setup flow instead of the normal login/signup form until the first account exists. Reuses the existing `register()` first-user-becomes-admin logic underneath, just a different presentation.
+- [x] Admin can create accounts directly (`POST /api/admin/users`, a small inline form on `/admin`, no `signupEnabled` gate) and delete accounts (`DELETE /api/admin/users/:id`, cascades recordings/audio files/tags/sessions, confirmation modal required, can't delete self).
 - [ ] Server picker + login screen on mobile first launch (Immich-style)
 - [ ] "Go offline" option on first launch, skips server/account entirely
 
@@ -52,10 +53,11 @@
 
 ## Data export / import
 
-- [ ] "Export your data" button (Settings): downloads everything for the current account, recordings, transcripts, tags, descriptions, in recoral's own format. Recordings now persist server-side so this is unblocked, not yet built.
-- [ ] "Import your data" button (Settings), with a choice of source format:
-  - recoral's own export format (round-trips with the export above)
-  - Google Takeout data (Google Recorder's export), since recoral is explicitly a Google Recorder replacement, letting people migrate their existing recordings in is a natural onboarding path.
+- [x] "Export your data" (Settings → Export): dedicated page explaining what's included/excluded, big download button with a loading state, then a confetti "done" screen with real stats (recordings/duration/tags). `GET /api/export` streams a zip (`manifest.json` + `recordings/<id>.<ext>`), `GET /api/export/stats` powers the done-screen numbers.
+- [x] "Import your data" (Settings → Import), multi-step wizard (format → upload/drag-drop → confirm → progress → confetti done-screen with stats), with a choice of source format:
+  - recoral's own export format (round-trips with the export above, listed first in the wizard), server-side in `recoralImport.ts`
+  - Google Takeout data (Google Recorder's export), since recoral is explicitly a Google Recorder replacement, letting people migrate their existing recordings in is a natural onboarding path. Server-side in `takeoutImport.ts`.
+  - Both paths verified end-to-end against the user's real 1000-recording Takeout export (streaming zip parse, ffprobe date/duration extraction, duplicate-hash dedup, storage quota enforcement with early-stop + "quota reached" messaging, admin-configurable `maxImportSizeMb` upload cap).
   - **Promoted to top priority**: this is a personal-necessity feature for the user, whose own Google Recorder app is bricked from too many recordings, not just a nice-to-have for other users.
   - **Format reverse-engineered (2026-07-13)** against the user's own real Takeout export (1000 recordings, 273MB, received by email, extracted for inspection to a scratch dir outside the repo, original `.zip` kept at the repo root but gitignored, never committed):
     - Structure is completely flat: `Takeout/Recorder/*.m4a` plus, for some recordings, a matching `Takeout/Recorder/<same base name>_summary.txt`. No manifest/index/JSON file anywhere in the export.

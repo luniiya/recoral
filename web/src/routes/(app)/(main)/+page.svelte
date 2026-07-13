@@ -4,10 +4,12 @@
 	import LiveRecordingPanel from '$lib/components/LiveRecordingPanel.svelte';
 	import RecordingCard from '$lib/components/RecordingCard.svelte';
 	import RecordingDetail from '$lib/components/RecordingDetail.svelte';
-	import { buildTimeline } from '$lib/dateGroups';
+	import Scrubber from '$lib/components/Scrubber.svelte';
+	import { buildScrubberSegments, buildTimeline } from '$lib/dateGroups';
 	import { formatDuration } from '$lib/format';
 	import { recordingsStore } from '$lib/recordings.svelte';
 
+	let scrollEl: HTMLDivElement | undefined = $state();
 	let isRecording = $state(false);
 	let elapsedSeconds = $state(0);
 	let selectedId = $state<string | null>(null);
@@ -34,6 +36,7 @@
 
 	let selectedRecording = $derived(recordingsStore.active.find((r) => r.id === selectedId) ?? null);
 	let timeline = $derived(buildTimeline(visibleRecordings));
+	let scrubberSegments = $derived(buildScrubberSegments(visibleRecordings));
 
 	async function startRecording() {
 		selectedId = null;
@@ -87,13 +90,12 @@
 
 <div class="flex h-full">
 	<div
-		class="h-full overflow-y-auto transition-[width] duration-300 {selectedRecording ||
-		isRecording ||
-		savingRecording
+		class="relative h-full transition-[width] duration-300 {selectedRecording || isRecording || savingRecording
 			? 'w-[26rem] shrink-0'
 			: 'w-full'}"
 	>
-		<div class="mx-auto max-w-xl px-6 py-10">
+		<div bind:this={scrollEl} class="no-native-scrollbar h-full overflow-y-auto">
+			<div class="mx-auto max-w-xl px-6 py-10">
 			<div class="flex flex-col items-center gap-3 pb-10">
 				<button
 					class="flex size-16 items-center justify-center rounded-full text-white shadow-sm transition
@@ -141,6 +143,9 @@
 				{/each}
 			</div>
 		</div>
+		</div>
+
+		<Scrubber {scrollEl} segments={scrubberSegments} />
 	</div>
 
 	{#if isRecording || savingRecording}

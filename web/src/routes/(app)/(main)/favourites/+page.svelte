@@ -3,9 +3,11 @@
 	import EmptyState from '$lib/components/EmptyState.svelte';
 	import RecordingCard from '$lib/components/RecordingCard.svelte';
 	import RecordingDetail from '$lib/components/RecordingDetail.svelte';
-	import { buildTimeline } from '$lib/dateGroups';
+	import Scrubber from '$lib/components/Scrubber.svelte';
+	import { buildScrubberSegments, buildTimeline } from '$lib/dateGroups';
 	import { recordingsStore } from '$lib/recordings.svelte';
 
+	let scrollEl: HTMLDivElement | undefined = $state();
 	let selectedId = $state<string | null>(null);
 
 	let visibleRecordings = $derived(
@@ -23,6 +25,7 @@
 
 	let selectedRecording = $derived(recordingsStore.favorites.find((r) => r.id === selectedId) ?? null);
 	let timeline = $derived(buildTimeline(visibleRecordings));
+	let scrubberSegments = $derived(buildScrubberSegments(visibleRecordings));
 </script>
 
 <svelte:head>
@@ -31,11 +34,12 @@
 
 <div class="flex h-full">
 	<div
-		class="h-full overflow-y-auto transition-[width] duration-300 {selectedRecording
+		class="relative h-full transition-[width] duration-300 {selectedRecording
 			? 'w-[26rem] shrink-0'
 			: 'w-full'}"
 	>
-		<div class="mx-auto max-w-xl px-6 py-10">
+		<div bind:this={scrollEl} class="no-native-scrollbar h-full overflow-y-auto">
+			<div class="mx-auto max-w-xl px-6 py-10">
 			<p class="mb-3 text-xs font-medium text-gray-400">
 				{#if recordingsStore.search.trim() || recordingsStore.selectedTagIds.length > 0}
 					{visibleRecordings.length} {visibleRecordings.length === 1 ? 'result' : 'results'}
@@ -62,6 +66,9 @@
 				{/each}
 			</div>
 		</div>
+		</div>
+
+		<Scrubber {scrollEl} segments={scrubberSegments} />
 	</div>
 
 	{#if selectedRecording}
