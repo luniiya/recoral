@@ -1,4 +1,5 @@
 <script lang="ts">
+	import EmptyState from '$lib/components/EmptyState.svelte';
 	import LiveRecordingPanel from '$lib/components/LiveRecordingPanel.svelte';
 	import RecordingCard from '$lib/components/RecordingCard.svelte';
 	import RecordingDetail from '$lib/components/RecordingDetail.svelte';
@@ -125,8 +126,10 @@
 						<RecordingCard {recording} selected={selectedId === recording.id} onselect={() => (selectedId = recording.id)} />
 					</li>
 				{:else}
-					<li class="card border-dashed p-8 text-center text-sm text-gray-400">
-						{recordingsStore.active.length > 0 ? 'No recordings match your search' : 'No recordings yet'}
+					<li>
+						<EmptyState
+							message={recordingsStore.active.length > 0 ? 'No recordings match your search' : 'No recordings yet'}
+						/>
 					</li>
 				{/each}
 			</ul>

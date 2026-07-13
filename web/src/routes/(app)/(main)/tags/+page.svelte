@@ -1,5 +1,6 @@
 <script lang="ts">
 	import ColorPicker from '$lib/components/ColorPicker.svelte';
+	import EmptyState from '$lib/components/EmptyState.svelte';
 	import TagCard from '$lib/components/TagCard.svelte';
 	import { buildTagTree } from '$lib/tagPath';
 	import { tagsStore } from '$lib/tags.svelte';
@@ -89,7 +90,7 @@
 				{/each}
 			</div>
 		{:else}
-			<div class="card border-dashed p-8 text-center text-sm text-gray-400">No tags yet</div>
+			<EmptyState message="No tags yet" />
 		{/if}
 	{/if}
 </div>

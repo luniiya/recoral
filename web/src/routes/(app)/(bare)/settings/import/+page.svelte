@@ -1,5 +1,7 @@
 <script lang="ts">
+	import BackButton from '$lib/components/BackButton.svelte';
 	import Confetti from '$lib/components/Confetti.svelte';
+	import StatCard from '$lib/components/StatCard.svelte';
 
 	type Step = 'format' | 'upload' | 'confirm' | 'progress';
 	type Format = 'takeout' | 'recoral';
@@ -134,25 +136,9 @@
 <div class="mx-auto max-w-xl">
 	<div class="mb-6 flex items-center gap-3">
 		{#if step === 'format'}
-			<a
-				href="/settings"
-				class="flex size-8 items-center justify-center rounded-full text-gray-500 transition hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-white/5"
-				aria-label="Back to settings"
-			>
-				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="size-4">
-					<path stroke-linecap="round" stroke-linejoin="round" d="M15 18l-6-6 6-6" />
-				</svg>
-			</a>
+			<BackButton href="/settings" label="Back to settings" />
 		{:else if step !== 'progress'}
-			<button
-				class="flex size-8 items-center justify-center rounded-full text-gray-500 transition hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-white/5"
-				aria-label="Back"
-				onclick={() => (step = step === 'confirm' ? 'upload' : 'format')}
-			>
-				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="size-4">
-					<path stroke-linecap="round" stroke-linejoin="round" d="M15 18l-6-6 6-6" />
-				</svg>
-			</button>
+			<BackButton onclick={() => (step = step === 'confirm' ? 'upload' : 'format')} />
 		{/if}
 		<h1 class="text-lg font-semibold text-gray-900 dark:text-gray-100">Import data</h1>
 	</div>
@@ -288,21 +274,10 @@
 
 				{#if job.imported > 0}
 					<div class="grid grid-cols-2 gap-3">
-						<div class="rounded-xl bg-accent-50 p-4 text-center dark:bg-accent-500/10">
-							<p class="text-2xl font-semibold text-accent-600 dark:text-accent-400">{job.imported}</p>
-							<p class="text-xs text-gray-500 dark:text-gray-400">recordings rescued</p>
-						</div>
-						<div class="rounded-xl bg-accent-50 p-4 text-center dark:bg-accent-500/10">
-							<p class="text-2xl font-semibold text-accent-600 dark:text-accent-400">
-								{formatDurationStat(job.totalDurationSeconds)}
-							</p>
-							<p class="text-xs text-gray-500 dark:text-gray-400">of you, now safe forever</p>
-						</div>
+						<StatCard value={job.imported} label="recordings rescued" />
+						<StatCard value={formatDurationStat(job.totalDurationSeconds)} label="of you, now safe forever" />
 						{#if job.transcribedCount > 0}
-							<div class="rounded-xl bg-accent-50 p-4 text-center dark:bg-accent-500/10">
-								<p class="text-2xl font-semibold text-accent-600 dark:text-accent-400">{job.transcribedCount}</p>
-								<p class="text-xs text-gray-500 dark:text-gray-400">already had a transcript</p>
-							</div>
+							<StatCard value={job.transcribedCount} label="already had a transcript" />
 						{/if}
 						{#if job.earliestDate && job.latestDate}
 							<div class="rounded-xl bg-accent-50 p-4 text-center dark:bg-accent-500/10">
@@ -317,16 +292,10 @@
 							</div>
 						{/if}
 						{#if job.duplicates > 0}
-							<div class="rounded-xl bg-gray-50 p-4 text-center dark:bg-white/5">
-								<p class="text-2xl font-semibold text-gray-500 dark:text-gray-400">{job.duplicates}</p>
-								<p class="text-xs text-gray-500 dark:text-gray-400">already in your library, skipped</p>
-							</div>
+							<StatCard value={job.duplicates} label="already in your library, skipped" tone="gray" />
 						{/if}
 						{#if job.errors > 0}
-							<div class="rounded-xl bg-gray-50 p-4 text-center dark:bg-white/5">
-								<p class="text-2xl font-semibold text-gray-500 dark:text-gray-400">{job.errors}</p>
-								<p class="text-xs text-gray-500 dark:text-gray-400">couldn't be imported</p>
-							</div>
+							<StatCard value={job.errors} label="couldn't be imported" tone="gray" />
 						{/if}
 					</div>
 				{/if}

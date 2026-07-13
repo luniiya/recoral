@@ -1,5 +1,7 @@
 <script lang="ts">
+	import BackButton from '$lib/components/BackButton.svelte';
 	import Confetti from '$lib/components/Confetti.svelte';
+	import StatCard from '$lib/components/StatCard.svelte';
 
 	interface ExportStats {
 		recordingCount: number;
@@ -63,15 +65,7 @@
 
 <div class="mx-auto max-w-xl">
 	<div class="mb-6 flex items-center gap-3">
-		<a
-			href="/settings"
-			class="flex size-8 items-center justify-center rounded-full text-gray-500 transition hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-white/5"
-			aria-label="Back to settings"
-		>
-			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="size-4">
-				<path stroke-linecap="round" stroke-linejoin="round" d="M15 18l-6-6 6-6" />
-			</svg>
-		</a>
+		<BackButton href="/settings" label="Back to settings" />
 		<h1 class="text-lg font-semibold text-gray-900 dark:text-gray-100">Export data</h1>
 	</div>
 
@@ -130,21 +124,10 @@
 
 			{#if stats}
 				<div class="grid grid-cols-2 gap-3">
-					<div class="rounded-xl bg-accent-50 p-4 text-center dark:bg-accent-500/10">
-						<p class="text-2xl font-semibold text-accent-600 dark:text-accent-400">{stats.recordingCount}</p>
-						<p class="text-xs text-gray-500 dark:text-gray-400">recordings backed up</p>
-					</div>
-					<div class="rounded-xl bg-accent-50 p-4 text-center dark:bg-accent-500/10">
-						<p class="text-2xl font-semibold text-accent-600 dark:text-accent-400">
-							{formatDurationStat(stats.totalDurationSeconds)}
-						</p>
-						<p class="text-xs text-gray-500 dark:text-gray-400">of you, now safe forever</p>
-					</div>
+					<StatCard value={stats.recordingCount} label="recordings backed up" />
+					<StatCard value={formatDurationStat(stats.totalDurationSeconds)} label="of you, now safe forever" />
 					{#if stats.tagCount > 0}
-						<div class="rounded-xl bg-accent-50 p-4 text-center dark:bg-accent-500/10">
-							<p class="text-2xl font-semibold text-accent-600 dark:text-accent-400">{stats.tagCount}</p>
-							<p class="text-xs text-gray-500 dark:text-gray-400">tags included</p>
-						</div>
+						<StatCard value={stats.tagCount} label="tags included" />
 					{/if}
 				</div>
 			{/if}

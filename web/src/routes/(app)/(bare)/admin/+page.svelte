@@ -4,6 +4,7 @@
 	import Avatar from '$lib/components/Avatar.svelte';
 	import ColorPicker from '$lib/components/ColorPicker.svelte';
 	import Toggle from '$lib/components/Toggle.svelte';
+	import { readAsDataUrl } from '$lib/file';
 	import { onMount } from 'svelte';
 
 	let users = $state<User[]>([]);
@@ -53,15 +54,6 @@
 			body: JSON.stringify(updates)
 		});
 		if (res.ok) settings = await res.json();
-	}
-
-	function readAsDataUrl(file: File) {
-		return new Promise<string>((resolve, reject) => {
-			const reader = new FileReader();
-			reader.onload = () => resolve(reader.result as string);
-			reader.onerror = () => reject(reader.error);
-			reader.readAsDataURL(file);
-		});
 	}
 
 	async function onBackgroundSelected(event: Event) {

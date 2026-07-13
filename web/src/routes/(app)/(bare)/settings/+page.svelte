@@ -3,20 +3,12 @@
 	import Avatar from '$lib/components/Avatar.svelte';
 	import ColorPicker from '$lib/components/ColorPicker.svelte';
 	import Toggle from '$lib/components/Toggle.svelte';
+	import { readAsDataUrl } from '$lib/file';
 	import { wavySeekStore } from '$lib/wavySeek.svelte';
 
 	let saving = $state(false);
 	let error = $state('');
 	let fileInput: HTMLInputElement | undefined = $state();
-
-	function readAsDataUrl(file: File) {
-		return new Promise<string>((resolve, reject) => {
-			const reader = new FileReader();
-			reader.onload = () => resolve(reader.result as string);
-			reader.onerror = () => reject(reader.error);
-			reader.readAsDataURL(file);
-		});
-	}
 
 	async function onAvatarSelected(event: Event) {
 		const file = (event.target as HTMLInputElement).files?.[0];

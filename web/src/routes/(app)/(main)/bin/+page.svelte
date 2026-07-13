@@ -1,5 +1,6 @@
 <script lang="ts">
 	import AudioPlayer from '$lib/components/AudioPlayer.svelte';
+	import EmptyState from '$lib/components/EmptyState.svelte';
 	import RecordingCardHeader from '$lib/components/RecordingCardHeader.svelte';
 	import TagChip from '$lib/components/TagChip.svelte';
 	import { recordingsStore } from '$lib/recordings.svelte';
@@ -86,7 +87,7 @@
 				{/if}
 			</li>
 		{:else}
-			<li class="card border-dashed p-8 text-center text-sm text-gray-400">Bin is empty</li>
+			<li><EmptyState message="Bin is empty" /></li>
 		{/each}
 	</ul>
 </div>

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import EmptyState from '$lib/components/EmptyState.svelte';
 	import RecordingCard from '$lib/components/RecordingCard.svelte';
 	import RecordingDetail from '$lib/components/RecordingDetail.svelte';
 	import { recordingsStore } from '$lib/recordings.svelte';
@@ -46,8 +47,10 @@
 						<RecordingCard {recording} selected={selectedId === recording.id} onselect={() => (selectedId = recording.id)} />
 					</li>
 				{:else}
-					<li class="card border-dashed p-8 text-center text-sm text-gray-400">
-						{recordingsStore.favorites.length > 0 ? 'No recordings match your search' : 'No favourites yet'}
+					<li>
+						<EmptyState
+							message={recordingsStore.favorites.length > 0 ? 'No recordings match your search' : 'No favourites yet'}
+						/>
 					</li>
 				{/each}
 			</ul>

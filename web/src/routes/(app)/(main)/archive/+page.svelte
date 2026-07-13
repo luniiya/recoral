@@ -1,4 +1,5 @@
 <script lang="ts">
+	import EmptyState from '$lib/components/EmptyState.svelte';
 	import RecordingCard from '$lib/components/RecordingCard.svelte';
 	import RecordingDetail from '$lib/components/RecordingDetail.svelte';
 	import { recordingsStore } from '$lib/recordings.svelte';
@@ -27,7 +28,7 @@
 						<RecordingCard {recording} selected={selectedId === recording.id} onselect={() => (selectedId = recording.id)} />
 					</li>
 				{:else}
-					<li class="card border-dashed p-8 text-center text-sm text-gray-400">Nothing archived yet</li>
+					<li><EmptyState message="Nothing archived yet" /></li>
 				{/each}
 			</ul>
 		</div>
