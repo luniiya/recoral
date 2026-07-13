@@ -4,10 +4,13 @@ export function formatDuration(totalSeconds: number) {
 	return `${minutes}:${seconds.toString().padStart(2, '0')}`;
 }
 
-export function formatTimestamp(iso: string) {
-	return new Date(iso).toLocaleString(undefined, {
+export function formatTimestamp(iso: string, now = new Date()) {
+	const date = new Date(iso);
+	const includeYear = date.getFullYear() !== now.getFullYear();
+	return date.toLocaleString(undefined, {
 		month: 'short',
 		day: 'numeric',
+		year: includeYear ? 'numeric' : undefined,
 		hour: 'numeric',
 		minute: '2-digit'
 	});

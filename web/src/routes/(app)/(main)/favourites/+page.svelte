@@ -1,7 +1,9 @@
 <script lang="ts">
+	import DateSeparator from '$lib/components/DateSeparator.svelte';
 	import EmptyState from '$lib/components/EmptyState.svelte';
 	import RecordingCard from '$lib/components/RecordingCard.svelte';
 	import RecordingDetail from '$lib/components/RecordingDetail.svelte';
+	import { buildTimeline } from '$lib/dateGroups';
 	import { recordingsStore } from '$lib/recordings.svelte';
 
 	let selectedId = $state<string | null>(null);
@@ -20,6 +22,7 @@
 	);
 
 	let selectedRecording = $derived(recordingsStore.favorites.find((r) => r.id === selectedId) ?? null);
+	let timeline = $derived(buildTimeline(visibleRecordings));
 </script>
 
 <svelte:head>
@@ -41,19 +44,23 @@
 				{/if}
 			</p>
 
-			<ul class="flex flex-col gap-3">
-				{#each visibleRecordings as recording (recording.id)}
-					<li>
-						<RecordingCard {recording} selected={selectedId === recording.id} onselect={() => (selectedId = recording.id)} />
-					</li>
-				{:else}
-					<li>
-						<EmptyState
-							message={recordingsStore.favorites.length > 0 ? 'No recordings match your search' : 'No favourites yet'}
+			<div class="flex flex-col gap-3">
+				{#each timeline as row (row.key)}
+					{#if row.kind === 'recording'}
+						<RecordingCard
+							recording={row.recording}
+							selected={selectedId === row.recording.id}
+							onselect={() => (selectedId = row.recording.id)}
 						/>
-					</li>
+					{:else}
+						<DateSeparator level={row.kind} label={row.label} />
+					{/if}
+				{:else}
+					<EmptyState
+						message={recordingsStore.favorites.length > 0 ? 'No recordings match your search' : 'No favourites yet'}
+					/>
 				{/each}
-			</ul>
+			</div>
 		</div>
 	</div>
 

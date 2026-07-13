@@ -3,6 +3,7 @@
 	import AudioPlayer from './AudioPlayer.svelte';
 	import TagChips from './TagChips.svelte';
 	import Waveform from './Waveform.svelte';
+	import { formatTimestamp } from '$lib/format';
 	import { recordingsStore } from '$lib/recordings.svelte';
 	import { tagsStore } from '$lib/tags.svelte';
 
@@ -19,19 +20,10 @@
 	let playbackPlaying = $state(false);
 	let playbackEl = $state<HTMLAudioElement | undefined>(undefined);
 
-	function formatDate(iso: string) {
-		return new Date(iso).toLocaleString(undefined, {
-			month: 'short',
-			day: 'numeric',
-			hour: 'numeric',
-			minute: '2-digit'
-		});
-	}
-
 	function downloadRecording() {
 		const a = document.createElement('a');
 		a.href = recordingsStore.audioUrl(recording.id);
-		a.download = (recording.title || formatDate(recording.createdAt)).replace(/[\\/:*?"<>|]/g, '_');
+		a.download = (recording.title || formatTimestamp(recording.createdAt)).replace(/[\\/:*?"<>|]/g, '_');
 		document.body.appendChild(a);
 		a.click();
 		a.remove();
@@ -141,13 +133,13 @@
 		<div class="flex items-baseline justify-between gap-3">
 			<input
 				class="min-w-0 flex-1 truncate bg-transparent text-lg font-semibold text-gray-900 outline-none dark:text-gray-100"
-				placeholder={formatDate(recording.createdAt)}
+				placeholder={formatTimestamp(recording.createdAt)}
 				value={recording.title}
 				onchange={(e) => recordingsStore.updateTitle(recording.id, e.currentTarget.value)}
 				aria-label="Recording title"
 			/>
 			{#if recording.title}
-				<span class="shrink-0 text-xs text-gray-400">{formatDate(recording.createdAt)}</span>
+				<span class="shrink-0 text-xs text-gray-400">{formatTimestamp(recording.createdAt)}</span>
 			{/if}
 		</div>
 
