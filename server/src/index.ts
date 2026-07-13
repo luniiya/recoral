@@ -3,8 +3,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Readable } from "node:stream";
 import {
+	adminCreateUser,
 	adminUpdateUser,
 	clearSessionCookie,
+	deleteUser,
 	endSession,
 	listUsers,
 	login,
@@ -81,6 +83,10 @@ class ForbiddenError extends Error {}
 function authErrorResponse(err: unknown) {
 	if (err instanceof ForbiddenError) return new Response(null, { status: 403 });
 	if (err instanceof UnauthorizedError) return new Response(null, { status: 401 });
+	// Anything else here is an actual bug, not an auth failure, log it so it
+	// shows up in the terminal running the server instead of silently
+	// surfacing to the client as a generic 401/400.
+	console.error(err);
 	return null;
 }
 
@@ -163,8 +169,8 @@ const server = Bun.serve({
 					const user = requireUser(req);
 					purgeExpiredTagTrash();
 					return Response.json(listTags(user.id));
-				} catch {
-					return new Response(null, { status: 401 });
+				} catch (err) {
+					return authErrorResponse(err) ?? new Response(null, { status: 401 });
 				}
 			},
 			POST: async (req) => {
@@ -201,18 +207,43 @@ const server = Bun.serve({
 					const user = requireUser(req);
 					deleteTagForever(user.id, req.params.id);
 					return new Response(null, { status: 204 });
-				} catch {
-					return new Response(null, { status: 401 });
+				} catch (err) {
+					return authErrorResponse(err) ?? new Response(null, { status: 401 });
 				}
 			}
 		},
 
-		"/api/admin/users": (req) => {
-			try {
-				requireAdmin(req);
-				return Response.json(listUsers());
-			} catch (err) {
-				return authErrorResponse(err) ?? new Response(null, { status: 401 });
+		"/api/admin/users": {
+			GET: (req) => {
+				try {
+					requireAdmin(req);
+					return Response.json(listUsers());
+				} catch (err) {
+					return authErrorResponse(err) ?? new Response(null, { status: 401 });
+				}
+			},
+			POST: async (req) => {
+				try {
+					requireAdmin(req);
+					const body = await req.json();
+					const username = typeof body.username === "string" ? body.username.trim().toLowerCase() : "";
+					const email =
+						typeof body.email === "string" && body.email.trim() ? body.email.trim().toLowerCase() : null;
+					const password = typeof body.password === "string" ? body.password : "";
+					const isAdmin = body.isAdmin === true;
+
+					if (!USERNAME_PATTERN.test(username)) {
+						return Response.json(
+							{ error: "Username must be 3-32 characters, letters, numbers, dots, underscores or hyphens only" },
+							{ status: 400 }
+						);
+					}
+
+					const user = await adminCreateUser(username, password, email, isAdmin);
+					return Response.json(user, { status: 201 });
+				} catch (err) {
+					return authErrorResponse(err) ?? Response.json({ error: (err as Error).message }, { status: 400 });
+				}
 			}
 		},
 
@@ -234,6 +265,18 @@ const server = Bun.serve({
 					}
 
 					return Response.json(adminUpdateUser(req.params.id, updates));
+				} catch (err) {
+					return authErrorResponse(err) ?? new Response(null, { status: 401 });
+				}
+			},
+			DELETE: (req) => {
+				try {
+					const admin = requireAdmin(req);
+					if (req.params.id === admin.id) {
+						return Response.json({ error: "You can't delete your own account" }, { status: 400 });
+					}
+					deleteUser(req.params.id);
+					return new Response(null, { status: 204 });
 				} catch (err) {
 					return authErrorResponse(err) ?? new Response(null, { status: 401 });
 				}
@@ -286,8 +329,8 @@ const server = Bun.serve({
 					const user = requireUser(req);
 					purgeExpiredTrash();
 					return Response.json(listRecordings(user.id));
-				} catch {
-					return new Response(null, { status: 401 });
+				} catch (err) {
+					return authErrorResponse(err) ?? new Response(null, { status: 401 });
 				}
 			},
 			POST: async (req) => {
@@ -348,8 +391,8 @@ const server = Bun.serve({
 					const user = requireUser(req);
 					deleteRecording(user.id, req.params.id);
 					return new Response(null, { status: 204 });
-				} catch {
-					return new Response(null, { status: 401 });
+				} catch (err) {
+					return authErrorResponse(err) ?? new Response(null, { status: 401 });
 				}
 			}
 		},
@@ -395,8 +438,8 @@ const server = Bun.serve({
 					usedBytes: globalStorageBytes(),
 					limitMb: getSettings().serverStorageLimitMb
 				});
-			} catch {
-				return new Response(null, { status: 401 });
+			} catch (err) {
+				return authErrorResponse(err) ?? new Response(null, { status: 401 });
 			}
 		},
 
@@ -441,8 +484,8 @@ const server = Bun.serve({
 					const job = getImportJob(user.id, req.params.jobId);
 					if (!job) return new Response(null, { status: 404 });
 					return Response.json(job);
-				} catch {
-					return new Response(null, { status: 401 });
+				} catch (err) {
+					return authErrorResponse(err) ?? new Response(null, { status: 401 });
 				}
 			}
 		},
@@ -485,8 +528,8 @@ const server = Bun.serve({
 					const job = getRecoralImportJob(user.id, req.params.jobId);
 					if (!job) return new Response(null, { status: 404 });
 					return Response.json(job);
-				} catch {
-					return new Response(null, { status: 401 });
+				} catch (err) {
+					return authErrorResponse(err) ?? new Response(null, { status: 401 });
 				}
 			}
 		},
@@ -496,8 +539,8 @@ const server = Bun.serve({
 				try {
 					const user = requireUser(req);
 					return Response.json(getExportStats(user.id));
-				} catch {
-					return new Response(null, { status: 401 });
+				} catch (err) {
+					return authErrorResponse(err) ?? new Response(null, { status: 401 });
 				}
 			}
 		},
@@ -514,8 +557,8 @@ const server = Bun.serve({
 							"Content-Disposition": `attachment; filename="${filename}"`
 						}
 					});
-				} catch {
-					return new Response(null, { status: 401 });
+				} catch (err) {
+					return authErrorResponse(err) ?? new Response(null, { status: 401 });
 				}
 			}
 		}
@@ -532,6 +575,10 @@ const server = Bun.serve({
 		if (await index.exists()) return new Response(index);
 
 		return new Response("Not Found", { status: 404 });
+	},
+	error(err) {
+		console.error(err);
+		return new Response("Internal Server Error", { status: 500 });
 	}
 });
 

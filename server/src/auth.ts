@@ -1,4 +1,5 @@
 import type { User } from "@recoral/shared";
+import { unlinkSync } from "node:fs";
 import { db } from "./db";
 
 const SESSION_COOKIE = "recoral_session";
@@ -151,6 +152,61 @@ export function adminUpdateUser(
 export function listUsers(): User[] {
 	const rows = db.query<UserRow, []>("SELECT * FROM users ORDER BY created_at").all();
 	return rows.map(toUser);
+}
+
+// Doesn't start a session for the new account, this is an admin creating an
+// account for someone else, not logging in as them.
+export async function adminCreateUser(
+	username: string,
+	password: string,
+	email: string | null,
+	isAdmin: boolean
+): Promise<User> {
+	if (!username) throw new Error("Username is required");
+	if (!password) throw new Error("Password is required");
+
+	const existingUsername = db
+		.query<{ id: string }, [string]>("SELECT id FROM users WHERE username = ?")
+		.get(username);
+	if (existingUsername) throw new Error("That username is already taken");
+
+	if (email) {
+		const existingEmail = db.query<{ id: string }, [string]>("SELECT id FROM users WHERE email = ?").get(email);
+		if (existingEmail) throw new Error("An account with that email already exists");
+	}
+
+	const id = crypto.randomUUID();
+	const createdAt = new Date().toISOString();
+	const passwordHash = await Bun.password.hash(password);
+
+	db.run(
+		"INSERT INTO users (id, username, email, password_hash, created_at, accent_hue, is_admin) VALUES (?, ?, ?, ?, ?, ?, ?)",
+		[id, username, email, passwordHash, createdAt, DEFAULT_ACCENT_HUE, isAdmin ? 1 : 0]
+	);
+
+	return toUser(db.query<UserRow, [string]>("SELECT * FROM users WHERE id = ?").get(id)!);
+}
+
+// Cascades by hand since bun:sqlite doesn't have foreign keys turned on:
+// audio files off disk, then recording_tags/recordings/tags/sessions rows,
+// then the user row itself.
+export function deleteUser(userId: string): void {
+	const recordings = db
+		.query<{ file_path: string }, [string]>("SELECT file_path FROM recordings WHERE user_id = ?")
+		.all(userId);
+	for (const recording of recordings) {
+		try {
+			unlinkSync(recording.file_path);
+		} catch {
+			// already gone, nothing to clean up
+		}
+	}
+
+	db.run("DELETE FROM recording_tags WHERE recording_id IN (SELECT id FROM recordings WHERE user_id = ?)", [userId]);
+	db.run("DELETE FROM recordings WHERE user_id = ?", [userId]);
+	db.run("DELETE FROM tags WHERE user_id = ?", [userId]);
+	db.run("DELETE FROM sessions WHERE user_id = ?", [userId]);
+	db.run("DELETE FROM users WHERE id = ?", [userId]);
 }
 
 function startSession(user: User) {
