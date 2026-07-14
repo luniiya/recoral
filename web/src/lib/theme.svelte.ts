@@ -52,11 +52,24 @@ function cycle() {
 	set(ORDER[(ORDER.indexOf(preference) + 1) % ORDER.length]);
 }
 
+// Applies the system theme visually without touching the stored preference,
+// for the native app's pre-login screen (no per-user setting exists yet
+// there). Call restore() to reapply the real stored preference afterwards.
+function previewSystem() {
+	applyClass('system');
+}
+
+function restore() {
+	applyClass(preference);
+}
+
 export const themeStore = {
 	get preference() {
 		return preference;
 	},
 	init,
 	set,
-	cycle
+	cycle,
+	previewSystem,
+	restore
 };

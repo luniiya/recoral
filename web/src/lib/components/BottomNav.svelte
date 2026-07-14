@@ -20,7 +20,7 @@
 </script>
 
 <nav
-	class="fixed inset-x-0 bottom-0 z-30 flex items-center justify-around border-t border-gray-200 bg-white pb-[env(safe-area-inset-bottom)] md:hidden dark:border-white/10 dark:bg-black"
+	class="fixed inset-x-0 bottom-0 z-30 flex items-center justify-around border-t border-gray-200 bg-white pb-[var(--android-nav-bottom-inset,env(safe-area-inset-bottom))] md:hidden dark:border-white/10 dark:bg-black"
 >
 	{#each items as item (item.href)}
 		<a

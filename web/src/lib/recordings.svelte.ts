@@ -15,7 +15,11 @@ let trashed = $derived(all.filter((r) => r.trashedAt !== null));
 let favorites = $derived(all.filter((r) => r.trashedAt === null && r.favorite));
 
 function audioUrl(id: string) {
-	return api.url(`/api/recordings/${id}/audio`);
+	// <audio src> loads directly, with no way to attach an Authorization
+	// header, so the token (when auth is token-based, i.e. mobile) has to
+	// ride along as a query param instead.
+	const path = `/api/recordings/${id}/audio`;
+	return api.token ? api.url(`${path}?token=${encodeURIComponent(api.token)}`) : api.url(path);
 }
 
 function stripExtension(filename: string) {

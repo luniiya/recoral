@@ -58,7 +58,12 @@ export function tokenFromRequest(req: Request): string | null {
 	if (auth?.startsWith("Bearer ")) return auth.slice(7);
 
 	const cookies = parseCookies(req.headers.get("cookie"));
-	return cookies[SESSION_COOKIE] ?? null;
+	if (cookies[SESSION_COOKIE]) return cookies[SESSION_COOKIE];
+
+	// <audio>/<img> elements load their src directly, with no way to attach
+	// an Authorization header, so the audio route also accepts the token as
+	// a query param for those specifically. Not used by normal apiFetch calls.
+	return new URL(req.url).searchParams.get("token");
 }
 
 export function userFromRequest(req: Request): User | null {

@@ -8,6 +8,7 @@
 	import ThemeToggle from '$lib/components/ThemeToggle.svelte';
 	import { onboarding } from '$lib/onboarding.svelte';
 	import { isNativePlatform } from '$lib/platform';
+	import { themeStore } from '$lib/theme.svelte';
 	import { onMount } from 'svelte';
 
 	let mode = $state<'login' | 'register'>('login');
@@ -36,6 +37,15 @@
 	// applies the account's own saved hue instead.
 	$effect(() => {
 		applyAccentHue(accentHue);
+	});
+
+	onMount(() => {
+		// No per-account theme setting exists before login, so the APK's
+		// login screen always follows the system theme (no manual toggle).
+		if (isNativePlatform()) themeStore.previewSystem();
+		return () => {
+			if (isNativePlatform()) themeStore.restore();
+		};
 	});
 
 	onMount(async () => {
@@ -91,9 +101,11 @@
 		</div>
 	{/if}
 
-	<div class="absolute top-4 right-4 z-10">
-		<ThemeToggle />
-	</div>
+	{#if !isNativePlatform()}
+		<div class="absolute top-4 right-4 z-10">
+			<ThemeToggle />
+		</div>
+	{/if}
 
 	<div class="card relative z-10 w-full max-w-sm p-8">
 		<div class="mb-8 flex flex-col items-center gap-2">

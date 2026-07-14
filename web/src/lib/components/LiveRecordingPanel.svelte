@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { liveRecordingStore } from '$lib/liveRecording.svelte';
 	import LiveWaveform from './LiveWaveform.svelte';
+	import StatusBarSpacer from './StatusBarSpacer.svelte';
 
 	interface Props {
 		stream: MediaStream | null;
@@ -19,6 +20,9 @@
 </script>
 
 <div class="flex h-full flex-col">
+	<div class="md:hidden">
+		<StatusBarSpacer />
+	</div>
 	<div class="flex flex-col gap-3 px-5 py-4">
 		<input
 			class="min-w-0 truncate bg-transparent text-lg font-semibold text-gray-900 outline-none disabled:opacity-60 dark:text-gray-100"
@@ -61,7 +65,9 @@
 	</div>
 
 	{#if !saving}
-		<div class="flex justify-center pb-8">
+		<div
+			class="flex justify-center pb-[calc(2rem+var(--android-nav-bottom-inset,env(safe-area-inset-bottom)))] md:pb-8"
+		>
 			<button
 				class="flex size-16 items-center justify-center rounded-full bg-red-500 text-white shadow-sm transition hover:bg-red-600"
 				aria-label="Stop recording"

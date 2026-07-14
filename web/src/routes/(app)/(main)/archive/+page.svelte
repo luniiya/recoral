@@ -5,10 +5,17 @@
 	import RecordingDetail from '$lib/components/RecordingDetail.svelte';
 	import Scrubber from '$lib/components/Scrubber.svelte';
 	import { buildScrubberSegments, buildTimeline } from '$lib/dateGroups';
+	import { mobileBack } from '$lib/mobileBack.svelte';
 	import { recordingsStore } from '$lib/recordings.svelte';
 
 	let scrollEl: HTMLDivElement | undefined = $state();
 	let selectedId = $state<string | null>(null);
+
+	$effect(() => {
+		if (selectedId) mobileBack.set(() => (selectedId = null));
+		else mobileBack.clear();
+		return () => mobileBack.clear();
+	});
 
 	let selectedRecording = $derived(recordingsStore.archived.find((r) => r.id === selectedId) ?? null);
 	let timeline = $derived(buildTimeline(recordingsStore.archived));

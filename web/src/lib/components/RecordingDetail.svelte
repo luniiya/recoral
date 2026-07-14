@@ -6,6 +6,7 @@
 	import { formatTimestamp } from '$lib/format';
 	import { recordingsStore } from '$lib/recordings.svelte';
 	import { tagsStore } from '$lib/tags.svelte';
+	import StatusBarSpacer from './StatusBarSpacer.svelte';
 
 	interface Props {
 		recording: Recording;
@@ -43,6 +44,9 @@
 </script>
 
 <div class="flex h-full flex-col">
+	<div class="md:hidden">
+		<StatusBarSpacer />
+	</div>
 	<div class="flex items-center justify-between px-5 py-3">
 		<button
 			class="flex size-8 items-center justify-center rounded-full text-gray-500 transition hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-white/5"
@@ -228,7 +232,9 @@
 		</div>
 	</div>
 
-	<div class="px-5 py-4">
+	<div
+		class="px-5 pt-4 pb-[calc(1rem+var(--android-nav-bottom-inset,env(safe-area-inset-bottom)))] md:pb-4"
+	>
 		<AudioPlayer
 			src={recordingsStore.audioUrl(recording.id)}
 			bind:currentTime={playbackTime}

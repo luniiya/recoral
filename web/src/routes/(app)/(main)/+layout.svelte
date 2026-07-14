@@ -118,7 +118,9 @@
 </div>
 
 {#if page.url.pathname !== '/account' && page.url.pathname !== '/library'}
-	<div class="fixed inset-x-0 bottom-20 z-20 flex items-center gap-2 px-4 md:hidden">
+	<div
+		class="fixed inset-x-0 bottom-[calc(5rem+var(--android-nav-bottom-inset,env(safe-area-inset-bottom)))] z-20 flex items-center gap-2 px-4 md:hidden"
+	>
 		<SearchBar
 			class="min-w-0 flex-1 border border-gray-200/70 bg-white/70 shadow-sm backdrop-blur-lg dark:border-white/10 dark:bg-black/60"
 		/>

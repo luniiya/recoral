@@ -3,6 +3,7 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { auth } from '$lib/auth.svelte';
+	import { mobileBack } from '$lib/mobileBack.svelte';
 	import { onboarding } from '$lib/onboarding.svelte';
 	import { isNativePlatform } from '$lib/platform';
 	import { themeStore } from '$lib/theme.svelte';
@@ -40,6 +41,23 @@
 
 		if (!isNativePlatform() && 'serviceWorker' in navigator) {
 			navigator.serviceWorker.register('/service-worker.js');
+		}
+
+		if (isNativePlatform()) {
+			// Registering any listener here replaces Capacitor's default
+			// behavior entirely, so we have to reimplement the fallback
+			// (history back, else exit) ourselves for the no-open-panel case.
+			import('@capacitor/app').then(({ App }) => {
+				App.addListener('backButton', ({ canGoBack }) => {
+					if (mobileBack.handler) {
+						mobileBack.handler();
+					} else if (canGoBack) {
+						window.history.back();
+					} else {
+						App.exitApp();
+					}
+				});
+			});
 		}
 	});
 </script>

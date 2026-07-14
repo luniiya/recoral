@@ -2,5 +2,8 @@
 include ':capacitor-android'
 project(':capacitor-android').projectDir = new File('../../node_modules/.bun/@capacitor+android@7.6.7+d8a2320436209c74/node_modules/@capacitor/android/capacitor')
 
+include ':capacitor-app'
+project(':capacitor-app').projectDir = new File('../../node_modules/.bun/@capacitor+app@7.1.2+d8a2320436209c74/node_modules/@capacitor/app/android')
+
 include ':capacitor-status-bar'
 project(':capacitor-status-bar').projectDir = new File('../../node_modules/.bun/@capacitor+status-bar@7.0.6+d8a2320436209c74/node_modules/@capacitor/status-bar/android')

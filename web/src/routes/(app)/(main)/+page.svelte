@@ -8,6 +8,7 @@
 	import { buildScrubberSegments, buildTimeline } from '$lib/dateGroups';
 	import { formatDuration } from '$lib/format';
 	import { liveRecordingStore } from '$lib/liveRecording.svelte';
+	import { mobileBack } from '$lib/mobileBack.svelte';
 	import { recordingsStore } from '$lib/recordings.svelte';
 
 	let scrollEl: HTMLDivElement | undefined = $state();
@@ -40,6 +41,15 @@
 	// panel reactively rather than only when this page's button is clicked.
 	$effect(() => {
 		if (liveRecordingStore.isRecording) selectedId = null;
+	});
+
+	// Hardware back button on Android should close the detail panel, not exit
+	// the app (it's local state, not a route change, so there's nothing else
+	// for the OS's default back behavior to fall back to).
+	$effect(() => {
+		if (selectedId) mobileBack.set(() => (selectedId = null));
+		else mobileBack.clear();
+		return () => mobileBack.clear();
 	});
 </script>
 
