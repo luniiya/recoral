@@ -98,7 +98,7 @@ function authErrorResponse(err: unknown) {
 // itself has no way to know every mobile client's origin in advance, and
 // credentialed requests can't use a wildcard "*" anyway.
 const CORS_METHODS = "GET, POST, PATCH, DELETE, OPTIONS";
-const CORS_HEADERS = "Content-Type";
+const CORS_HEADERS = "Content-Type, Authorization";
 
 function corsHeaders(origin: string | null): HeadersInit {
 	if (!origin) return {};

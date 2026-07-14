@@ -4,6 +4,7 @@
 	import BottomNav from '$lib/components/BottomNav.svelte';
 	import SearchBar from '$lib/components/SearchBar.svelte';
 	import Sidebar from '$lib/components/Sidebar.svelte';
+	import StatusBarSpacer from '$lib/components/StatusBarSpacer.svelte';
 	import ThemeToggle from '$lib/components/ThemeToggle.svelte';
 	import { liveRecordingStore } from '$lib/liveRecording.svelte';
 	import { recordingsStore } from '$lib/recordings.svelte';
@@ -68,6 +69,7 @@
 </script>
 
 <div class="flex h-dvh flex-col overflow-hidden bg-white dark:bg-black">
+	<StatusBarSpacer />
 	<header class="flex h-16 shrink-0 items-center gap-3 border-b border-gray-200 px-6 dark:border-white/10">
 		<a href="/" class="flex items-center gap-2.5">
 			<img src="/logo.png" alt="recoral" class="size-7 rounded-full object-cover" />
@@ -115,25 +117,27 @@
 	</div>
 </div>
 
-<div class="fixed inset-x-0 bottom-20 z-20 flex items-center gap-2 px-4 md:hidden">
-	<SearchBar
-		class="min-w-0 flex-1 border border-gray-200/70 bg-white/70 shadow-sm backdrop-blur-lg dark:border-white/10 dark:bg-black/60"
-	/>
-	{#if page.url.pathname === '/'}
-		<button
-			class="flex size-12 shrink-0 items-center justify-center rounded-full text-white shadow-sm transition
-				{liveRecordingStore.isRecording ? 'bg-accent-700' : 'bg-accent-500 hover:bg-accent-600'}"
-			onclick={() => liveRecordingStore.toggle()}
-			aria-label={liveRecordingStore.isRecording ? 'Stop recording' : 'Start recording'}
-		>
-			{#if liveRecordingStore.isRecording}
-				<span class="size-3.5 rounded-sm bg-white"></span>
-			{:else}
-				<span class="size-5 rounded-full bg-white"></span>
-			{/if}
-		</button>
-	{/if}
-</div>
+{#if page.url.pathname !== '/account' && page.url.pathname !== '/library'}
+	<div class="fixed inset-x-0 bottom-20 z-20 flex items-center gap-2 px-4 md:hidden">
+		<SearchBar
+			class="min-w-0 flex-1 border border-gray-200/70 bg-white/70 shadow-sm backdrop-blur-lg dark:border-white/10 dark:bg-black/60"
+		/>
+		{#if page.url.pathname === '/'}
+			<button
+				class="flex size-12 shrink-0 items-center justify-center rounded-full text-white shadow-sm transition
+					{liveRecordingStore.isRecording ? 'bg-accent-700' : 'bg-accent-500 hover:bg-accent-600'}"
+				onclick={() => liveRecordingStore.toggle()}
+				aria-label={liveRecordingStore.isRecording ? 'Stop recording' : 'Start recording'}
+			>
+				{#if liveRecordingStore.isRecording}
+					<span class="size-3.5 rounded-sm bg-white"></span>
+				{:else}
+					<span class="size-5 rounded-full bg-white"></span>
+				{/if}
+			</button>
+		{/if}
+	</div>
+{/if}
 
 <BottomNav />
 

@@ -131,7 +131,7 @@
 
 	function skip(delta: number) {
 		if (!audioEl) return;
-		audioEl.currentTime = Math.max(0, Math.min(duration, audioEl.currentTime + delta));
+		seekTo(audioEl.currentTime + delta);
 	}
 
 	function cycleRate() {
@@ -147,6 +147,11 @@
 		const clamped = Math.max(0, Math.min(duration, value));
 		if (audioEl) audioEl.currentTime = clamped;
 		currentTime = clamped;
+		// smoothTime otherwise only self-updates while playing (via the rAF
+		// loop below); without this, seeking/skipping while paused silently
+		// moves the real playback position but leaves the visible playhead
+		// and elapsed time frozen on the old spot.
+		smoothTime = clamped;
 	}
 
 	function seekToClientX(clientX: number) {

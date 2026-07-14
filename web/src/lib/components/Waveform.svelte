@@ -74,6 +74,16 @@
 	let smoothTime = $state(0);
 
 	$effect(() => {
+		// Read (not use) `currentTime` so this effect actually re-runs when a
+		// seek happens while paused. `audioEl`/`playing` alone don't change on
+		// a seek, so without this the effect never re-fires and the waveform
+		// stays frozen on the pre-seek position even though the real audio
+		// element (shared with AudioPlayer) did move. Still assigning from
+		// the live element value below, not straight from the prop, since
+		// `currentTime` only updates via the sparse `timeupdate` event and
+		// can lag a moment behind where the rAF loop had already tracked to.
+		void currentTime;
+
 		if (!playing) {
 			smoothTime = audioEl ? audioEl.currentTime : currentTime;
 			return;

@@ -2,6 +2,7 @@
 	import type { Settings, User } from '@recoral/shared';
 	import { auth } from '$lib/auth.svelte';
 	import Avatar from '$lib/components/Avatar.svelte';
+	import BackButton from '$lib/components/BackButton.svelte';
 	import ColorPicker from '$lib/components/ColorPicker.svelte';
 	import Toggle from '$lib/components/Toggle.svelte';
 	import { api } from '$lib/api.svelte';
@@ -141,7 +142,10 @@
 	<title>recoral - Administration</title>
 </svelte:head>
 
-<h1 class="mb-6 text-lg font-semibold text-gray-900 dark:text-gray-100">Administration</h1>
+<div class="mb-6 flex items-center gap-3">
+	<BackButton href="/account" label="Back to account" />
+	<h1 class="text-lg font-semibold text-gray-900 dark:text-gray-100">Administration</h1>
+</div>
 
 {#if !loading && auth.user && !auth.user.isAdmin}
 	<div class="card p-8 text-center text-sm text-gray-400">You don't have access to this page.</div>
