@@ -23,8 +23,18 @@
 		}
 	});
 
-	onMount(() => {
+	// There's no server to ask yet until onboarding picks one (mobile only,
+	// always true immediately on desktop), so don't fire this too early, it'd
+	// just hit a URL that doesn't exist and throw parsing the response.
+	$effect(() => {
+		if (isNativePlatform() && onboarding.mode === null) {
+			auth.skipRefresh();
+			return;
+		}
 		auth.refresh();
+	});
+
+	onMount(() => {
 		themeStore.init();
 		wavySeekStore.init();
 

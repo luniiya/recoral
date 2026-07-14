@@ -21,6 +21,13 @@ async function refresh() {
 	}
 }
 
+// Mobile, before a server is picked: there's nothing to check yet, but the
+// loading gate still needs to clear or the whole app stays stuck behind a
+// permanent "Loading…" screen, including the setup picker itself.
+function skipRefresh() {
+	loading = false;
+}
+
 async function submit(path: string, body: Record<string, unknown>) {
 	const res = await api.fetch(path, {
 		method: 'POST',
@@ -30,7 +37,9 @@ async function submit(path: string, body: Record<string, unknown>) {
 	});
 	const data = await res.json();
 	if (!res.ok) throw new Error(data.error ?? 'Something went wrong');
-	setUser(data as User);
+	const { token, ...userData } = data as User & { token?: string };
+	if (token) api.setToken(token);
+	setUser(userData as User);
 }
 
 async function login(identifier: string, password: string) {
@@ -55,6 +64,7 @@ async function updateAccount(updates: { accentHue?: number; avatar?: string | nu
 
 async function logout() {
 	await api.fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
+	api.setToken(null);
 	setUser(null);
 }
 
@@ -66,6 +76,7 @@ export const auth = {
 		return loading;
 	},
 	refresh,
+	skipRefresh,
 	login,
 	register,
 	updateAccount,

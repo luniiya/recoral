@@ -48,9 +48,21 @@ export function clearSessionCookie() {
 	return `${SESSION_COOKIE}=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0`;
 }
 
-export function userFromRequest(req: Request): User | null {
+// Cookies work for the desktop webUI (always same-origin). Mobile is
+// genuinely cross-origin (its own bundled WebView origin vs. a user-picked
+// server), and SameSite=Lax cookies aren't reliably sent on cross-origin
+// requests, so mobile authenticates via a bearer token instead, stored
+// client-side and sent explicitly. Both are accepted here, either is fine.
+export function tokenFromRequest(req: Request): string | null {
+	const auth = req.headers.get("authorization");
+	if (auth?.startsWith("Bearer ")) return auth.slice(7);
+
 	const cookies = parseCookies(req.headers.get("cookie"));
-	const token = cookies[SESSION_COOKIE];
+	return cookies[SESSION_COOKIE] ?? null;
+}
+
+export function userFromRequest(req: Request): User | null {
+	const token = tokenFromRequest(req);
 	if (!token) return null;
 
 	const row = db
@@ -224,7 +236,6 @@ function startSession(user: User) {
 }
 
 export function endSession(req: Request) {
-	const cookies = parseCookies(req.headers.get("cookie"));
-	const token = cookies[SESSION_COOKIE];
+	const token = tokenFromRequest(req);
 	if (token) db.run("DELETE FROM sessions WHERE token = ?", [token]);
 }

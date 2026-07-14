@@ -1,3 +1,5 @@
+import { isNativePlatform } from './platform';
+
 export type ThemePreference = 'light' | 'dark' | 'system';
 
 const STORAGE_KEY = 'recoral-theme';
@@ -13,8 +15,20 @@ function resolve(pref: ThemePreference): 'light' | 'dark' {
 	return pref === 'system' ? (prefersDark() ? 'dark' : 'light') : pref;
 }
 
+// Status bar icons default to light (made for a dark app background), which
+// is invisible against this app's white light-mode background. Overlay stays
+// on (not opaque, doesn't push content down), only the icon color changes.
+async function syncStatusBar(resolved: 'light' | 'dark') {
+	if (!isNativePlatform()) return;
+	const { StatusBar, Style } = await import('@capacitor/status-bar');
+	await StatusBar.setOverlaysWebView({ overlay: true });
+	await StatusBar.setStyle({ style: resolved === 'dark' ? Style.Dark : Style.Light });
+}
+
 function applyClass(pref: ThemePreference) {
-	document.documentElement.classList.toggle('dark', resolve(pref) === 'dark');
+	const resolved = resolve(pref);
+	document.documentElement.classList.toggle('dark', resolved === 'dark');
+	syncStatusBar(resolved);
 }
 
 function set(pref: ThemePreference) {

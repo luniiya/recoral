@@ -91,6 +91,68 @@ function authErrorResponse(err: unknown) {
 	return null;
 }
 
+// Only needed for the mobile app: it's loaded from a local WebView origin and
+// talks to a genuinely different, user-picked server origin, unlike the
+// desktop webUI (always same-origin, never needed this before). Reflects the
+// request's own Origin back rather than a fixed value since the server
+// itself has no way to know every mobile client's origin in advance, and
+// credentialed requests can't use a wildcard "*" anyway.
+const CORS_METHODS = "GET, POST, PATCH, DELETE, OPTIONS";
+const CORS_HEADERS = "Content-Type";
+
+function corsHeaders(origin: string | null): HeadersInit {
+	if (!origin) return {};
+	return {
+		"Access-Control-Allow-Origin": origin,
+		"Access-Control-Allow-Credentials": "true",
+		Vary: "Origin"
+	};
+}
+
+function preflightResponse(origin: string | null) {
+	return new Response(null, {
+		status: 204,
+		headers: {
+			...corsHeaders(origin),
+			"Access-Control-Allow-Methods": CORS_METHODS,
+			"Access-Control-Allow-Headers": CORS_HEADERS
+		}
+	});
+}
+
+type RouteHandler = (req: never) => Response | Promise<Response>;
+type RouteValue = RouteHandler | Record<string, RouteHandler>;
+
+function withCors<T extends Record<string, RouteValue>>(routes: T): T {
+	const wrapped: Record<string, RouteValue> = {};
+
+	for (const [path, value] of Object.entries(routes)) {
+		if (typeof value === "function") {
+			wrapped[path] = async (req: Request) => {
+				const origin = req.headers.get("origin");
+				if (req.method === "OPTIONS") return preflightResponse(origin);
+				const res = await value(req as never);
+				for (const [key, val] of Object.entries(corsHeaders(origin))) res.headers.set(key, val as string);
+				return res;
+			};
+		} else {
+			const methods: Record<string, RouteHandler> = {};
+			for (const [method, fn] of Object.entries(value)) {
+				methods[method] = async (req: Request) => {
+					const origin = req.headers.get("origin");
+					const res = await fn(req as never);
+					for (const [key, val] of Object.entries(corsHeaders(origin))) res.headers.set(key, val as string);
+					return res;
+				};
+			}
+			methods.OPTIONS = (req: Request) => preflightResponse(req.headers.get("origin"));
+			wrapped[path] = methods;
+		}
+	}
+
+	return wrapped as T;
+}
+
 const server = Bun.serve({
 	port: Number(process.env.PORT) || 3000,
 	// Bun's default is 128MiB, which a real Google Takeout export (hundreds
@@ -98,7 +160,7 @@ const server = Bun.serve({
 	// ceiling; the actual admin-configurable limit (Settings.maxImportSizeMb,
 	// default 1GiB) is enforced in the /api/import/takeout route itself.
 	maxRequestBodySize: 10 * 1024 * 1024 * 1024,
-	routes: {
+	routes: withCors({
 		"/api/health": () => Response.json({ status: "ok", version: APP_VERSION }),
 
 		"/api/auth/register": {
@@ -109,7 +171,7 @@ const server = Bun.serve({
 					}
 					const { username, email, password, accentHue } = await readRegisterBody(req);
 					const { user, token } = await register(username, password, email, accentHue);
-					return Response.json(user, { headers: { "Set-Cookie": sessionCookie(token) } });
+					return Response.json({ ...user, token }, { headers: { "Set-Cookie": sessionCookie(token) } });
 				} catch (err) {
 					return Response.json({ error: (err as Error).message }, { status: 400 });
 				}
@@ -121,7 +183,7 @@ const server = Bun.serve({
 				try {
 					const { identifier, password } = await readLoginBody(req);
 					const { user, token } = await login(identifier, password);
-					return Response.json(user, { headers: { "Set-Cookie": sessionCookie(token) } });
+					return Response.json({ ...user, token }, { headers: { "Set-Cookie": sessionCookie(token) } });
 				} catch (err) {
 					return Response.json({ error: (err as Error).message }, { status: 401 });
 				}
@@ -565,7 +627,7 @@ const server = Bun.serve({
 				}
 			}
 		}
-	},
+	}),
 	async fetch(req) {
 		const url = new URL(req.url);
 		const filePath = url.pathname === "/" ? "index.html" : url.pathname.slice(1);

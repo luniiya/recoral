@@ -6,6 +6,8 @@
 	import { auth } from '$lib/auth.svelte';
 	import ColorPicker from '$lib/components/ColorPicker.svelte';
 	import ThemeToggle from '$lib/components/ThemeToggle.svelte';
+	import { onboarding } from '$lib/onboarding.svelte';
+	import { isNativePlatform } from '$lib/platform';
 	import { onMount } from 'svelte';
 
 	let mode = $state<'login' | 'register'>('login');
@@ -13,6 +15,9 @@
 	let username = $state('');
 	let email = $state('');
 	let password = $state('');
+	// Mobile only: shown editable right here so there's always a way to see
+	// or change which server you're talking to, not just once during setup.
+	let serverUrl = $state(api.baseUrl);
 	// Bootstrap from whatever app.html already painted (cached fixed color, or a
 	// prior random pick) so there's nothing to correct visually once JS runs.
 	let accentHue = $state(readCachedAccentHue() ?? Math.floor(Math.random() * 360));
@@ -114,6 +119,12 @@
 				</p>
 			{/if}
 
+			{#if isNativePlatform()}
+				<p class="text-center text-sm text-gray-400">
+					Server: <span class="text-gray-600 dark:text-gray-300">{serverUrl}</span>
+				</p>
+			{/if}
+
 			{#if !needsSetup && mode === 'login'}
 				<label class="flex flex-col gap-1.5">
 					<span class="form-label">Username or email</span>
@@ -173,6 +184,19 @@
 				onclick={() => (mode = mode === 'login' ? 'register' : 'login')}
 			>
 				{mode === 'login' ? "Don't have an account? Sign up" : 'Already have an account? Log in'}
+			</button>
+		{/if}
+
+		{#if isNativePlatform()}
+			<button
+				type="button"
+				class="mt-3 w-full text-center text-sm text-gray-400 hover:underline"
+				onclick={() => {
+					onboarding.reset();
+					goto('/setup');
+				}}
+			>
+				Not your server? Start over
 			</button>
 		{/if}
 	</div>

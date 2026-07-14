@@ -10,7 +10,10 @@
 	function normalizeUrl(raw: string): string {
 		const trimmed = raw.trim().replace(/\/+$/, '');
 		if (!trimmed) return '';
-		return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+		// Bare host:port (no scheme) is almost always a local/self-hosted server
+		// reached directly without a reverse proxy in front of it, so plain http
+		// is the sane default, not https.
+		return /^https?:\/\//i.test(trimmed) ? trimmed : `http://${trimmed}`;
 	}
 
 	async function connect(event: SubmitEvent) {
@@ -23,11 +26,12 @@
 		}
 		connecting = true;
 		try {
-			const res = await fetch(`${url}/api/health`);
+			const res = await fetch(`${url}/api/health`, { signal: AbortSignal.timeout(8000) });
 			if (!res.ok) throw new Error();
 			onboarding.completeWithServer(url);
 			goto('/login');
-		} catch {
+		} catch (err) {
+			console.error('Failed to reach server:', err);
 			error = "Couldn't reach that server. Check the address and try again.";
 		} finally {
 			connecting = false;
