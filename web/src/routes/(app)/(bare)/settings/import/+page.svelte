@@ -2,6 +2,7 @@
 	import BackButton from '$lib/components/BackButton.svelte';
 	import Confetti from '$lib/components/Confetti.svelte';
 	import StatCard from '$lib/components/StatCard.svelte';
+	import { api } from '$lib/api.svelte';
 
 	type Step = 'format' | 'upload' | 'confirm' | 'progress';
 	type Format = 'takeout' | 'recoral';
@@ -85,7 +86,7 @@
 		const form = new FormData();
 		form.append('file', selectedFile);
 
-		const res = await fetch(`/api/import/${format}`, { method: 'POST', credentials: 'include', body: form });
+		const res = await api.fetch(`/api/import/${format}`, { method: 'POST', credentials: 'include', body: form });
 		if (!res.ok) {
 			const body = await res.json().catch(() => ({}));
 			uploadError = body.error ?? 'Something went wrong';
@@ -100,7 +101,7 @@
 	function pollJob(jobId: string) {
 		if (pollHandle) clearInterval(pollHandle);
 		pollHandle = setInterval(async () => {
-			const res = await fetch(`/api/import/${format}/${jobId}`, { credentials: 'include' });
+			const res = await api.fetch(`/api/import/${format}/${jobId}`, { credentials: 'include' });
 			if (!res.ok) return;
 			job = await res.json();
 			if (job && job.status !== 'processing' && pollHandle) {

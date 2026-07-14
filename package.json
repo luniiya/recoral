@@ -4,6 +4,7 @@
   "workspaces": [
     "server",
     "web",
+    "mobile",
     "packages/*"
   ]
 }

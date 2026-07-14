@@ -2,11 +2,11 @@
 
 ## Scaffolding
 
-- [x] Root `package.json` with Bun workspaces (`server`, `web`, `packages/*`)
+- [x] Root `package.json` with Bun workspaces (`server`, `web`, `mobile`, `packages/*`)
 - [x] `server/` skeleton, Bun HTTP server, basic routing, serves `web/build` with SPA fallback
 - [x] `web/` skeleton, SvelteKit with `adapter-static`
 - [x] `packages/shared` for shared TS types/DTOs
-- [ ] `mobile/` Capacitor project wrapping `web/`
+- [x] `mobile/` Capacitor project wrapping `web/build` (`webDir: "../web/build"` in `capacitor.config.json`, appId `com.recoral.app`). Android platform scaffolded and building successfully (`mobile/android/`, a real Gradle project embedding a WebView; debug APK builds clean via `./gradlew assembleDebug` using AUR-installed SDK packages + JDK 21, see git history for the exact setup). iOS not started, can't be scaffolded from this Linux dev machine at all (Xcode is macOS-only). Native plugin work (`capacitor-audio-recorder` for mic capture/background recording) not started; server picker/offline onboarding now built, see Accounts/auth section.
 - [x] Dockerfile (multi-stage, builds web then ships a slim Bun runtime image) + docker-compose for the server
 - [x] `start-dev.sh` to run server + web dev servers together
 
@@ -17,8 +17,10 @@
 - [x] Admin page (`/admin`, reachable via avatar menu, own layout with no sidebar): server status + version, users list, "allow sign ups" toggle, optional fixed accent color for the logged-out login page (random per visit by default), optional login page background image upload.
 - [x] First-run setup screen (Immich-style): `GET /api/setup-status` reports `needsSetup` (true when the server has zero users), the login page shows a dedicated "Welcome to recoral" setup flow instead of the normal login/signup form until the first account exists. Reuses the existing `register()` first-user-becomes-admin logic underneath, just a different presentation.
 - [x] Admin can create accounts directly (`POST /api/admin/users`, a small inline form on `/admin`, no `signupEnabled` gate) and delete accounts (`DELETE /api/admin/users/:id`, cascades recordings/audio files/tags/sessions, confirmation modal required, can't delete self).
-- [ ] Server picker + login screen on mobile first launch (Immich-style)
-- [ ] "Go offline" option on first launch, skips server/account entirely
+- [x] Server picker screen on mobile first launch (`web/src/routes/setup/+page.svelte`): enter a server address, tests reachability against `/api/health` before proceeding, then hands off to the existing login/register flow against that server. Gated on `isNativePlatform()` (`$lib/platform.ts`, wraps `@capacitor/core`'s `Capacitor.isNativePlatform()`), so this never fires on desktop webUI. Choice persisted via `$lib/onboarding.svelte.ts` so it's asked once, not every launch.
+- [x] "Go offline" button exists on the picker and routes to `web/src/routes/setup/offline/+page.svelte`, but it's an honest placeholder for now ("not ready yet, connect to a server instead"), not a real offline mode. Real offline mode needs the on-device SQLite layer below first, wiring it up to actually work is still open.
+- [x] **Prerequisite this unblocked**: the whole web app used to assume same-origin `/api/...` calls, which only works for the desktop webUI (served from its own API's origin). Mobile loads from a bundled local WebView with no server at its own origin, so every fetch call across the app (`auth.svelte.ts`, `tags.svelte.ts`, `recordings.svelte.ts`, `Sidebar.svelte`, admin/import/export pages, `audioUrl()`) now goes through `$lib/api.ts`'s `api.fetch()`/`api.url()`, backed by a configurable `apiBaseUrl` (empty string = same-origin, desktop behavior unchanged; set to the picked server URL on mobile, persisted to `localStorage`).
+- [ ] **Unverified risk, needs a real device to check**: session cookies are `SameSite=Lax` server-side. That's fine same-origin (desktop), but mobile's `api.fetch()` calls are genuinely cross-origin (WebView's own origin vs. the remote server), and `SameSite=Lax` cookies are not reliably sent on cross-origin `fetch`/XHR by browsers/WebViews. Login might not actually persist a session on a real device even though the server-URL-connect step itself works. Not something fixable/testable from a sandbox with no device or emulator, revisit once someone can actually run the app on a phone.
 
 ## Local-first / offline mode
 

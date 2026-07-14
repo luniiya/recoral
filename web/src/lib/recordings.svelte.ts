@@ -1,4 +1,5 @@
 import type { Recording } from '@recoral/shared';
+import { api } from './api.svelte';
 
 const TRASH_RETENTION_DAYS = 30;
 
@@ -14,7 +15,7 @@ let trashed = $derived(all.filter((r) => r.trashedAt !== null));
 let favorites = $derived(all.filter((r) => r.trashedAt === null && r.favorite));
 
 function audioUrl(id: string) {
-	return `/api/recordings/${id}/audio`;
+	return api.url(`/api/recordings/${id}/audio`);
 }
 
 function stripExtension(filename: string) {
@@ -30,7 +31,7 @@ function readDuration(url: string): Promise<number> {
 }
 
 async function load() {
-	const res = await fetch('/api/recordings', { credentials: 'include' });
+	const res = await api.fetch('/api/recordings', { credentials: 'include' });
 	if (res.ok) all = await res.json();
 	loaded = true;
 }
@@ -41,7 +42,7 @@ async function upload(file: File | Blob, filename: string, title: string, durati
 	form.append('title', title);
 	form.append('durationSeconds', String(durationSeconds));
 
-	const res = await fetch('/api/recordings', { method: 'POST', credentials: 'include', body: form });
+	const res = await api.fetch('/api/recordings', { method: 'POST', credentials: 'include', body: form });
 
 	if (!res.ok) {
 		const body = await res.json().catch(() => ({}));
@@ -89,7 +90,7 @@ async function patch(
 	id: string,
 	updates: Partial<{ title: string; description: string; favorite: boolean; archived: boolean; trashed: boolean }>
 ) {
-	const res = await fetch(`/api/recordings/${id}`, {
+	const res = await api.fetch(`/api/recordings/${id}`, {
 		method: 'PATCH',
 		headers: { 'Content-Type': 'application/json' },
 		credentials: 'include',
@@ -132,7 +133,7 @@ function restore(id: string) {
 
 async function deleteForever(id: string) {
 	all = all.filter((r) => r.id !== id);
-	await fetch(`/api/recordings/${id}`, { method: 'DELETE', credentials: 'include' });
+	await api.fetch(`/api/recordings/${id}`, { method: 'DELETE', credentials: 'include' });
 }
 
 async function toggleRecordingTag(recordingId: string, tagId: string) {
@@ -140,7 +141,7 @@ async function toggleRecordingTag(recordingId: string, tagId: string) {
 	if (!recording) return;
 	const has = recording.tagIds.includes(tagId);
 	recording.tagIds = has ? recording.tagIds.filter((id) => id !== tagId) : [...recording.tagIds, tagId];
-	await fetch(`/api/recordings/${recordingId}/tags/${tagId}`, {
+	await api.fetch(`/api/recordings/${recordingId}/tags/${tagId}`, {
 		method: has ? 'DELETE' : 'POST',
 		credentials: 'include'
 	});

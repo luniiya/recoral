@@ -2,6 +2,7 @@
 	import BackButton from '$lib/components/BackButton.svelte';
 	import Confetti from '$lib/components/Confetti.svelte';
 	import StatCard from '$lib/components/StatCard.svelte';
+	import { api } from '$lib/api.svelte';
 
 	interface ExportStats {
 		recordingCount: number;
@@ -27,8 +28,8 @@
 		downloading = true;
 		try {
 			const [exportRes, statsRes] = await Promise.all([
-				fetch('/api/export', { credentials: 'include' }),
-				fetch('/api/export/stats', { credentials: 'include' })
+				api.fetch('/api/export', { credentials: 'include' }),
+				api.fetch('/api/export/stats', { credentials: 'include' })
 			]);
 			if (!exportRes.ok) throw new Error('Something went wrong');
 

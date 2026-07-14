@@ -1,5 +1,6 @@
 import type { User } from '@recoral/shared';
 import { applyAccentHue, cacheAccentHue } from './accent';
+import { api } from './api.svelte';
 
 let user = $state<User | null>(null);
 let loading = $state(true);
@@ -13,7 +14,7 @@ function setUser(next: User | null) {
 async function refresh() {
 	loading = true;
 	try {
-		const res = await fetch('/api/auth/me', { credentials: 'include' });
+		const res = await api.fetch('/api/auth/me', { credentials: 'include' });
 		setUser(res.ok ? await res.json() : null);
 	} finally {
 		loading = false;
@@ -21,7 +22,7 @@ async function refresh() {
 }
 
 async function submit(path: string, body: Record<string, unknown>) {
-	const res = await fetch(path, {
+	const res = await api.fetch(path, {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },
 		credentials: 'include',
@@ -41,7 +42,7 @@ async function register(username: string, password: string, email: string, accen
 }
 
 async function updateAccount(updates: { accentHue?: number; avatar?: string | null }) {
-	const res = await fetch('/api/account', {
+	const res = await api.fetch('/api/account', {
 		method: 'PATCH',
 		headers: { 'Content-Type': 'application/json' },
 		credentials: 'include',
@@ -53,7 +54,7 @@ async function updateAccount(updates: { accentHue?: number; avatar?: string | nu
 }
 
 async function logout() {
-	await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
+	await api.fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
 	setUser(null);
 }
 

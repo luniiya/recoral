@@ -1,4 +1,5 @@
 import type { Tag } from '@recoral/shared';
+import { api } from './api.svelte';
 
 const TAG_TRASH_RETENTION_DAYS = 30;
 
@@ -9,13 +10,13 @@ let list = $derived(all.filter((t) => t.trashedAt === null));
 let trashed = $derived(all.filter((t) => t.trashedAt !== null));
 
 async function load() {
-	const res = await fetch('/api/tags', { credentials: 'include' });
+	const res = await api.fetch('/api/tags', { credentials: 'include' });
 	if (res.ok) all = await res.json();
 	loaded = true;
 }
 
 async function create(name: string, hue: number): Promise<Tag> {
-	const res = await fetch('/api/tags', {
+	const res = await api.fetch('/api/tags', {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },
 		credentials: 'include',
@@ -28,7 +29,7 @@ async function create(name: string, hue: number): Promise<Tag> {
 }
 
 async function update(id: string, updates: { name?: string; hue?: number }): Promise<Tag> {
-	const res = await fetch(`/api/tags/${id}`, {
+	const res = await api.fetch(`/api/tags/${id}`, {
 		method: 'PATCH',
 		headers: { 'Content-Type': 'application/json' },
 		credentials: 'include',
@@ -43,7 +44,7 @@ async function update(id: string, updates: { name?: string; hue?: number }): Pro
 // Trashing/restoring/deleting a tag cascades to its subtags server-side, so a
 // single-row local patch can't keep the client in sync; just reload the list.
 async function trash(id: string) {
-	await fetch(`/api/tags/${id}`, {
+	await api.fetch(`/api/tags/${id}`, {
 		method: 'PATCH',
 		headers: { 'Content-Type': 'application/json' },
 		credentials: 'include',
@@ -53,7 +54,7 @@ async function trash(id: string) {
 }
 
 async function restore(id: string) {
-	const res = await fetch(`/api/tags/${id}`, {
+	const res = await api.fetch(`/api/tags/${id}`, {
 		method: 'PATCH',
 		headers: { 'Content-Type': 'application/json' },
 		credentials: 'include',
@@ -68,7 +69,7 @@ async function restore(id: string) {
 }
 
 async function deleteForever(id: string) {
-	await fetch(`/api/tags/${id}`, { method: 'DELETE', credentials: 'include' });
+	await api.fetch(`/api/tags/${id}`, { method: 'DELETE', credentials: 'include' });
 	await load();
 }
 

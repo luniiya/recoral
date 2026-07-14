@@ -1,0 +1,5 @@
+{
+  "appId": "com.recoral.app",
+  "appName": "recoral",
+  "webDir": "../web/build"
+}

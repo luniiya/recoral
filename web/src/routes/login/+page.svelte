@@ -2,6 +2,7 @@
 	import type { Settings } from '@recoral/shared';
 	import { goto } from '$app/navigation';
 	import { applyAccentHue, cacheAccentHue, readCachedAccentHue } from '$lib/accent';
+	import { api } from '$lib/api.svelte';
 	import { auth } from '$lib/auth.svelte';
 	import ColorPicker from '$lib/components/ColorPicker.svelte';
 	import ThemeToggle from '$lib/components/ThemeToggle.svelte';
@@ -33,7 +34,10 @@
 	});
 
 	onMount(async () => {
-		const [settingsRes, setupRes] = await Promise.all([fetch('/api/settings'), fetch('/api/setup-status')]);
+		const [settingsRes, setupRes] = await Promise.all([
+			api.fetch('/api/settings'),
+			api.fetch('/api/setup-status')
+		]);
 
 		if (setupRes.ok) {
 			const setup = await setupRes.json();

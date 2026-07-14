@@ -4,6 +4,7 @@
 	import Avatar from '$lib/components/Avatar.svelte';
 	import ColorPicker from '$lib/components/ColorPicker.svelte';
 	import Toggle from '$lib/components/Toggle.svelte';
+	import { api } from '$lib/api.svelte';
 	import { readAsDataUrl } from '$lib/file';
 	import { onMount } from 'svelte';
 
@@ -30,9 +31,9 @@
 
 	onMount(async () => {
 		const [usersRes, healthRes, settingsRes] = await Promise.all([
-			fetch('/api/admin/users', { credentials: 'include' }),
-			fetch('/api/health'),
-			fetch('/api/settings')
+			api.fetch('/api/admin/users', { credentials: 'include' }),
+			api.fetch('/api/health'),
+			api.fetch('/api/settings')
 		]);
 		if (usersRes.ok) users = await usersRes.json();
 		if (settingsRes.ok) settings = await settingsRes.json();
@@ -47,7 +48,7 @@
 	});
 
 	async function patchSettings(updates: Partial<Settings>) {
-		const res = await fetch('/api/admin/settings', {
+		const res = await api.fetch('/api/admin/settings', {
 			method: 'PATCH',
 			headers: { 'Content-Type': 'application/json' },
 			credentials: 'include',
@@ -70,7 +71,7 @@
 
 	async function patchUser(id: string, updates: { isAdmin?: boolean; storageLimitMb?: number | null }) {
 		usersError = '';
-		const res = await fetch(`/api/admin/users/${id}`, {
+		const res = await api.fetch(`/api/admin/users/${id}`, {
 			method: 'PATCH',
 			headers: { 'Content-Type': 'application/json' },
 			credentials: 'include',
@@ -88,7 +89,7 @@
 		createUserError = '';
 		creatingUser = true;
 		try {
-			const res = await fetch('/api/admin/users', {
+			const res = await api.fetch('/api/admin/users', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				credentials: 'include',
@@ -119,7 +120,7 @@
 		if (!deleteTarget) return;
 		deleting = true;
 		try {
-			const res = await fetch(`/api/admin/users/${deleteTarget.id}`, {
+			const res = await api.fetch(`/api/admin/users/${deleteTarget.id}`, {
 				method: 'DELETE',
 				credentials: 'include'
 			});

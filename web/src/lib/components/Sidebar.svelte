@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { page } from '$app/state';
+	import { api } from '$lib/api.svelte';
 	import { auth } from '$lib/auth.svelte';
 	import { onMount } from 'svelte';
 
@@ -47,14 +48,14 @@
 
 	onMount(async () => {
 		try {
-			const res = await fetch('/api/health');
+			const res = await api.fetch('/api/health');
 			serverOnline = res.ok;
 			if (res.ok) version = (await res.json()).version;
 		} catch {
 			serverOnline = false;
 		}
 
-		const storageRes = await fetch('/api/storage', { credentials: 'include' });
+		const storageRes = await api.fetch('/api/storage', { credentials: 'include' });
 		if (storageRes.ok) {
 			const usage = await storageRes.json();
 			usedBytes = usage.usedBytes;
