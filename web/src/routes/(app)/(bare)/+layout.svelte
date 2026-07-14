@@ -1,5 +1,6 @@
 <script lang="ts">
 	import AvatarMenu from '$lib/components/AvatarMenu.svelte';
+	import BottomNav from '$lib/components/BottomNav.svelte';
 	import ThemeToggle from '$lib/components/ThemeToggle.svelte';
 
 	let { children } = $props();
@@ -12,11 +13,15 @@
 			<span class="font-semibold text-gray-900 dark:text-gray-100">recoral</span>
 		</a>
 
-		<ThemeToggle />
-		<AvatarMenu />
+		<div class="hidden items-center gap-3 md:flex">
+			<ThemeToggle />
+			<AvatarMenu />
+		</div>
 	</header>
 
-	<main class="mx-auto w-full max-w-xl px-6 py-10">
+	<main class="mx-auto w-full max-w-xl px-6 pt-10 pb-24 md:pb-10">
 		{@render children()}
 	</main>
 </div>
+
+<BottomNav />

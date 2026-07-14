@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { liveRecordingStore } from '$lib/liveRecording.svelte';
 	import LiveWaveform from './LiveWaveform.svelte';
 
 	interface Props {
@@ -18,25 +19,31 @@
 </script>
 
 <div class="flex h-full flex-col">
-	<div class="flex items-center justify-between px-5 py-3">
-		<div class="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
-			{#if !saving}
-				<span class="size-2 animate-pulse rounded-full bg-red-500"></span>
-			{/if}
+	<div class="flex flex-col gap-3 px-5 py-4">
+		<input
+			class="min-w-0 truncate bg-transparent text-lg font-semibold text-gray-900 outline-none disabled:opacity-60 dark:text-gray-100"
+			placeholder="Untitled recording"
+			value={liveRecordingStore.title}
+			oninput={(e) => liveRecordingStore.setTitle(e.currentTarget.value)}
+			aria-label="Recording title"
+			disabled={saving}
+		/>
+		<input
+			class="w-full bg-transparent text-sm text-gray-500 outline-none disabled:opacity-60 dark:text-gray-400"
+			placeholder="Add a description…"
+			value={liveRecordingStore.description}
+			oninput={(e) => liveRecordingStore.setDescription(e.currentTarget.value)}
+			aria-label="Recording description"
+			disabled={saving}
+		/>
+	</div>
+
+	{#if !saving}
+		<div class="flex items-center justify-center gap-2 text-sm text-gray-500 dark:text-gray-400">
+			<span class="size-2 animate-pulse rounded-full bg-red-500"></span>
 			<span class="tabular-nums">{formatDuration(elapsedSeconds)}</span>
 		</div>
-
-		{#if !saving}
-			<button
-				class="flex size-8 items-center justify-center rounded-full text-red-500 transition hover:bg-red-50 dark:hover:bg-red-950/40"
-				aria-label="Stop recording"
-				title="Stop recording"
-				onclick={onStop}
-			>
-				<span class="size-3.5 rounded-sm bg-red-500"></span>
-			</button>
-		{/if}
-	</div>
+	{/if}
 
 	<div
 		class="mx-5 my-4 flex min-h-0 flex-1 flex-col items-center justify-center gap-4 overflow-hidden rounded-2xl bg-accent-50 dark:bg-accent-500/10"
@@ -52,4 +59,17 @@
 			<p class="text-sm text-gray-500 dark:text-gray-400">Recording…</p>
 		{/if}
 	</div>
+
+	{#if !saving}
+		<div class="flex justify-center pb-8">
+			<button
+				class="flex size-16 items-center justify-center rounded-full bg-red-500 text-white shadow-sm transition hover:bg-red-600"
+				aria-label="Stop recording"
+				title="Stop recording"
+				onclick={onStop}
+			>
+				<span class="size-5 rounded-sm bg-white"></span>
+			</button>
+		</div>
+	{/if}
 </div>

@@ -39,7 +39,7 @@
 			: 'w-full'}"
 	>
 		<div bind:this={scrollEl} class="no-native-scrollbar h-full overflow-y-auto">
-			<div class="mx-auto max-w-xl px-6 py-10">
+			<div class="mx-auto max-w-xl px-6 pt-10 pb-36 md:pb-10">
 			<p class="mb-3 text-xs font-medium text-gray-400">
 				{#if recordingsStore.search.trim() || recordingsStore.selectedTagIds.length > 0}
 					{visibleRecordings.length} {visibleRecordings.length === 1 ? 'result' : 'results'}
@@ -72,7 +72,7 @@
 	</div>
 
 	{#if selectedRecording}
-		<div class="min-w-0 flex-1 border-l border-gray-200 dark:border-white/10">
+		<div class="fixed inset-0 z-40 bg-white dark:bg-black md:static md:inset-auto md:z-auto md:min-w-0 md:flex-1 md:border-l md:border-gray-200 md:dark:border-white/10">
 			<RecordingDetail recording={selectedRecording} onclose={() => (selectedId = null)} />
 		</div>
 	{/if}

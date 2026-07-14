@@ -57,5 +57,6 @@ export const themeStore = {
 		return preference;
 	},
 	init,
+	set,
 	cycle
 };

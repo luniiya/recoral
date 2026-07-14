@@ -30,7 +30,7 @@
 		<button class="fixed inset-0 z-10 cursor-default" aria-label="Close filters" onclick={() => (open = false)}
 		></button>
 
-		<div class="card absolute top-full right-0 z-20 mt-2 w-64 p-4">
+		<div class="card absolute right-0 bottom-full z-20 mb-2 w-64 p-4 md:top-full md:bottom-auto md:mt-2 md:mb-0">
 			<div class="mb-3 flex items-center justify-between">
 				<span class="text-sm font-medium text-gray-900 dark:text-gray-100">Filter by tag</span>
 				{#if count > 0}

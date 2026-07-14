@@ -36,11 +36,18 @@ async function load() {
 	loaded = true;
 }
 
-async function upload(file: File | Blob, filename: string, title: string, durationSeconds: number) {
+async function upload(
+	file: File | Blob,
+	filename: string,
+	title: string,
+	durationSeconds: number,
+	description?: string
+) {
 	const form = new FormData();
 	form.append('file', file, filename);
 	form.append('title', title);
 	form.append('durationSeconds', String(durationSeconds));
+	if (description) form.append('description', description);
 
 	const res = await api.fetch('/api/recordings', { method: 'POST', credentials: 'include', body: form });
 
@@ -73,8 +80,13 @@ async function importFiles(files: FileList | File[]) {
 	}
 }
 
-async function addRecording(blob: Blob, title: string, durationSeconds: number): Promise<Recording | null> {
-	const result = await upload(blob, 'recording.webm', title, durationSeconds);
+async function addRecording(
+	blob: Blob,
+	title: string,
+	durationSeconds: number,
+	description?: string
+): Promise<Recording | null> {
+	const result = await upload(blob, 'recording.webm', title, durationSeconds, description);
 	if (result.error) {
 		importError = result.error;
 		return null;

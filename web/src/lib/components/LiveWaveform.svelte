@@ -38,10 +38,10 @@
 	});
 </script>
 
-<div class="flex h-24 w-full items-center justify-center gap-1">
+<div class="flex h-24 w-full items-center justify-center gap-0.5">
 	{#each levels as level, i (i)}
 		<span
-			class="max-w-1.5 min-w-[2px] flex-1 rounded-full bg-accent-500 transition-[height] duration-75"
+			class="max-w-1.5 min-w-px flex-1 rounded-full bg-accent-500 transition-[height] duration-75"
 			style:height="{Math.max(6, level * 100)}%"
 		></span>
 	{/each}

@@ -4,7 +4,14 @@
 	import ColorPicker from '$lib/components/ColorPicker.svelte';
 	import Toggle from '$lib/components/Toggle.svelte';
 	import { readAsDataUrl } from '$lib/file';
+	import { themeStore, type ThemePreference } from '$lib/theme.svelte';
 	import { wavySeekStore } from '$lib/wavySeek.svelte';
+
+	const themeOptions: { value: ThemePreference; label: string }[] = [
+		{ value: 'system', label: 'Auto' },
+		{ value: 'light', label: 'Light' },
+		{ value: 'dark', label: 'Dark' }
+	];
 
 	let saving = $state(false);
 	let error = $state('');
@@ -83,7 +90,25 @@
 
 	<div class="card mb-6 p-6">
 		<h2 class="mb-4 text-sm font-semibold text-gray-900 dark:text-gray-100">Appearance</h2>
-		<div class="flex items-center justify-between gap-4">
+
+		<div class="mb-5 flex items-center justify-between gap-4">
+			<p class="text-sm text-gray-900 dark:text-gray-100">Theme</p>
+			<div class="flex gap-1 rounded-full bg-gray-100 p-1 dark:bg-white/5">
+				{#each themeOptions as option (option.value)}
+					<button
+						class="rounded-full px-3.5 py-1.5 text-sm font-medium transition
+							{themeStore.preference === option.value
+							? 'bg-accent-500 text-white'
+							: 'text-gray-600 hover:bg-gray-200 dark:text-gray-300 dark:hover:bg-white/10'}"
+						onclick={() => themeStore.set(option.value)}
+					>
+						{option.label}
+					</button>
+				{/each}
+			</div>
+		</div>
+
+		<div class="flex items-center justify-between gap-4 border-t border-gray-100 pt-5 dark:border-white/10">
 			<div>
 				<p class="text-sm text-gray-900 dark:text-gray-100">Wavy playback indicator</p>
 				<p class="text-sm text-gray-500 dark:text-gray-400">

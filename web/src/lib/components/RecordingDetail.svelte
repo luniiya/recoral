@@ -49,7 +49,10 @@
 			aria-label="Close"
 			onclick={onclose}
 		>
-			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="size-4">
+			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="size-4 md:hidden">
+				<path stroke-linecap="round" stroke-linejoin="round" d="M15 18l-6-6 6-6" />
+			</svg>
+			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="hidden size-4 md:block">
 				<path stroke-linecap="round" stroke-linejoin="round" d="M18 6 6 18M6 6l12 12" />
 			</svg>
 		</button>

@@ -1,8 +1,11 @@
 <script lang="ts">
+	import { page } from '$app/state';
 	import AvatarMenu from '$lib/components/AvatarMenu.svelte';
-	import SearchFilter from '$lib/components/SearchFilter.svelte';
+	import BottomNav from '$lib/components/BottomNav.svelte';
+	import SearchBar from '$lib/components/SearchBar.svelte';
 	import Sidebar from '$lib/components/Sidebar.svelte';
 	import ThemeToggle from '$lib/components/ThemeToggle.svelte';
+	import { liveRecordingStore } from '$lib/liveRecording.svelte';
 	import { recordingsStore } from '$lib/recordings.svelte';
 	import { onMount } from 'svelte';
 
@@ -71,33 +74,12 @@
 			<span class="font-semibold text-gray-900 dark:text-gray-100">recoral</span>
 		</a>
 
-		<div class="flex flex-1 justify-center">
-			<div
-				class="flex w-full max-w-md items-center gap-2 rounded-full bg-[#e5e7eb] py-1.5 pr-1.5 pl-3.5 transition focus-within:ring-2 focus-within:ring-accent-500 dark:bg-white/5"
-			>
-				<svg
-					viewBox="0 0 24 24"
-					fill="none"
-					stroke="currentColor"
-					stroke-width="2"
-					class="size-4 shrink-0 text-gray-400"
-				>
-					<circle cx="11" cy="11" r="7" />
-					<path stroke-linecap="round" d="m20 20-3.5-3.5" />
-				</svg>
-				<input
-					class="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-gray-400"
-					type="search"
-					placeholder="Search your recordings"
-					value={recordingsStore.search}
-					oninput={(e) => recordingsStore.setSearch(e.currentTarget.value)}
-				/>
-				<SearchFilter />
-			</div>
+		<div class="hidden flex-1 justify-center md:flex">
+			<SearchBar class="w-full max-w-md bg-[#e5e7eb] dark:bg-white/5" />
 		</div>
 
 		<button
-			class="flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-sm text-gray-600 transition hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-white/5"
+			class="ml-auto flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-sm text-gray-600 transition hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-white/5 md:ml-0"
 			onclick={() => fileInput?.click()}
 		>
 			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="size-4">
@@ -118,8 +100,10 @@
 			onchange={onFilesSelected}
 		/>
 
-		<ThemeToggle />
-		<AvatarMenu />
+		<div class="hidden items-center gap-3 md:flex">
+			<ThemeToggle />
+			<AvatarMenu />
+		</div>
 	</header>
 
 	<div class="flex min-h-0 flex-1">
@@ -130,6 +114,28 @@
 		</main>
 	</div>
 </div>
+
+<div class="fixed inset-x-0 bottom-20 z-20 flex items-center gap-2 px-4 md:hidden">
+	<SearchBar
+		class="min-w-0 flex-1 border border-gray-200/70 bg-white/70 shadow-sm backdrop-blur-lg dark:border-white/10 dark:bg-black/60"
+	/>
+	{#if page.url.pathname === '/'}
+		<button
+			class="flex size-12 shrink-0 items-center justify-center rounded-full text-white shadow-sm transition
+				{liveRecordingStore.isRecording ? 'bg-accent-700' : 'bg-accent-500 hover:bg-accent-600'}"
+			onclick={() => liveRecordingStore.toggle()}
+			aria-label={liveRecordingStore.isRecording ? 'Stop recording' : 'Start recording'}
+		>
+			{#if liveRecordingStore.isRecording}
+				<span class="size-3.5 rounded-sm bg-white"></span>
+			{:else}
+				<span class="size-5 rounded-full bg-white"></span>
+			{/if}
+		</button>
+	{/if}
+</div>
+
+<BottomNav />
 
 {#if recordingsStore.importError}
 	<div class="fixed top-4 left-1/2 z-50 -translate-x-1/2">

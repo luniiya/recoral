@@ -404,6 +404,7 @@ const server = Bun.serve({
 					const form = await req.formData();
 					const file = form.get("file");
 					const title = form.get("title");
+					const description = form.get("description");
 					const durationSeconds = Number(form.get("durationSeconds") ?? 0);
 
 					if (!(file instanceof File)) return Response.json({ error: "A file is required" }, { status: 400 });
@@ -413,6 +414,7 @@ const server = Bun.serve({
 					const recording = await createRecording({
 						userId: user.id,
 						title: typeof title === "string" ? title.trim() : "",
+						description: typeof description === "string" ? description.trim() : undefined,
 						file,
 						durationSeconds
 					});

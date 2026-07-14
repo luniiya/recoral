@@ -267,8 +267,8 @@
 		</span>
 	</div>
 
-	<div class="flex items-center gap-3">
-		<div class="flex w-28 shrink-0">
+	<div class="flex items-center gap-1 md:gap-3">
+		<div class="flex w-16 shrink-0 md:w-28">
 			<button
 				class="rounded-full px-2.5 py-1 text-xs font-medium text-gray-500 ring-1 ring-gray-200 transition hover:bg-gray-100 dark:text-gray-400 dark:ring-white/10 dark:hover:bg-white/5"
 				onclick={cycleRate}
@@ -277,7 +277,7 @@
 			</button>
 		</div>
 
-		<div class="flex flex-1 items-center justify-center gap-5">
+		<div class="flex flex-1 items-center justify-center gap-2 md:gap-5">
 			<button
 				class="flex size-9 items-center justify-center rounded-full text-gray-500 transition hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-white/5"
 				aria-label="Back 10 seconds"
@@ -324,7 +324,7 @@
 			</button>
 		</div>
 
-		<div class="flex w-28 shrink-0 items-center justify-end gap-1.5">
+		<div class="flex w-16 shrink-0 items-center justify-end gap-1.5 md:w-28">
 			<input
 				type="range"
 				min="0"

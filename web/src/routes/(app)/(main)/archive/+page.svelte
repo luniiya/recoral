@@ -26,7 +26,7 @@
 			: 'w-full'}"
 	>
 		<div bind:this={scrollEl} class="no-native-scrollbar h-full overflow-y-auto">
-			<div class="mx-auto max-w-xl px-6 py-10">
+			<div class="mx-auto max-w-xl px-6 pt-10 pb-36 md:pb-10">
 				<h1 class="mb-6 text-lg font-semibold text-gray-900 dark:text-gray-100">Archive</h1>
 
 				<div class="flex flex-col gap-3">
@@ -51,7 +51,7 @@
 	</div>
 
 	{#if selectedRecording}
-		<div class="min-w-0 flex-1 border-l border-gray-200 dark:border-white/10">
+		<div class="fixed inset-0 z-40 bg-white dark:bg-black md:static md:inset-auto md:z-auto md:min-w-0 md:flex-1 md:border-l md:border-gray-200 md:dark:border-white/10">
 			<RecordingDetail recording={selectedRecording} onclose={() => (selectedId = null)} />
 		</div>
 	{/if}
