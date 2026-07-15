@@ -13,6 +13,11 @@
         <item name="windowActionBar">false</item>
         <item name="windowNoTitle">true</item>
         <item name="android:background">@null</item>
+        <!-- AppCompat's DayNight default (#FAFAFA) shows through behind the
+             system bars via Capacitor's edge-to-edge SystemBars plugin, which
+             paints the decor view with this color, not the web page's own
+             bg-white/dark:bg-black. Pin it to true white/black to match. -->
+        <item name="android:windowBackground">#FFFFFF</item>
     </style>
 
 

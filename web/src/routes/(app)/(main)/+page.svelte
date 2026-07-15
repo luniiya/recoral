@@ -125,6 +125,7 @@
 		<div class="fixed inset-0 z-40 bg-white dark:bg-black md:static md:inset-auto md:z-auto md:min-w-0 md:flex-1 md:border-l md:border-gray-200 md:dark:border-white/10">
 			<LiveRecordingPanel
 				stream={liveRecordingStore.recordingStream}
+				amplitude={liveRecordingStore.nativeAmplitude}
 				elapsedSeconds={liveRecordingStore.elapsedSeconds}
 				saving={liveRecordingStore.savingRecording}
 				onStop={() => liveRecordingStore.stop()}

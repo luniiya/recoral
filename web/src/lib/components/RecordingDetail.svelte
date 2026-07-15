@@ -165,14 +165,16 @@
 				selected={recording.tagIds}
 				ontoggle={(tagId) => recordingsStore.toggleRecordingTag(recording.id, tagId)}
 			/>
-			<button
-				class="rounded-full px-2.5 py-1 text-xs text-gray-400 ring-1 ring-gray-200 transition hover:bg-gray-100 dark:ring-white/10 dark:hover:bg-white/5"
-				onclick={() => (tagPickerOpen = !tagPickerOpen)}
-			>
-				+ tag
-			</button>
+			{#if tagsStore.list.length > 0}
+				<button
+					class="rounded-full px-2.5 py-1 text-xs text-gray-400 ring-1 ring-gray-200 transition hover:bg-gray-100 dark:ring-white/10 dark:hover:bg-white/5"
+					onclick={() => (tagPickerOpen = !tagPickerOpen)}
+				>
+					+ tag
+				</button>
+			{/if}
 
-			{#if tagPickerOpen}
+			{#if tagPickerOpen && tagsStore.list.length > 0}
 				<button
 					class="fixed inset-0 z-10 cursor-default"
 					aria-label="Close tag picker"
@@ -233,7 +235,7 @@
 	</div>
 
 	<div
-		class="px-5 pt-4 pb-[calc(1rem+var(--android-nav-bottom-inset,env(safe-area-inset-bottom)))] md:pb-4"
+		class="px-5 pt-4 pb-[calc(1rem+var(--safe-area-inset-bottom,env(safe-area-inset-bottom)))] md:pb-4"
 	>
 		<AudioPlayer
 			src={recordingsStore.audioUrl(recording.id)}

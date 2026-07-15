@@ -1,15 +1,23 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
+
 	interface Props {
-		stream: MediaStream;
+		// Desktop/browser recording: a raw MediaStream analysed client-side.
+		stream?: MediaStream | null;
+		// Native recording: the mic is owned by the native plugin, not the
+		// page, so there's no MediaStream to analyse here. The parent polls
+		// the plugin's amplitude instead and passes each sample through this.
+		amplitude?: number;
 	}
 
-	let { stream }: Props = $props();
+	let { stream = null, amplitude = 0 }: Props = $props();
 
 	const BAR_COUNT = 60;
 
 	let levels = $state<number[]>(Array(BAR_COUNT).fill(0));
 
 	$effect(() => {
+		if (!stream) return;
 		const audioCtx = new (window.AudioContext ??
 			(window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
 		const analyser = audioCtx.createAnalyser();
@@ -35,6 +43,17 @@
 			source.disconnect();
 			audioCtx.close();
 		};
+	});
+
+	$effect(() => {
+		if (stream) return;
+		// amplitude is the only thing this effect should re-run for; reading
+		// levels directly here (to build the next window) makes the effect
+		// depend on its own write, re-triggering itself every time it runs
+		// (Svelte 5's effect_update_depth_exceeded infinite-loop trap).
+		// untrack() reads the current value without registering it as a
+		// dependency, keeping amplitude as the sole trigger.
+		levels = [...untrack(() => levels).slice(1), amplitude];
 	});
 </script>
 

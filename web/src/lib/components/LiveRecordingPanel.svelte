@@ -5,12 +5,13 @@
 
 	interface Props {
 		stream: MediaStream | null;
+		amplitude?: number;
 		elapsedSeconds: number;
 		saving: boolean;
 		onStop: () => void;
 	}
 
-	let { stream, elapsedSeconds, saving, onStop }: Props = $props();
+	let { stream, amplitude = 0, elapsedSeconds, saving, onStop }: Props = $props();
 
 	function formatDuration(totalSeconds: number) {
 		const minutes = Math.floor(totalSeconds / 60);
@@ -58,15 +59,15 @@
 				aria-label="Saving"
 			></div>
 			<p class="text-sm text-gray-500 dark:text-gray-400">Saving…</p>
-		{:else if stream}
-			<LiveWaveform {stream} />
+		{:else}
+			<LiveWaveform {stream} {amplitude} />
 			<p class="text-sm text-gray-500 dark:text-gray-400">Recording…</p>
 		{/if}
 	</div>
 
 	{#if !saving}
 		<div
-			class="flex justify-center pb-[calc(2rem+var(--android-nav-bottom-inset,env(safe-area-inset-bottom)))] md:pb-8"
+			class="flex justify-center pb-[calc(2rem+var(--safe-area-inset-bottom,env(safe-area-inset-bottom)))] md:pb-8"
 		>
 			<button
 				class="flex size-16 items-center justify-center rounded-full bg-red-500 text-white shadow-sm transition hover:bg-red-600"

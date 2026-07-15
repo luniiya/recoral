@@ -90,7 +90,11 @@ async function addRecording(
 	durationSeconds: number,
 	description?: string
 ): Promise<Recording | null> {
-	const result = await upload(blob, 'recording.webm', title, durationSeconds, description);
+	// Filename extension matters server-side (extensionFor() in recordings.ts
+	// prefers it over the blob's own MIME type), so a hardcoded .webm here
+	// would mislabel native recordings, which are real .m4a/AAC content.
+	const ext = blob.type.split('/')[1]?.split(';')[0] || 'webm';
+	const result = await upload(blob, `recording.${ext}`, title, durationSeconds, description);
 	if (result.error) {
 		importError = result.error;
 		return null;

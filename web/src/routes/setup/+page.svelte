@@ -1,7 +1,8 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
-	import ThemeToggle from '$lib/components/ThemeToggle.svelte';
 	import { onboarding } from '$lib/onboarding.svelte';
+	import { themeStore } from '$lib/theme.svelte';
+	import { onMount } from 'svelte';
 
 	let serverUrl = $state('');
 	let connecting = $state(false);
@@ -42,6 +43,13 @@
 		onboarding.completeOffline();
 		goto('/setup/offline');
 	}
+
+	// This screen only ever appears in the native app (before a server/account
+	// exists to have a saved theme preference), so it always follows system.
+	onMount(() => {
+		themeStore.previewSystem();
+		return () => themeStore.restore();
+	});
 </script>
 
 <svelte:head>
@@ -49,10 +57,6 @@
 </svelte:head>
 
 <section class="relative flex min-h-dvh items-center justify-center bg-white px-4 dark:bg-black">
-	<div class="absolute top-4 right-4 z-10">
-		<ThemeToggle />
-	</div>
-
 	<div class="card relative z-10 w-full max-w-sm p-8">
 		<div class="mb-8 flex flex-col items-center gap-2">
 			<img src="/logo.png" alt="recoral" class="size-12 rounded-full object-cover" />
