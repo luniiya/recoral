@@ -5,7 +5,9 @@
 	import { auth } from '$lib/auth.svelte';
 	import { mobileBack } from '$lib/mobileBack.svelte';
 	import { onboarding } from '$lib/onboarding.svelte';
+	import { outboxStore } from '$lib/outbox.svelte';
 	import { isNativePlatform } from '$lib/platform';
+	import { syncStore } from '$lib/sync.svelte';
 	import { themeStore } from '$lib/theme.svelte';
 	import { wavySeekStore } from '$lib/wavySeek.svelte';
 	import { onMount } from 'svelte';
@@ -35,6 +37,14 @@
 		auth.refresh();
 	});
 
+	// Once logged in, try to push anything left over in the local outbox
+	// (queued while offline, or from a previous session that never got a
+	// chance to sync). syncStore.init() also sets up the online/foreground
+	// triggers for future flushes, so this only needs to fire once.
+	$effect(() => {
+		if (isNativePlatform() && auth.user) syncStore.init();
+	});
+
 	onMount(() => {
 		themeStore.init();
 		wavySeekStore.init();
@@ -42,6 +52,8 @@
 		if (!isNativePlatform() && 'serviceWorker' in navigator) {
 			navigator.serviceWorker.register('/service-worker.js');
 		}
+
+		if (isNativePlatform()) void outboxStore.init();
 
 		if (isNativePlatform()) {
 			// Registering any listener here replaces Capacitor's default

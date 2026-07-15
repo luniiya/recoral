@@ -232,6 +232,40 @@
 			</div>
 
 			<div class="flex flex-col gap-3 border-t border-gray-100 pt-5 dark:border-white/10">
+				<div class="flex items-center justify-between gap-4">
+					<div>
+						<p class="text-sm text-gray-900 dark:text-gray-100">Transcription</p>
+						<p class="text-xs text-gray-400">
+							Requires the transcription service (whisper.cpp) running alongside the server.
+						</p>
+					</div>
+					<Toggle
+						checked={settings.transcriptionEnabled}
+						onchange={(checked) => patchSettings({ transcriptionEnabled: checked })}
+						label="Transcription"
+					/>
+				</div>
+
+				{#if settings.transcriptionEnabled}
+					<label class="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
+						Model
+						<select
+							value={settings.transcriptionModel}
+							class="rounded-lg bg-gray-100 px-2 py-1 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-accent-500 dark:bg-white/5 dark:text-gray-100"
+							onchange={(e) =>
+								patchSettings({ transcriptionModel: e.currentTarget.value as Settings['transcriptionModel'] })}
+						>
+							<option value="tiny">Tiny — fastest, least accurate</option>
+							<option value="base">Base — fast</option>
+							<option value="small">Small — balanced (recommended)</option>
+							<option value="medium">Medium — slower, more accurate</option>
+							<option value="large">Large — slowest, most accurate</option>
+						</select>
+					</label>
+				{/if}
+			</div>
+
+			<div class="flex flex-col gap-3 border-t border-gray-100 pt-5 dark:border-white/10">
 				<div>
 					<p class="text-sm text-gray-900 dark:text-gray-100">Max import upload size</p>
 					<p class="text-xs text-gray-400">

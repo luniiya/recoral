@@ -1,5 +1,7 @@
-import type { Settings } from "@recoral/shared";
+import type { Settings, TranscriptionModel } from "@recoral/shared";
 import { db } from "./db";
+
+const TRANSCRIPTION_MODELS: TranscriptionModel[] = ["tiny", "base", "small", "medium", "large"];
 
 interface SettingsRow {
 	id: number;
@@ -8,6 +10,8 @@ interface SettingsRow {
 	background_image: string | null;
 	server_storage_limit_mb: number | null;
 	max_import_size_mb: number;
+	transcription_enabled: number;
+	transcription_model: string;
 }
 
 function toSettings(row: SettingsRow): Settings {
@@ -16,7 +20,11 @@ function toSettings(row: SettingsRow): Settings {
 		signupEnabled: row.signup_enabled === 1,
 		backgroundImage: row.background_image,
 		serverStorageLimitMb: row.server_storage_limit_mb,
-		maxImportSizeMb: row.max_import_size_mb
+		maxImportSizeMb: row.max_import_size_mb,
+		transcriptionEnabled: row.transcription_enabled === 1,
+		transcriptionModel: (TRANSCRIPTION_MODELS as string[]).includes(row.transcription_model)
+			? (row.transcription_model as TranscriptionModel)
+			: "small"
 	};
 }
 
@@ -29,7 +37,9 @@ export function getSettings(): Settings {
 				signupEnabled: true,
 				backgroundImage: null,
 				serverStorageLimitMb: 204800,
-				maxImportSizeMb: 1024
+				maxImportSizeMb: 1024,
+				transcriptionEnabled: true,
+				transcriptionModel: "small"
 			};
 }
 
@@ -39,6 +49,8 @@ export function updateSettings(updates: {
 	backgroundImage?: string | null;
 	serverStorageLimitMb?: number | null;
 	maxImportSizeMb?: number;
+	transcriptionEnabled?: boolean;
+	transcriptionModel?: TranscriptionModel;
 }): Settings {
 	if (updates.defaultAccentHue !== undefined) {
 		const hue =
@@ -58,6 +70,12 @@ export function updateSettings(updates: {
 	}
 	if (updates.maxImportSizeMb !== undefined) {
 		db.run("UPDATE settings SET max_import_size_mb = ? WHERE id = 1", [updates.maxImportSizeMb]);
+	}
+	if (updates.transcriptionEnabled !== undefined) {
+		db.run("UPDATE settings SET transcription_enabled = ? WHERE id = 1", [updates.transcriptionEnabled ? 1 : 0]);
+	}
+	if (updates.transcriptionModel !== undefined && TRANSCRIPTION_MODELS.includes(updates.transcriptionModel)) {
+		db.run("UPDATE settings SET transcription_model = ? WHERE id = 1", [updates.transcriptionModel]);
 	}
 	return getSettings();
 }

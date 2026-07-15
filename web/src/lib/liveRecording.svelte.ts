@@ -1,14 +1,8 @@
-import { Filesystem } from '@capacitor/filesystem';
+import { outboxStore } from './outbox.svelte';
 import { RecoralRecorder } from './nativeRecorder';
 import { isNativePlatform } from './platform';
 import { recordingsStore } from './recordings.svelte';
-
-function base64ToBlob(base64: string, mimeType: string): Blob {
-	const byteChars = atob(base64);
-	const byteNumbers = new Array(byteChars.length);
-	for (let i = 0; i < byteChars.length; i++) byteNumbers[i] = byteChars.charCodeAt(i);
-	return new Blob([new Uint8Array(byteNumbers)], { type: mimeType });
-}
+import { syncStore } from './sync.svelte';
 
 // Shared so both the desktop record button (on the Recordings page itself)
 // and the mobile floating record button (in the layout, next to the search
@@ -115,22 +109,25 @@ async function stopNative() {
 
 	try {
 		const { uri, duration } = await RecoralRecorder.stopRecording();
-		// fetch(Capacitor.convertFileSrc(uri)) is the usual trick for this, but
-		// hangs indefinitely (no error, no timeout) for files under this app's
-		// own internal storage on this WebView version, confirmed via adb logs
-		// showing the local request handler start and never complete. Reading
-		// the file directly through the Filesystem plugin instead is the
-		// standard, well-tested Capacitor path and doesn't have that problem.
-		const { data } = await Filesystem.readFile({ path: uri });
-		const blob = base64ToBlob(data as string, 'audio/mp4');
-		const durationSeconds = duration / 1000;
-
-		const recording = await recordingsStore.addRecording(blob, title, durationSeconds, description);
-		lastRecordingId = recording?.id ?? null;
+		// Local-first: queued to the on-device outbox before any network
+		// attempt, so the take is never lost even if the upload below fails
+		// or the app gets killed before it finishes. The queued item shows
+		// in the list immediately (recordings.svelte.ts merges the outbox
+		// in), synced.flush() then tries to push it in the background.
+		const item = await outboxStore.add({
+			filePath: uri,
+			mimeType: 'audio/mp4',
+			title,
+			description,
+			durationSeconds: duration / 1000,
+			createdAt: new Date().toISOString()
+		});
+		lastRecordingId = item.localId;
+		void syncStore.flush();
 	} catch (err) {
 		// Surfaced so a real failure here is visible instead of leaving the
 		// panel stuck on "Saving..." forever with no explanation.
-		console.error('[liveRecording] Failed to save native recording:', err);
+		console.error('[liveRecording] Failed to queue native recording:', err);
 	} finally {
 		savingRecording = false;
 	}

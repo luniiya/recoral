@@ -1,4 +1,4 @@
-import type { Recording } from "@recoral/shared";
+import type { Recording, TranscriptStatus } from "@recoral/shared";
 import { mkdirSync, unlinkSync } from "node:fs";
 import { db } from "./db";
 import { getSettings } from "./settings";
@@ -22,6 +22,7 @@ interface RecordingRow {
 	trashed_at: string | null;
 	created_at: string;
 	transcript: string | null;
+	transcript_status: string;
 }
 
 export class DuplicateError extends Error {
@@ -65,6 +66,7 @@ function toRecording(row: RecordingRow): Recording {
 		createdAt: row.created_at,
 		durationSeconds: row.duration_seconds,
 		transcript: row.transcript,
+		transcriptStatus: (row.transcript_status as TranscriptStatus) || "none",
 		favorite: row.favorite === 1,
 		archivedAt: row.archived_at,
 		trashedAt: row.trashed_at,
@@ -87,6 +89,11 @@ function extensionFor(mimeType: string, filename: string): string {
 
 function getRow(userId: string, id: string): RecordingRow | null {
 	return db.query<RecordingRow, [string, string]>("SELECT * FROM recordings WHERE id = ? AND user_id = ?").get(id, userId);
+}
+
+export function getRecording(userId: string, id: string): Recording | null {
+	const row = getRow(userId, id);
+	return row ? toRecording(row) : null;
 }
 
 export function listRecordings(userId: string): Recording[] {
@@ -132,10 +139,11 @@ export async function createRecording(params: {
 	await Bun.write(filePath, buffer);
 
 	const createdAt = params.createdAt ?? new Date().toISOString();
+	const transcript = params.transcript ?? null;
 	db.run(
 		`INSERT INTO recordings
-			(id, user_id, title, description, file_path, content_hash, duration_seconds, file_size_bytes, mime_type, created_at, transcript)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			(id, user_id, title, description, file_path, content_hash, duration_seconds, file_size_bytes, mime_type, created_at, transcript, transcript_status)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		[
 			id,
 			params.userId,
@@ -147,7 +155,8 @@ export async function createRecording(params: {
 			buffer.byteLength,
 			params.file.type || "audio/mpeg",
 			createdAt,
-			params.transcript ?? null
+			transcript,
+			transcript ? "done" : "none"
 		]
 	);
 
@@ -234,4 +243,48 @@ export function globalStorageBytes(): number {
 export function getAudioFile(userId: string, id: string): { path: string; mimeType: string } | null {
 	const row = getRow(userId, id);
 	return row ? { path: row.file_path, mimeType: row.mime_type } : null;
+}
+
+// The transcription queue processes by recording id alone (it's a background
+// worker, not a per-request handler with a logged-in user on hand), so these
+// don't scope to a user_id like the rest of this file does.
+function getRowById(id: string): RecordingRow | null {
+	return db.query<RecordingRow, [string]>("SELECT * FROM recordings WHERE id = ?").get(id);
+}
+
+export function getRecordingForTranscription(id: string): { path: string; mimeType: string } | null {
+	const row = getRowById(id);
+	return row ? { path: row.file_path, mimeType: row.mime_type } : null;
+}
+
+export function setTranscriptStatus(id: string, status: TranscriptStatus) {
+	db.run("UPDATE recordings SET transcript_status = ? WHERE id = ?", [status, id]);
+}
+
+export function setTranscriptResult(id: string, transcript: string) {
+	db.run("UPDATE recordings SET transcript = ?, transcript_status = 'done' WHERE id = ?", [transcript, id]);
+}
+
+// Recordings that have never been transcribed successfully: either nothing's
+// ever run on them (created before transcription was turned on, or while it
+// was off) or a previous attempt failed. Not trashed, since there's no point
+// burning GPU time transcribing something sitting in the bin.
+export function listUntranscribed(): string[] {
+	const rows = db
+		.query<{ id: string }, []>(
+			"SELECT id FROM recordings WHERE transcript_status IN ('none', 'failed') AND trashed_at IS NULL"
+		)
+		.all();
+	return rows.map((r) => r.id);
+}
+
+// Recordings still marked pending/processing when the server last shut down
+// (crashed mid-job, or was restarted) need requeuing on boot, otherwise
+// they'd be stuck showing "transcribing…" forever with nothing actually
+// working on them.
+export function listStuckTranscriptions(): string[] {
+	const rows = db
+		.query<{ id: string }, []>("SELECT id FROM recordings WHERE transcript_status IN ('pending', 'processing')")
+		.all();
+	return rows.map((r) => r.id);
 }

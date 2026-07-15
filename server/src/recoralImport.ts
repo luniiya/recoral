@@ -6,6 +6,7 @@ import yauzl from "yauzl";
 import type { ExportManifest } from "./dataExport";
 import { attachTag, checkStorageQuota, createRecording, DuplicateError, QuotaError, updateRecording } from "./recordings";
 import { createTag, listTags } from "./tags";
+import { enqueueTranscription } from "./transcription";
 
 const MIME_TYPES: Record<string, string> = {
 	".m4a": "audio/mp4",
@@ -163,6 +164,7 @@ async function runImport(job: ImportJob, userId: string, userStorageLimitMb: num
 					createdAt: entry.createdAt,
 					transcript: entry.transcript
 				});
+				if (!entry.transcript) enqueueTranscription(recording.id);
 
 				if (entry.favorite || entry.archivedAt) {
 					updateRecording(userId, recording.id, {

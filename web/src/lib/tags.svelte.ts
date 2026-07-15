@@ -1,18 +1,28 @@
 import type { Tag } from '@recoral/shared';
 import { api } from './api.svelte';
+import { readLocalCache, writeLocalCache } from './localCache';
 
 const TAG_TRASH_RETENTION_DAYS = 30;
+const CACHED_TAGS_KEY = 'recoral_cached_tags';
 
-let all = $state<Tag[]>([]);
+let all = $state<Tag[]>(readLocalCache<Tag[]>(CACHED_TAGS_KEY, []));
 let loaded = $state(false);
 
 let list = $derived(all.filter((t) => t.trashedAt === null));
 let trashed = $derived(all.filter((t) => t.trashedAt !== null));
 
 async function load() {
-	const res = await api.fetch('/api/tags', { credentials: 'include' });
-	if (res.ok) all = await res.json();
-	loaded = true;
+	try {
+		const res = await api.fetch('/api/tags', { credentials: 'include' });
+		if (res.ok) {
+			all = await res.json();
+			writeLocalCache(CACHED_TAGS_KEY, all);
+		}
+	} catch {
+		// Offline: keep showing whatever was cached from the last successful load.
+	} finally {
+		loaded = true;
+	}
 }
 
 async function create(name: string, hue: number): Promise<Tag> {

@@ -8,9 +8,35 @@ services:
     environment:
       - PORT=3000
       - DATA_DIR=/data
+      - TRANSCRIPTION_URL=http://transcription:8090
     volumes:
       - recoral-data:/data
+    restart: unless-stopped
+    depends_on:
+      - transcription
+
+  # GPU-accelerated ASR (whisper.cpp + ROCm/HIP), kept as its own service
+  # rather than folded into the main container: a completely different
+  # runtime profile (GPU base image, device passthrough, heavy build deps)
+  # from the lean Bun+SQLite server above. Gated by the transcriptionEnabled
+  # admin setting; the main server just calls this over the compose network.
+  transcription:
+    build: ./transcription
+    environment:
+      - PORT=8090
+      - MODELS_DIR=/models
+    volumes:
+      - recoral-transcription-models:/models
+    devices:
+      - /dev/kfd
+      - /dev/dri
+    group_add:
+      - video
+      - render
+    security_opt:
+      - seccomp=unconfined
     restart: unless-stopped
 
 volumes:
   recoral-data:
+  recoral-transcription-models:

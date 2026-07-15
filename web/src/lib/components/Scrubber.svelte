@@ -127,7 +127,7 @@
 {#if canScroll}
 	<div
 		bind:this={trackEl}
-		class="absolute top-0 right-0 bottom-0 z-10 w-5 cursor-row-resize touch-none select-none"
+		class="absolute top-0 right-0 bottom-[calc(5rem+var(--safe-area-inset-bottom,env(safe-area-inset-bottom)))] z-10 w-5 cursor-row-resize touch-none select-none md:bottom-0"
 		role="scrollbar"
 		aria-orientation="vertical"
 		aria-controls="scrubber-label"

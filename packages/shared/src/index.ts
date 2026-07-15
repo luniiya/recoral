@@ -1,5 +1,9 @@
 export const APP_VERSION = "0.1.0";
 
+export type TranscriptStatus = "none" | "pending" | "processing" | "done" | "failed";
+
+export type TranscriptionModel = "tiny" | "base" | "small" | "medium" | "large";
+
 export interface Recording {
 	id: string;
 	title: string;
@@ -7,6 +11,7 @@ export interface Recording {
 	createdAt: string;
 	durationSeconds: number;
 	transcript: string | null;
+	transcriptStatus: TranscriptStatus;
 	favorite: boolean;
 	archivedAt: string | null;
 	trashedAt: string | null;
@@ -38,6 +43,8 @@ export interface Settings {
 	backgroundImage: string | null;
 	serverStorageLimitMb: number | null;
 	maxImportSizeMb: number;
+	transcriptionEnabled: boolean;
+	transcriptionModel: TranscriptionModel;
 }
 
 export interface StorageUsage {

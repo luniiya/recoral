@@ -1,4 +1,4 @@
-import { APP_VERSION } from "@recoral/shared";
+import { APP_VERSION, type TranscriptionModel } from "@recoral/shared";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Readable } from "node:stream";
@@ -24,6 +24,7 @@ import {
 	detachTag as detachRecordingTag,
 	DuplicateError,
 	getAudioFile,
+	getRecording,
 	globalStorageBytes,
 	listRecordings,
 	purgeExpiredTrash,
@@ -36,12 +37,14 @@ import { getRecoralImportJob, startRecoralImport } from "./recoralImport";
 import { getSettings, updateSettings } from "./settings";
 import { getImportJob, startTakeoutImport } from "./takeoutImport";
 import { createTag, deleteTagForever, listTags, purgeExpiredTagTrash, updateTag } from "./tags";
+import { enqueueAllUntranscribed, enqueueTranscription, requeueStuckTranscriptions } from "./transcription";
 
 const webDir = new URL("../../web/build/", import.meta.url);
 const MAX_AVATAR_LENGTH = 2_000_000; // ~1.5MB decoded, generous for a small profile picture
 const MAX_BACKGROUND_LENGTH = 8_000_000; // ~6MB decoded, a full-bleed page background needs more room
 
 const USERNAME_PATTERN = /^[a-zA-Z0-9_.-]{3,32}$/;
+const TRANSCRIPTION_MODELS: TranscriptionModel[] = ["tiny", "base", "small", "medium", "large"];
 
 async function readRegisterBody(req: Request) {
 	const body = await req.json();
@@ -361,6 +364,8 @@ const server = Bun.serve({
 						backgroundImage?: string | null;
 						serverStorageLimitMb?: number | null;
 						maxImportSizeMb?: number;
+						transcriptionEnabled?: boolean;
+						transcriptionModel?: TranscriptionModel;
 					} = {};
 
 					if (body.defaultAccentHue === null || typeof body.defaultAccentHue === "number") {
@@ -380,8 +385,20 @@ const server = Bun.serve({
 					if (typeof body.maxImportSizeMb === "number" && body.maxImportSizeMb > 0) {
 						updates.maxImportSizeMb = Math.min(body.maxImportSizeMb, 10240);
 					}
+					if (typeof body.transcriptionEnabled === "boolean") {
+						updates.transcriptionEnabled = body.transcriptionEnabled;
+					}
+					if (TRANSCRIPTION_MODELS.includes(body.transcriptionModel)) {
+						updates.transcriptionModel = body.transcriptionModel;
+					}
 
-					return Response.json(updateSettings(updates));
+					const newSettings = updateSettings(updates);
+					// Covers both "just turned transcription on" (nothing's been
+					// queued for any pre-existing recording yet) and "already on,
+					// something else changed" (harmless no-op, listUntranscribed()
+					// only returns recordings that never actually finished).
+					enqueueAllUntranscribed();
+					return Response.json(newSettings);
 				} catch (err) {
 					return authErrorResponse(err) ?? new Response(null, { status: 401 });
 				}
@@ -418,6 +435,14 @@ const server = Bun.serve({
 						file,
 						durationSeconds
 					});
+					if (!recording.transcript) {
+						enqueueTranscription(recording.id);
+						// enqueueTranscription() already wrote "pending" (or left it
+						// "none" if transcription is off) straight to the db; reflect
+						// that in the response instead of the now-stale snapshot
+						// createRecording() returned before the enqueue call.
+						if (getSettings().transcriptionEnabled) recording.transcriptStatus = "pending";
+					}
 					return Response.json(recording, { status: 201 });
 				} catch (err) {
 					if (err instanceof DuplicateError) {
@@ -430,6 +455,16 @@ const server = Bun.serve({
 		},
 
 		"/api/recordings/:id": {
+			GET: (req) => {
+				try {
+					const user = requireUser(req);
+					const recording = getRecording(user.id, req.params.id);
+					if (!recording) return new Response(null, { status: 404 });
+					return Response.json(recording);
+				} catch (err) {
+					return authErrorResponse(err) ?? new Response(null, { status: 401 });
+				}
+			},
 			PATCH: async (req) => {
 				try {
 					const user = requireUser(req);
@@ -472,6 +507,22 @@ const server = Bun.serve({
 			if (!audio) return new Response(null, { status: 404 });
 
 			return new Response(Bun.file(audio.path), { headers: { "Content-Type": audio.mimeType } });
+		},
+
+		"/api/recordings/:id/transcribe": {
+			POST: (req) => {
+				try {
+					const user = requireUser(req);
+					if (!getAudioFile(user.id, req.params.id)) return new Response(null, { status: 404 });
+					if (!getSettings().transcriptionEnabled) {
+						return Response.json({ error: "Transcription isn't enabled on this server" }, { status: 400 });
+					}
+					enqueueTranscription(req.params.id);
+					return new Response(null, { status: 202 });
+				} catch (err) {
+					return authErrorResponse(err) ?? new Response(null, { status: 401 });
+				}
+			}
 		},
 
 		"/api/recordings/:id/tags/:tagId": {
@@ -648,5 +699,8 @@ const server = Bun.serve({
 		return new Response("Internal Server Error", { status: 500 });
 	}
 });
+
+requeueStuckTranscriptions();
+enqueueAllUntranscribed();
 
 console.log(`recoral server listening on http://localhost:${server.port}`);

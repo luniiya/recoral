@@ -2,4 +2,8 @@
 <paths xmlns:android="http://schemas.android.com/apk/res/android">
     <external-path name="my_images" path="." />
     <cache-path name="my_cache_images" path="." />
+    <!-- Covers getFilesDir() (Capacitor's Directory.Data), where
+         RecorderService writes recordings and downloadForOffline() caches
+         them, needed for @capacitor/share to generate a content:// URI. -->
+    <files-path name="recordings" path="recordings/" />
 </paths>

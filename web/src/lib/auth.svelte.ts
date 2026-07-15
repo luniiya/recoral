@@ -1,12 +1,25 @@
 import type { User } from '@recoral/shared';
 import { applyAccentHue, cacheAccentHue } from './accent';
 import { api } from './api.svelte';
+import { readLocalCache, writeLocalCache } from './localCache';
 
-let user = $state<User | null>(null);
+// Cached alongside the token so a native app opened with no network at all
+// (local-first mobile's whole point) starts out logged in with last-known
+// account info instead of bouncing to a login screen there'd be no way to
+// actually submit while offline anyway.
+const CACHED_USER_KEY = 'recoral_cached_user';
+
+function cacheUser(next: User | null) {
+	if (next) writeLocalCache(CACHED_USER_KEY, next);
+	else if (typeof localStorage !== 'undefined') localStorage.removeItem(CACHED_USER_KEY);
+}
+
+let user = $state<User | null>(readLocalCache<User | null>(CACHED_USER_KEY, null));
 let loading = $state(true);
 
 function setUser(next: User | null) {
 	user = next;
+	cacheUser(next);
 	applyAccentHue(next?.accentHue ?? 26);
 	if (next) cacheAccentHue(next.accentHue);
 }
@@ -15,7 +28,18 @@ async function refresh() {
 	loading = true;
 	try {
 		const res = await api.fetch('/api/auth/me', { credentials: 'include' });
-		setUser(res.ok ? await res.json() : null);
+		if (res.ok) {
+			setUser(await res.json());
+		} else if (res.status === 401) {
+			// Server explicitly says this session is invalid, a real logout.
+			setUser(null);
+		}
+		// Any other non-ok response: leave the cached user alone rather than
+		// logging out over a transient server error.
+	} catch {
+		// Couldn't reach the server at all. Stay logged in with whatever's
+		// cached rather than forcing a login screen there'd be no way to
+		// actually use offline anyway.
 	} finally {
 		loading = false;
 	}

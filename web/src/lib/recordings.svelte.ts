@@ -1,25 +1,120 @@
 import type { Recording } from '@recoral/shared';
+import { Capacitor } from '@capacitor/core';
+import { Directory, Filesystem } from '@capacitor/filesystem';
 import { api } from './api.svelte';
+import { readLocalCache, writeLocalCache } from './localCache';
+import { outboxStore } from './outbox.svelte';
 
 const TRASH_RETENTION_DAYS = 30;
 
-let all = $state<Recording[]>([]);
+// Mobile only. 'local': still in the outbox, not on the server at all yet
+// (device-only icon). 'uploading': actively being pushed right now (pulsing
+// ring on its card). 'local-and-synced': on the server AND this device still
+// has a playable local copy (cloud+check icon). Anything without this field
+// is server-only, no local copy on this device (plain cloud icon).
+export interface DisplayRecording extends Recording {
+	syncStatus?: 'local' | 'uploading' | 'local-and-synced';
+}
+
+function isLocalId(id: string) {
+	return id.startsWith('local-');
+}
+
+function withSyncStatus(r: Recording): DisplayRecording {
+	return outboxStore.localFiles[r.id] ? { ...r, syncStatus: 'local-and-synced' } : r;
+}
+
+const CACHED_RECORDINGS_KEY = 'recoral_cached_recordings';
+
+let all = $state<Recording[]>(readLocalCache<Recording[]>(CACHED_RECORDINGS_KEY, []));
 let loaded = $state(false);
 let search = $state('');
 let selectedTagIds = $state<string[]>([]);
 let importError = $state<string | null>(null);
 
-let active = $derived(all.filter((r) => r.trashedAt === null && r.archivedAt === null));
-let archived = $derived(all.filter((r) => r.trashedAt === null && r.archivedAt !== null));
-let trashed = $derived(all.filter((r) => r.trashedAt !== null));
-let favorites = $derived(all.filter((r) => r.trashedAt === null && r.favorite));
+function pendingAsRecordings(): DisplayRecording[] {
+	return outboxStore.pending.map((p) => ({
+		id: p.localId,
+		title: p.title,
+		description: p.description,
+		createdAt: p.createdAt,
+		durationSeconds: p.durationSeconds,
+		transcript: null,
+		transcriptStatus: 'none',
+		favorite: false,
+		archivedAt: null,
+		trashedAt: null,
+		tagIds: [],
+		syncStatus: p.localId === outboxStore.uploadingId ? 'uploading' : 'local'
+	}));
+}
+
+let active = $derived<DisplayRecording[]>([
+	...pendingAsRecordings(),
+	...all.filter((r) => r.trashedAt === null && r.archivedAt === null).map(withSyncStatus)
+]);
+let archived = $derived(all.filter((r) => r.trashedAt === null && r.archivedAt !== null).map(withSyncStatus));
+let trashed = $derived(all.filter((r) => r.trashedAt !== null).map(withSyncStatus));
+let favorites = $derived(all.filter((r) => r.trashedAt === null && r.favorite).map(withSyncStatus));
 
 function audioUrl(id: string) {
+	// Not uploaded yet, or on the server but this device also still has the
+	// file (either it was recorded here, or explicitly downloaded for
+	// offline use): play straight from that local file rather than the
+	// network. Capacitor.convertFileSrc() (not fetch(), which hangs
+	// indefinitely for this app's own internal storage on this WebView, see
+	// liveRecording.svelte.ts) is the standard way to hand a native file to
+	// an <audio>/<video> element. Preferring it even when online avoids an
+	// unnecessary network request and guarantees offline playback works.
+	const pendingItem = outboxStore.pending.find((p) => p.localId === id);
+	if (pendingItem) return Capacitor.convertFileSrc(pendingItem.filePath);
+	const localPath = outboxStore.localFiles[id];
+	if (localPath) return Capacitor.convertFileSrc(localPath);
+
 	// <audio src> loads directly, with no way to attach an Authorization
 	// header, so the token (when auth is token-based, i.e. mobile) has to
 	// ride along as a query param instead.
 	const path = `/api/recordings/${id}/audio`;
 	return api.token ? api.url(`${path}?token=${encodeURIComponent(api.token)}`) : api.url(path);
+}
+
+// The actual on-device file path for a recording, if it has one (still
+// pending upload, or synced-with-local-copy, or explicitly downloaded).
+// Native only, used for sharing an actual file rather than a URL (which
+// would need to embed the bearer token, leaking it to whoever it's shared
+// with) and for showing "already downloaded" state in the detail panel.
+function localFilePath(id: string): string | null {
+	const pendingItem = outboxStore.pending.find((p) => p.localId === id);
+	if (pendingItem) return pendingItem.filePath;
+	return outboxStore.localFiles[id] ?? null;
+}
+
+// Mobile only: fetches the audio from the server once and writes it to the
+// app's own internal storage, so it plays back with no network afterwards
+// (audioUrl() above then prefers this local copy automatically).
+async function downloadForOffline(id: string): Promise<void> {
+	// api.fetch() already resolves the path against the base URL and attaches
+	// the Authorization header itself (it's a real fetch() call, unlike
+	// <audio src> which can't attach headers, hence that path's ?token= trick
+	// in audioUrl() above). Passing an already-absolute URL in here would
+	// double up the base URL on top of itself.
+	const res = await api.fetch(`/api/recordings/${id}/audio`);
+	if (!res.ok) throw new Error('Failed to download recording');
+	const blob = await res.blob();
+	const base64 = await new Promise<string>((resolve, reject) => {
+		const reader = new FileReader();
+		reader.onloadend = () => resolve((reader.result as string).split(',')[1] ?? '');
+		reader.onerror = reject;
+		reader.readAsDataURL(blob);
+	});
+	const ext = blob.type.split('/')[1]?.split(';')[0] || 'bin';
+	const { uri } = await Filesystem.writeFile({
+		path: `recordings/downloaded-${id}.${ext}`,
+		data: base64,
+		directory: Directory.Data,
+		recursive: true
+	});
+	outboxStore.cacheLocalFile(id, uri);
 }
 
 function stripExtension(filename: string) {
@@ -35,9 +130,17 @@ function readDuration(url: string): Promise<number> {
 }
 
 async function load() {
-	const res = await api.fetch('/api/recordings', { credentials: 'include' });
-	if (res.ok) all = await res.json();
-	loaded = true;
+	try {
+		const res = await api.fetch('/api/recordings', { credentials: 'include' });
+		if (res.ok) {
+			all = await res.json();
+			writeLocalCache(CACHED_RECORDINGS_KEY, all);
+		}
+	} catch {
+		// Offline: keep showing whatever was cached from the last successful load.
+	} finally {
+		loaded = true;
+	}
 }
 
 async function upload(
@@ -110,6 +213,10 @@ async function patch(
 	id: string,
 	updates: Partial<{ title: string; description: string; favorite: boolean; archived: boolean; trashed: boolean }>
 ) {
+	// Favorite/archive/trash need a recording that actually exists server-side.
+	// Title/description on a still-local one are handled by their own
+	// functions below before ever reaching here.
+	if (isLocalId(id)) return;
 	const res = await api.fetch(`/api/recordings/${id}`, {
 		method: 'PATCH',
 		headers: { 'Content-Type': 'application/json' },
@@ -123,14 +230,17 @@ async function patch(
 }
 
 function updateTitle(id: string, title: string) {
+	if (isLocalId(id)) return outboxStore.updateMeta(id, { title });
 	patch(id, { title });
 }
 
 function updateDescription(id: string, description: string) {
+	if (isLocalId(id)) return outboxStore.updateMeta(id, { description });
 	patch(id, { description });
 }
 
 function toggleFavorite(id: string) {
+	if (isLocalId(id)) return;
 	const recording = all.find((r) => r.id === id);
 	if (recording) patch(id, { favorite: !recording.favorite });
 }
@@ -152,11 +262,25 @@ function restore(id: string) {
 }
 
 async function deleteForever(id: string) {
+	if (isLocalId(id)) {
+		await outboxStore.remove(id);
+		return;
+	}
+	const localPath = outboxStore.localFiles[id];
+	if (localPath) {
+		outboxStore.removeLocalFile(id);
+		try {
+			await Filesystem.deleteFile({ path: localPath });
+		} catch {
+			// already gone, nothing to clean up
+		}
+	}
 	all = all.filter((r) => r.id !== id);
 	await api.fetch(`/api/recordings/${id}`, { method: 'DELETE', credentials: 'include' });
 }
 
 async function toggleRecordingTag(recordingId: string, tagId: string) {
+	if (isLocalId(recordingId)) return;
 	const recording = all.find((r) => r.id === recordingId);
 	if (!recording) return;
 	const has = recording.tagIds.includes(tagId);
@@ -165,6 +289,27 @@ async function toggleRecordingTag(recordingId: string, tagId: string) {
 		method: has ? 'DELETE' : 'POST',
 		credentials: 'include'
 	});
+}
+
+// Used to poll a single recording while its transcript is pending/processing
+// (see RecordingDetail.svelte), rather than re-fetching the whole list.
+async function refreshOne(id: string) {
+	if (isLocalId(id)) return;
+	const res = await api.fetch(`/api/recordings/${id}`, { credentials: 'include' });
+	if (!res.ok) return;
+	const updated: Recording = await res.json();
+	all = all.map((r) => (r.id === id ? updated : r));
+}
+
+async function retryTranscription(id: string): Promise<{ error?: string }> {
+	if (isLocalId(id)) return {};
+	const res = await api.fetch(`/api/recordings/${id}/transcribe`, { method: 'POST', credentials: 'include' });
+	if (!res.ok) {
+		const body = await res.json().catch(() => ({}));
+		return { error: (body.error as string) ?? 'Something went wrong' };
+	}
+	all = all.map((r) => (r.id === id ? { ...r, transcriptStatus: 'pending' } : r));
+	return {};
 }
 
 function toggleFilterTag(tagId: string) {
@@ -222,12 +367,16 @@ export const recordingsStore = {
 		return loaded;
 	},
 	audioUrl,
+	downloadForOffline,
+	localFilePath,
 	load,
 	importFiles,
 	addRecording,
 	dismissImportError,
 	updateTitle,
 	updateDescription,
+	refreshOne,
+	retryTranscription,
 	toggleRecordingTag,
 	toggleFilterTag,
 	clearFilters,

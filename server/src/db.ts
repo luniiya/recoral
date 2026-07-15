@@ -81,7 +81,9 @@ db.run(`
 		signup_enabled INTEGER NOT NULL DEFAULT 1,
 		background_image TEXT,
 		server_storage_limit_mb INTEGER DEFAULT 204800,
-		max_import_size_mb INTEGER NOT NULL DEFAULT 1024
+		max_import_size_mb INTEGER NOT NULL DEFAULT 1024,
+		transcription_enabled INTEGER NOT NULL DEFAULT 1,
+		transcription_model TEXT NOT NULL DEFAULT 'small'
 	)
 `);
 db.run("INSERT OR IGNORE INTO settings (id, default_accent_hue, signup_enabled) VALUES (1, NULL, 1)");
@@ -90,6 +92,11 @@ ensureColumn("settings", "background_image", "background_image TEXT");
 ensureColumn("settings", "server_storage_limit_mb", "server_storage_limit_mb INTEGER DEFAULT 204800");
 // 1024 MB = 1 GiB, the default cap on a single Takeout/import upload.
 ensureColumn("settings", "max_import_size_mb", "max_import_size_mb INTEGER NOT NULL DEFAULT 1024");
+// On by default (an admin can flip it off in /admin). If the transcription
+// Docker service isn't actually running, jobs just sit failed rather than
+// breaking anything else.
+ensureColumn("settings", "transcription_enabled", "transcription_enabled INTEGER NOT NULL DEFAULT 1");
+ensureColumn("settings", "transcription_model", "transcription_model TEXT NOT NULL DEFAULT 'small'");
 
 db.run(`
 	CREATE TABLE IF NOT EXISTS recordings (
@@ -109,6 +116,10 @@ db.run(`
 		transcript TEXT
 	)
 `);
+ensureColumn("recordings", "transcript_status", "transcript_status TEXT NOT NULL DEFAULT 'none'");
+// Backfill: rows that already carry a transcript (e.g. from a Takeout import
+// done before this column existed) should read as done, not none.
+db.run("UPDATE recordings SET transcript_status = 'done' WHERE transcript IS NOT NULL AND transcript_status = 'none'");
 
 db.run(`
 	CREATE TABLE IF NOT EXISTS recording_tags (

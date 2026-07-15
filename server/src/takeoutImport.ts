@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import yauzl from "yauzl";
 import { checkStorageQuota, createRecording, DuplicateError, QuotaError } from "./recordings";
+import { enqueueTranscription } from "./transcription";
 
 // Google's auto-generated recording name, e.g. "22 Nov at 19_40" or
 // "22 Nov at 19_40(1)" (the "(1)" suffix Google itself appends when two
@@ -163,7 +164,7 @@ async function runImport(job: ImportJob, userId: string, userStorageLimitMb: num
 				const transcript = transcripts.get(name) ?? null;
 				const file = new File([stats], `${name}.${ext}`, { type: MIME_TYPES[ext] ?? "audio/mpeg" });
 
-				await createRecording({
+				const recording = await createRecording({
 					userId,
 					title,
 					file,
@@ -171,6 +172,7 @@ async function runImport(job: ImportJob, userId: string, userStorageLimitMb: num
 					createdAt: createdAt ?? undefined,
 					transcript
 				});
+				if (!transcript) enqueueTranscription(recording.id);
 
 				job.imported++;
 				job.totalDurationSeconds += durationSeconds;
