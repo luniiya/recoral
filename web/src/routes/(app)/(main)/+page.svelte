@@ -2,6 +2,7 @@
 	import DateSeparator from '$lib/components/DateSeparator.svelte';
 	import EmptyState from '$lib/components/EmptyState.svelte';
 	import LiveRecordingPanel from '$lib/components/LiveRecordingPanel.svelte';
+	import PullToRefresh from '$lib/components/PullToRefresh.svelte';
 	import RecordingCard from '$lib/components/RecordingCard.svelte';
 	import RecordingDetail from '$lib/components/RecordingDetail.svelte';
 	import Scrubber from '$lib/components/Scrubber.svelte';
@@ -9,6 +10,7 @@
 	import { formatDuration, recordingDisplayTitle } from '$lib/format';
 	import { liveRecordingStore } from '$lib/liveRecording.svelte';
 	import { mobileBack } from '$lib/mobileBack.svelte';
+	import { isNativePlatform } from '$lib/platform';
 	import { recordingsStore } from '$lib/recordings.svelte';
 
 	let scrollEl: HTMLDivElement | undefined = $state();
@@ -119,6 +121,9 @@
 		</div>
 
 		<Scrubber {scrollEl} segments={scrubberSegments} />
+		{#if isNativePlatform()}
+			<PullToRefresh {scrollEl} onrefresh={() => recordingsStore.load()} />
+		{/if}
 	</div>
 
 	{#if liveRecordingStore.isRecording || liveRecordingStore.savingRecording}

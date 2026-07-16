@@ -6,6 +6,8 @@ import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
 import android.content.Intent;
+import android.graphics.Bitmap;
+import android.graphics.Canvas;
 import android.graphics.Color;
 import android.os.Binder;
 import android.os.Build;
@@ -55,6 +57,7 @@ public class PlaybackService extends Service {
     private long positionMs = 0;
     private long durationMs = 0;
     private int accentColor = Color.parseColor("#e2664a");
+    private Bitmap accentArt;
 
     public class LocalBinder extends Binder {
 
@@ -130,10 +133,28 @@ public class PlaybackService extends Service {
     private void applyColor(String colorHex) {
         if (colorHex == null || colorHex.isEmpty()) return;
         try {
-            accentColor = Color.parseColor(colorHex);
+            int parsed = Color.parseColor(colorHex);
+            if (parsed == accentColor && accentArt != null) return;
+            accentColor = parsed;
+            // The redesigned Android media card (the one in the notification
+            // shade's "media" slot, distinct from a plain notification) draws
+            // its background from a Palette extraction over album art, not
+            // from Notification.setColor() directly — confirmed by testing:
+            // setColor()/setColorized() alone left the card a fixed default
+            // color regardless of what was passed. A solid-color bitmap gives
+            // Palette something real to extract, which is what actually lets
+            // this surface pick up the app's own accent.
+            accentArt = solidColorBitmap(accentColor);
         } catch (IllegalArgumentException ignored) {
-            // Keep whatever color was already set.
+            // Keep whatever color/art was already set.
         }
+    }
+
+    private Bitmap solidColorBitmap(int color) {
+        Bitmap bitmap = Bitmap.createBitmap(128, 128, Bitmap.Config.ARGB_8888);
+        Canvas canvas = new Canvas(bitmap);
+        canvas.drawColor(color);
+        return bitmap;
     }
 
     private void notifyListener(String action, long position) {
@@ -173,6 +194,21 @@ public class PlaybackService extends Service {
                     notifyListener("seekForward", -1);
                 }
 
+                // The redesigned media card (see applyColor()'s comment above)
+                // appears to only reserve its two flanking button slots for
+                // "skip track" semantics, not "seek within track" — mapped to
+                // the same ±10s behavior here since this app has no concept of
+                // a previous/next track to skip to anyway.
+                @Override
+                public void onSkipToPrevious() {
+                    notifyListener("seekBackward", -1);
+                }
+
+                @Override
+                public void onSkipToNext() {
+                    notifyListener("seekForward", -1);
+                }
+
                 @Override
                 public void onSeekTo(long pos) {
                     notifyListener("seekTo", pos);
@@ -189,6 +225,8 @@ public class PlaybackService extends Service {
             PlaybackStateCompat.ACTION_PLAY_PAUSE |
             PlaybackStateCompat.ACTION_REWIND |
             PlaybackStateCompat.ACTION_FAST_FORWARD |
+            PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS |
+            PlaybackStateCompat.ACTION_SKIP_TO_NEXT |
             // Without this, the notification/lock-screen never show a
             // draggable progress bar at all, regardless of position/duration
             // being set, confirmed against the real Android media-notification
@@ -205,11 +243,14 @@ public class PlaybackService extends Service {
             .build();
         mediaSession.setPlaybackState(state);
 
-        MediaMetadataCompat metadata = new MediaMetadataCompat.Builder()
+        MediaMetadataCompat.Builder metadataBuilder = new MediaMetadataCompat.Builder()
             .putString(MediaMetadataCompat.METADATA_KEY_TITLE, title)
             .putString(MediaMetadataCompat.METADATA_KEY_ARTIST, "recoral")
-            .putLong(MediaMetadataCompat.METADATA_KEY_DURATION, durationMs)
-            .build();
+            .putLong(MediaMetadataCompat.METADATA_KEY_DURATION, durationMs);
+        if (accentArt != null) {
+            metadataBuilder.putBitmap(MediaMetadataCompat.METADATA_KEY_ALBUM_ART, accentArt);
+        }
+        MediaMetadataCompat metadata = metadataBuilder.build();
         mediaSession.setMetadata(metadata);
     }
 

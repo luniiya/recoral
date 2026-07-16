@@ -158,7 +158,7 @@ function withCors<T extends Record<string, RouteValue>>(routes: T): T {
 }
 
 const server = Bun.serve({
-	port: Number(process.env.PORT) || 3000,
+	port: Number(process.env.PORT) || 7245,
 	// Bun's default is 128MiB, which a real Google Takeout export (hundreds
 	// of recordings) blows past easily. This is just the hard technical
 	// ceiling; the actual admin-configurable limit (Settings.maxImportSizeMb,

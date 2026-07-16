@@ -4,9 +4,9 @@ services:
   recoral:
     build: .
     ports:
-      - "3000:3000"
+      - "7245:7245"
     environment:
-      - PORT=3000
+      - PORT=7245
       - DATA_DIR=/data
       - TRANSCRIPTION_URL=http://transcription:8090
     volumes:

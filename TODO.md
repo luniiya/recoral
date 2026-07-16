@@ -60,11 +60,7 @@
 ## Tags
 
 - [x] Tags: name + configurable color, full CRUD (create/rename/recolor/delete), assignable per recording, filterable from the header
-- [ ] **Subtags idea** (brainstormed, not built): let a tag name itself encode hierarchy, e.g. `voiceacting/certainvoice` instead of a flat `certainvoice`. Recommendation from that discussion:
-  - Don't add a schema change (no `parent_id` column) yet. Keep `name` a plain string and just allow `/` in it, same `tags` table as today.
-  - UI parses the `/` client-side to render hierarchy: an indented tree on the Tags page, breadcrumb-style chips elsewhere (`voiceacting › certainvoice`), grouping headers, etc. Purely presentational, no new API shape.
-  - Cheap and reversible. If it turns out real hierarchy is needed (rename a parent and cascade to children, move a subtree, etc.), migrate to a proper `parent_id` self-reference then, not before.
-  - Not yet started: no `/` parsing anywhere in the current Tags UI or `TagChips`, tag names are treated as flat strings today.
+- [x] **Subtags**: a tag name encodes hierarchy via `/`, e.g. `voiceacting/certainvoice` instead of a flat `certainvoice`, no schema change (`tags.name` is still a plain string, no `parent_id` column). `$lib/tagPath.ts` (`buildTagTree`, `tagBreadcrumb`, `tagLeafLabel`) parses it client-side, used across `TagChip.svelte`, `TagChips.svelte`, `TagCard.svelte`, `RecordingCard.svelte`, the Tags page, and Bin. Migrate to a real `parent_id` self-reference only if this genuinely stops being enough (renaming a parent and cascading to children, moving a subtree), not before.
 
 ## Data export / import
 

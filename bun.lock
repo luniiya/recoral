@@ -21,7 +21,6 @@
         "@capacitor/preferences": "^8.0.0",
         "@capacitor/share": "^8.0.0",
         "@capacitor/status-bar": "^8.0.0",
-        "@capgo/capacitor-audio-recorder": "^8.0.0",
       },
       "devDependencies": {
         "@capacitor/cli": "^8.0.0",
@@ -56,7 +55,6 @@
         "@capacitor/preferences": "^8.0.0",
         "@capacitor/share": "^8.0.0",
         "@capacitor/status-bar": "^8.0.0",
-        "@capgo/capacitor-audio-recorder": "^8.0.0",
         "@recoral/shared": "workspace:*",
       },
       "devDependencies": {
@@ -92,8 +90,6 @@
     "@capacitor/status-bar": ["@capacitor/status-bar@8.0.2", "", { "peerDependencies": { "@capacitor/core": ">=8.0.0" } }, "sha512-WXs8YB8B9eEaPZz+bcdY6t2nForF1FLoj/JU0Dl9RRgQnddnS98FEEyDooQhaY7wivr000j4+SC1FyeJkrFO7A=="],
 
     "@capacitor/synapse": ["@capacitor/synapse@1.0.4", "", {}, "sha512-/C1FUo8/OkKuAT4nCIu/34ny9siNHr9qtFezu4kxm6GY1wNFxrCFWjfYx5C1tUhVGz3fxBABegupkpjXvjCHrw=="],
-
-    "@capgo/capacitor-audio-recorder": ["@capgo/capacitor-audio-recorder@8.2.6", "", { "peerDependencies": { "@capacitor/core": ">=8.0.0" } }, "sha512-JjWDSIezGYZ2qobdp4W3FWYdBleMA05bzsKDeY8UVWTDDlH5wHNDowvnag42Squt5T5Vi7sii1utn9Z8DeUL7g=="],
 
     "@emnapi/core": ["@emnapi/core@1.11.1", "", { "dependencies": { "@emnapi/wasi-threads": "1.2.2", "tslib": "^2.4.0" } }, "sha512-RSvbQmHzdKzNsLYa/wHrbc3KN4sYLKAdPZxqiM2HATqv/SBk2/ENSHpvXGaLOMcsAyz0poEGqkmmKYG3OWiJEQ=="],
 

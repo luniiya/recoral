@@ -16,6 +16,6 @@ SERVER_PID=$!
 bun run --cwd web dev &
 WEB_PID=$!
 
-echo "recoral dev running, server on :3000, web on :5173, Ctrl+C to quit"
+echo "recoral dev running, server on :7245, web on :5173, Ctrl+C to quit"
 
 wait

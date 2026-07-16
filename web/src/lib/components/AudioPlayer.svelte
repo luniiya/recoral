@@ -121,7 +121,16 @@
 	// surface anything on Android). Only starts the foreground service once
 	// actual playback begins, not just because a recording is open/selected,
 	// matching "show a media card when the media is playing".
-	let nativeSessionStarted = false;
+	//
+	// Must be $state, not a plain `let`: the update/interval effects below
+	// read it in an early-return guard before ever reaching `playing`, so on
+	// their first run (mount, before playback ever starts) they short-circuit
+	// without establishing `playing` as a dependency at all. If this flag
+	// isn't itself reactive, flipping it true from the start effect gives
+	// them no reason to ever re-run — confirmed via logs: Playback.update()
+	// never fired again after the initial start(), the notification's
+	// playing/position state was frozen from that first call forever after.
+	let nativeSessionStarted = $state(false);
 	let removeNativeListener: (() => void) | null = null;
 
 	$effect(() => {
@@ -134,7 +143,7 @@
 		void Playback.start({
 			title,
 			playing: true,
-			position: untrack(() => smoothTime),
+			position: untrack(() => audioEl?.currentTime ?? smoothTime),
 			duration,
 			color: getAccentColorHex()
 		});
@@ -150,16 +159,20 @@
 	});
 
 	// Keeps play/pause, title, and duration correct the moment they actually
-	// change, deliberately untracking smoothTime so this doesn't refire every
-	// animation frame (that was the cause of the notification showing a stale
-	// "Paused" state: a flood of concurrent native calls resolving out of
-	// order, the later ones sometimes landing before earlier in-flight ones).
+	// change. Reads audioEl.currentTime directly rather than smoothTime: this
+	// effect runs before the effect further below that recalculates smoothTime
+	// for the just-paused case (both depend on `playing`, and Svelte runs
+	// effects in declaration order), so untracking smoothTime here was reading
+	// a one-rAF-frame-stale value at the exact moment of pausing — small in
+	// isolation, but combined with speed dropping to 0 a beat late, this is
+	// what made the notification's progress bar visibly creep past the real
+	// paused position instead of freezing exactly there.
 	$effect(() => {
 		if (!nativePlaybackSupported() || !nativeSessionStarted) return;
 		void Playback.update({
 			title,
 			playing,
-			position: untrack(() => smoothTime),
+			position: untrack(() => audioEl?.currentTime ?? smoothTime),
 			duration,
 			color: getAccentColorHex()
 		});
@@ -282,6 +295,13 @@
 		// moves the real playback position but leaves the visible playhead
 		// and elapsed time frozen on the old spot.
 		smoothTime = clamped;
+		// The native notification's own position push is either the
+		// play/pause-transition effect or a while-playing interval, neither
+		// of which fires from a seek that happens while paused, so it'd show
+		// a stale position until the next play/pause toggle without this.
+		if (nativePlaybackSupported() && nativeSessionStarted) {
+			void Playback.update({ title, playing, position: clamped, duration, color: getAccentColorHex() });
+		}
 	}
 
 	function seekToClientX(clientX: number) {

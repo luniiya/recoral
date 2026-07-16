@@ -128,7 +128,7 @@
 		</button>
 
 		<div class="flex items-center gap-1">
-			{#if !isLocal}
+			{#if !isLocal && !isNativePlatform()}
 				<button
 					class="flex size-8 items-center justify-center rounded-full transition hover:bg-gray-100 dark:hover:bg-white/5
 						{recording.favorite ? 'text-accent-500' : 'text-gray-400 hover:text-accent-500'}"
