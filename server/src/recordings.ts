@@ -1,6 +1,7 @@
 import type { Recording, TranscriptStatus } from "@recoral/shared";
 import { mkdirSync, unlinkSync } from "node:fs";
 import { db } from "./db";
+import { broadcast } from "./realtime";
 import { getSettings } from "./settings";
 
 const dataDir = process.env.DATA_DIR ?? "./data";
@@ -160,6 +161,7 @@ export async function createRecording(params: {
 		]
 	);
 
+	broadcast(params.userId, "recordings");
 	return toRecording(getRow(params.userId, id)!);
 }
 
@@ -191,6 +193,7 @@ export function updateRecording(
 		]);
 	}
 
+	broadcast(userId, "recordings");
 	return toRecording(getRow(userId, id)!);
 }
 
@@ -202,6 +205,7 @@ export function deleteRecording(userId: string, id: string) {
 	} catch {}
 	db.run("DELETE FROM recording_tags WHERE recording_id = ?", [id]);
 	db.run("DELETE FROM recordings WHERE id = ?", [id]);
+	broadcast(userId, "recordings");
 }
 
 export function purgeExpiredTrash() {
@@ -221,11 +225,13 @@ export function purgeExpiredTrash() {
 export function attachTag(userId: string, recordingId: string, tagId: string) {
 	if (!getRow(userId, recordingId)) throw new Error("Recording not found");
 	db.run("INSERT OR IGNORE INTO recording_tags (recording_id, tag_id) VALUES (?, ?)", [recordingId, tagId]);
+	broadcast(userId, "recordings");
 }
 
 export function detachTag(userId: string, recordingId: string, tagId: string) {
 	if (!getRow(userId, recordingId)) throw new Error("Recording not found");
 	db.run("DELETE FROM recording_tags WHERE recording_id = ? AND tag_id = ?", [recordingId, tagId]);
+	broadcast(userId, "recordings");
 }
 
 export function userStorageBytes(userId: string): number {

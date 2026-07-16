@@ -2,7 +2,7 @@
 	import AudioPlayer from './AudioPlayer.svelte';
 	import TagChips from './TagChips.svelte';
 	import Waveform from './Waveform.svelte';
-	import { formatTimestamp } from '$lib/format';
+	import { formatTimestamp, recordingDisplayTitle } from '$lib/format';
 	import { isNativePlatform } from '$lib/platform';
 	import type { DisplayRecording } from '$lib/recordings.svelte';
 	import { recordingsStore } from '$lib/recordings.svelte';
@@ -68,7 +68,7 @@
 		}
 		const a = document.createElement('a');
 		a.href = recordingsStore.audioUrl(recording.id);
-		a.download = (recording.title || formatTimestamp(recording.createdAt)).replace(/[\\/:*?"<>|]/g, '_');
+		a.download = recordingDisplayTitle(recording).replace(/[\\/:*?"<>|]/g, '_');
 		document.body.appendChild(a);
 		a.click();
 		a.remove();
@@ -86,7 +86,7 @@
 			if (!filePath) return;
 			const { Share } = await import('@capacitor/share');
 			await Share.share({
-				title: recording.title || formatTimestamp(recording.createdAt),
+				title: recordingDisplayTitle(recording),
 				files: [filePath]
 			});
 		} catch (err) {
@@ -392,9 +392,12 @@
 	>
 		<AudioPlayer
 			src={recordingsStore.audioUrl(recording.id)}
+			title={recordingDisplayTitle(recording)}
 			bind:currentTime={playbackTime}
 			bind:playing={playbackPlaying}
 			bind:audioEl={playbackEl}
+			favorite={recording.favorite}
+			onToggleFavorite={isLocal ? undefined : () => recordingsStore.toggleFavorite(recording.id)}
 		/>
 	</div>
 </div>

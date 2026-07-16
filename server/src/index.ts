@@ -34,6 +34,7 @@ import {
 } from "./recordings";
 import { buildExportArchive, getExportStats } from "./dataExport";
 import { getRecoralImportJob, startRecoralImport } from "./recoralImport";
+import { subscribe as subscribeToEvents } from "./realtime";
 import { getSettings, updateSettings } from "./settings";
 import { getImportJob, startTakeoutImport } from "./takeoutImport";
 import { createTag, deleteTagForever, listTags, purgeExpiredTagTrash, updateTag } from "./tags";
@@ -497,6 +498,15 @@ const server = Bun.serve({
 					return authErrorResponse(err) ?? new Response(null, { status: 401 });
 				}
 			}
+		},
+
+		// A plain GET, not `requireUser`'s throw/catch shape, since EventSource
+		// can't read a JSON error body anyway, an outright 401 is enough for it
+		// to stop retrying with the same bad token.
+		"/api/events": (req) => {
+			const user = userFromRequest(req);
+			if (!user) return new Response(null, { status: 401 });
+			return subscribeToEvents(user.id);
 		},
 
 		"/api/recordings/:id/audio": (req) => {

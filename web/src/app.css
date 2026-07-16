@@ -36,6 +36,28 @@
 	body {
 		margin: 0;
 	}
+
+	/* App-wide, not just mobile: pinch-zoom/double-tap-zoom on touch devices
+	   and ctrl+scroll/trackpad-pinch zoom on desktop (blocked in +layout.svelte)
+	   both fight the fixed layout, this is a native-feeling app, not a page. */
+	html {
+		touch-action: pan-x pan-y;
+	}
+
+	/* This is a native-feeling app, not a document: text selection is only
+	   meaningful on the title/description fields in RecordingDetail (both real
+	   <input>s), everywhere else (cards, sidebar, buttons) selecting on a
+	   long-press/drag was just an accidental side effect, not a feature. */
+	body {
+		-webkit-user-select: none;
+		user-select: none;
+	}
+	input,
+	textarea,
+	[contenteditable] {
+		-webkit-user-select: text;
+		user-select: text;
+	}
 }
 
 /* Hides the native scrollbar where a custom Scrubber replaces it, Tailwind has no utility for this. */

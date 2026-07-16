@@ -5,6 +5,7 @@
 	import RecordingDetail from '$lib/components/RecordingDetail.svelte';
 	import Scrubber from '$lib/components/Scrubber.svelte';
 	import { buildScrubberSegments, buildTimeline } from '$lib/dateGroups';
+	import { recordingDisplayTitle } from '$lib/format';
 	import { mobileBack } from '$lib/mobileBack.svelte';
 	import { recordingsStore } from '$lib/recordings.svelte';
 
@@ -23,14 +24,14 @@
 </script>
 
 <svelte:head>
-	<title>recoral - Archive</title>
+	<title>{selectedRecording ? recordingDisplayTitle(selectedRecording) : 'recoral - Archive'}</title>
 </svelte:head>
 
 <div class="flex h-full">
 	<div
-		class="relative h-full transition-[width] duration-300 {selectedRecording
-			? 'w-[26rem] shrink-0'
-			: 'w-full'}"
+		class="relative h-full w-full md:transition-[width] md:duration-300 {selectedRecording
+			? 'md:w-[26rem] md:shrink-0'
+			: 'md:w-full'}"
 	>
 		<div bind:this={scrollEl} class="no-native-scrollbar h-full overflow-y-auto">
 			<div class="mx-auto max-w-xl px-6 pt-10 pb-36 md:pb-10">

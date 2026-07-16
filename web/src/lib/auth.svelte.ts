@@ -1,5 +1,4 @@
 import type { User } from '@recoral/shared';
-import { applyAccentHue, cacheAccentHue } from './accent';
 import { api } from './api.svelte';
 import { readLocalCache, writeLocalCache } from './localCache';
 
@@ -17,11 +16,13 @@ function cacheUser(next: User | null) {
 let user = $state<User | null>(readLocalCache<User | null>(CACHED_USER_KEY, null));
 let loading = $state(true);
 
+// Doesn't apply the accent itself: the root layout's effect owns that,
+// since the effective hue also depends on systemAccentStore (Android system
+// color can override the user's own accentHue), which this module doesn't
+// know about.
 function setUser(next: User | null) {
 	user = next;
 	cacheUser(next);
-	applyAccentHue(next?.accentHue ?? 26);
-	if (next) cacheAccentHue(next.accentHue);
 }
 
 async function refresh() {

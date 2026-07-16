@@ -30,20 +30,40 @@
 </script>
 
 <script lang="ts">
+	import { getAccentColorHex } from '$lib/accent';
+	import {
+		clearMediaSession,
+		setMediaSessionHandlers,
+		setMediaSessionMetadata,
+		setMediaSessionPlaybackState,
+		setMediaSessionPositionState
+	} from '$lib/mediaSession';
+	import { isSupported as nativePlaybackSupported, Playback } from '$lib/nativePlayback';
+	import { isNativePlatform } from '$lib/platform';
 	import { wavySeekStore } from '$lib/wavySeek.svelte';
+	import { onDestroy, untrack } from 'svelte';
 
 	interface Props {
 		src: string;
+		title: string;
 		currentTime?: number;
 		playing?: boolean;
 		audioEl?: HTMLAudioElement;
+		// Only passed where a favorite even applies (a real, synced recording);
+		// on native, this replaces the volume slider spot since phones already
+		// have hardware volume, leaving that side otherwise empty felt wasted.
+		favorite?: boolean;
+		onToggleFavorite?: () => void;
 	}
 
 	let {
 		src,
+		title,
 		currentTime = $bindable(0),
 		playing = $bindable(false),
-		audioEl = $bindable(undefined)
+		audioEl = $bindable(undefined),
+		favorite,
+		onToggleFavorite
 	}: Props = $props();
 
 	let waveActive = $derived(playing && wavySeekStore.enabled);
@@ -57,6 +77,116 @@
 	// steps. While playing, read the element's real position every rAF frame
 	// instead (see Waveform.svelte for the same fix, same reasoning).
 	let smoothTime = $state(0);
+
+	// `src` changing means a different recording was selected into this same
+	// component instance (the parent doesn't remount it per recording), so
+	// without this the elapsed time/seek position carried over from whatever
+	// was previously loaded/playing.
+	$effect(() => {
+		src;
+		currentTime = 0;
+		smoothTime = 0;
+		duration = 0;
+		buffered = 0;
+		playing = false;
+	});
+
+	// Registered once (not re-registered per play/pause) since the handlers
+	// close over `audioEl`/`playing` via the functions below, which are
+	// themselves reactive; only the OS-level media widget/notification needs
+	// these at all (desktop media keys/widget, Android's media notification).
+	setMediaSessionHandlers({
+		play: () => audioEl?.play(),
+		pause: () => audioEl?.pause(),
+		seekBackward: () => skip(-10),
+		seekForward: () => skip(10)
+	});
+
+	$effect(() => {
+		setMediaSessionMetadata(title);
+	});
+
+	$effect(() => {
+		setMediaSessionPlaybackState(playing ? 'playing' : 'paused');
+	});
+
+	$effect(() => {
+		setMediaSessionPositionState(duration, rate, smoothTime);
+	});
+
+	onDestroy(() => clearMediaSession());
+
+	// The real Android media notification (see nativePlayback.ts for why this
+	// exists alongside the Web Media Session calls above, which alone don't
+	// surface anything on Android). Only starts the foreground service once
+	// actual playback begins, not just because a recording is open/selected,
+	// matching "show a media card when the media is playing".
+	let nativeSessionStarted = false;
+	let removeNativeListener: (() => void) | null = null;
+
+	$effect(() => {
+		if (!nativePlaybackSupported() || nativeSessionStarted || !playing) return;
+		nativeSessionStarted = true;
+		// untrack the position read here: this effect's only real dependency
+		// is "has playback started", not the position itself, reading it
+		// untracked avoids this effect (and the notification's initial post)
+		// being reactive to every rAF-driven smoothTime tick.
+		void Playback.start({
+			title,
+			playing: true,
+			position: untrack(() => smoothTime),
+			duration,
+			color: getAccentColorHex()
+		});
+		void Playback.addListener('playbackAction', (data) => {
+			if (data.action === 'play') audioEl?.play();
+			else if (data.action === 'pause') audioEl?.pause();
+			else if (data.action === 'seekBackward') skip(-10);
+			else if (data.action === 'seekForward') skip(10);
+			else if (data.action === 'seekTo' && data.position !== undefined) seekTo(data.position);
+		}).then((handle) => {
+			removeNativeListener = () => handle.remove();
+		});
+	});
+
+	// Keeps play/pause, title, and duration correct the moment they actually
+	// change, deliberately untracking smoothTime so this doesn't refire every
+	// animation frame (that was the cause of the notification showing a stale
+	// "Paused" state: a flood of concurrent native calls resolving out of
+	// order, the later ones sometimes landing before earlier in-flight ones).
+	$effect(() => {
+		if (!nativePlaybackSupported() || !nativeSessionStarted) return;
+		void Playback.update({
+			title,
+			playing,
+			position: untrack(() => smoothTime),
+			duration,
+			color: getAccentColorHex()
+		});
+	});
+
+	// Position sync for the notification's own progress bar, throttled to
+	// 1/sec instead of riding the rAF-driven smoothTime tick, which would
+	// otherwise flood the native bridge and the NotificationManager ~60
+	// times a second for no visible benefit.
+	$effect(() => {
+		if (!nativePlaybackSupported() || !nativeSessionStarted || !playing) return;
+		const interval = setInterval(() => {
+			void Playback.update({
+				title,
+				playing,
+				position: audioEl?.currentTime ?? 0,
+				duration,
+				color: getAccentColorHex()
+			});
+		}, 1000);
+		return () => clearInterval(interval);
+	});
+
+	onDestroy(() => {
+		removeNativeListener?.();
+		if (nativeSessionStarted) void Playback.stop();
+	});
 
 	$effect(() => {
 		if (!playing) {
@@ -329,38 +459,61 @@
 			</button>
 		</div>
 
+		<!-- Android/iOS manage system volume directly (hardware buttons,
+			 the OS volume UI), an in-app slider would just be a second,
+			 conflicting volume control, so that side shows the favorite
+			 toggle instead on native rather than sitting empty. -->
 		<div class="flex w-16 shrink-0 items-center justify-end gap-1.5 md:w-28">
-			<input
-				type="range"
-				min="0"
-				max="100"
-				value={muted ? 0 : volumePosition * 100}
-				oninput={onVolumeInput}
-				class="seek-bar min-w-0 flex-1"
-				aria-label="Volume"
-			/>
-			<button
-				class="flex size-7 shrink-0 items-center justify-center rounded-full text-gray-500 transition hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-white/5"
-				aria-label={muted || gain === 0 ? 'Unmute' : 'Mute'}
-				onclick={toggleMute}
-			>
-				{#if muted || gain === 0}
-					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="size-4.5">
-						<path stroke-linecap="round" stroke-linejoin="round" d="M11 5 6 9H3v6h3l5 4V5Z" />
-						<path stroke-linecap="round" d="m16 9 5 6m0-6-5 6" />
-					</svg>
-				{:else if volumePosition < 0.5}
-					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="size-4.5">
-						<path stroke-linecap="round" stroke-linejoin="round" d="M11 5 6 9H3v6h3l5 4V5Z" />
-						<path stroke-linecap="round" d="M16.5 9.5a5 5 0 0 1 0 5" />
-					</svg>
-				{:else}
-					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="size-4.5">
-						<path stroke-linecap="round" stroke-linejoin="round" d="M11 5 6 9H3v6h3l5 4V5Z" />
-						<path stroke-linecap="round" d="M16.5 9.5a5 5 0 0 1 0 5M19 7a9 9 0 0 1 0 10" />
-					</svg>
+			{#if isNativePlatform()}
+				{#if onToggleFavorite}
+					<button
+						class="flex size-8 items-center justify-center rounded-full transition hover:bg-gray-100 dark:hover:bg-white/5
+							{favorite ? 'text-accent-500' : 'text-gray-400 hover:text-accent-500'}"
+						aria-label={favorite ? 'Unfavourite' : 'Favourite'}
+						onclick={onToggleFavorite}
+					>
+						<svg viewBox="0 0 24 24" fill={favorite ? 'currentColor' : 'none'} stroke="currentColor" stroke-width="1.8" class="size-4">
+							<path
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								d="M11.48 3.499a.562.562 0 0 1 1.04 0l2.125 5.111a.563.563 0 0 0 .475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 0 0-.182.557l1.285 5.385a.562.562 0 0 1-.84.61l-4.725-2.885a.562.562 0 0 0-.586 0L6.982 20.54a.562.562 0 0 1-.84-.61l1.285-5.386a.562.562 0 0 0-.182-.557l-4.204-3.602a.562.562 0 0 1 .321-.988l5.518-.442a.563.563 0 0 0 .475-.345L11.48 3.5Z"
+							/>
+						</svg>
+					</button>
 				{/if}
-			</button>
+			{:else}
+				<input
+					type="range"
+					min="0"
+					max="100"
+					value={muted ? 0 : volumePosition * 100}
+					oninput={onVolumeInput}
+					class="seek-bar min-w-0 flex-1"
+					aria-label="Volume"
+				/>
+				<button
+					class="flex size-7 shrink-0 items-center justify-center rounded-full text-gray-500 transition hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-white/5"
+					aria-label={muted || gain === 0 ? 'Unmute' : 'Mute'}
+					onclick={toggleMute}
+				>
+					{#if muted || gain === 0}
+						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="size-4.5">
+							<path stroke-linecap="round" stroke-linejoin="round" d="M11 5 6 9H3v6h3l5 4V5Z" />
+							<path stroke-linecap="round" d="m16 9 5 6m0-6-5 6" />
+						</svg>
+					{:else if volumePosition < 0.5}
+						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="size-4.5">
+							<path stroke-linecap="round" stroke-linejoin="round" d="M11 5 6 9H3v6h3l5 4V5Z" />
+							<path stroke-linecap="round" d="M16.5 9.5a5 5 0 0 1 0 5" />
+						</svg>
+					{:else}
+						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="size-4.5">
+							<path stroke-linecap="round" stroke-linejoin="round" d="M11 5 6 9H3v6h3l5 4V5Z" />
+							<path stroke-linecap="round" d="M16.5 9.5a5 5 0 0 1 0 5M19 7a9 9 0 0 1 0 10" />
+						</svg>
+					{/if}
+				</button>
+			{/if}
 		</div>
 	</div>
 </div>

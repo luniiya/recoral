@@ -3,6 +3,7 @@
 	import EmptyState from '$lib/components/EmptyState.svelte';
 	import RecordingCardHeader from '$lib/components/RecordingCardHeader.svelte';
 	import TagChip from '$lib/components/TagChip.svelte';
+	import { recordingDisplayTitle } from '$lib/format';
 	import { recordingsStore } from '$lib/recordings.svelte';
 	import { groupTrashedTags, type TrashedTagGroup } from '$lib/tagPath';
 	import { tagsStore } from '$lib/tags.svelte';
@@ -43,7 +44,10 @@
 						{recordingsStore.daysLeft(recording)} day{recordingsStore.daysLeft(recording) === 1 ? '' : 's'} left
 					</p>
 					<div class="mb-3">
-						<AudioPlayer src={recordingsStore.audioUrl(recording.id)} />
+						<AudioPlayer
+							src={recordingsStore.audioUrl(recording.id)}
+							title={recordingDisplayTitle(recording)}
+						/>
 					</div>
 					<div class="flex gap-2">
 						<button

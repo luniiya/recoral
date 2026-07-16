@@ -5,6 +5,7 @@
 	import ColorPicker from '$lib/components/ColorPicker.svelte';
 	import Toggle from '$lib/components/Toggle.svelte';
 	import { readAsDataUrl } from '$lib/file';
+	import { systemAccentStore } from '$lib/systemAccent.svelte';
 	import { themeStore, type ThemePreference } from '$lib/theme.svelte';
 	import { wavySeekStore } from '$lib/wavySeek.svelte';
 
@@ -89,6 +90,24 @@
 	<div class="card mb-6 p-6">
 		<h2 class="mb-1 text-sm font-semibold text-gray-900 dark:text-gray-100">Accent color</h2>
 		<p class="mb-4 text-sm text-gray-500 dark:text-gray-400">Applies across the whole app, on every device.</p>
+
+		{#if systemAccentStore.available}
+			<div class="mb-5 flex items-center justify-between gap-4 border-b border-gray-100 pb-5 dark:border-white/10">
+				<div>
+					<p class="text-sm text-gray-900 dark:text-gray-100">Use device color</p>
+					<p class="text-sm text-gray-500 dark:text-gray-400">
+						Match this phone's own system accent color, on this device only.
+					</p>
+				</div>
+				<Toggle checked={systemAccentStore.enabled} onchange={(checked) => systemAccentStore.set(checked)} />
+			</div>
+			{#if systemAccentStore.enabled}
+				<p class="mb-4 text-sm text-gray-500 dark:text-gray-400">
+					Your own color below applies once "Use device color" is off.
+				</p>
+			{/if}
+		{/if}
+
 		<ColorPicker value={auth.user.accentHue} onselect={onHueSelected} />
 	</div>
 

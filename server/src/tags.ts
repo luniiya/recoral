@@ -1,5 +1,6 @@
 import type { Tag } from "@recoral/shared";
 import { db } from "./db";
+import { broadcast } from "./realtime";
 
 const TAG_TRASH_RETENTION_DAYS = 30;
 
@@ -55,6 +56,7 @@ export function createTag(userId: string, name: string, hue: number): Tag {
 		createdAt
 	]);
 
+	broadcast(userId, "tags");
 	return { id, name: trimmed, hue: normalizedHue, createdAt, trashedAt: null };
 }
 
@@ -111,6 +113,7 @@ export function updateTag(
 	}
 
 	db.run("UPDATE tags SET name = ?, hue = ?, trashed_at = ? WHERE id = ?", [name, hue, trashedAt, tagId]);
+	broadcast(userId, "tags");
 	return { id: tagId, name, hue, createdAt: existing.created_at, trashedAt };
 }
 
@@ -126,6 +129,7 @@ export function deleteTagForever(userId: string, tagId: string) {
 		db.run("DELETE FROM recording_tags WHERE tag_id = ?", [member.id]);
 		db.run("DELETE FROM tags WHERE id = ?", [member.id]);
 	}
+	broadcast(userId, "tags");
 }
 
 export function purgeExpiredTagTrash() {

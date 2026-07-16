@@ -2,12 +2,15 @@
 	import '../app.css';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
+	import { applyAccentHue, cacheAccentHue } from '$lib/accent';
 	import { auth } from '$lib/auth.svelte';
 	import { mobileBack } from '$lib/mobileBack.svelte';
 	import { onboarding } from '$lib/onboarding.svelte';
 	import { outboxStore } from '$lib/outbox.svelte';
 	import { isNativePlatform } from '$lib/platform';
+	import { realtimeStore } from '$lib/realtime.svelte';
 	import { syncStore } from '$lib/sync.svelte';
+	import { systemAccentStore } from '$lib/systemAccent.svelte';
 	import { themeStore } from '$lib/theme.svelte';
 	import { wavySeekStore } from '$lib/wavySeek.svelte';
 	import { onMount } from 'svelte';
@@ -45,15 +48,52 @@
 		if (isNativePlatform() && auth.user) syncStore.init();
 	});
 
+	// Cross-device live updates: connect once logged in (desktop and mobile
+	// both, not native-only, since the desktop webUI benefits just as much),
+	// disconnect on logout so a stale connection doesn't linger authenticated
+	// as nobody.
+	$effect(() => {
+		if (auth.user) realtimeStore.connect();
+		else realtimeStore.disconnect();
+	});
+
+	// Single source of truth for the applied accent: re-runs whenever the
+	// logged-in user's own accentHue changes OR systemAccentStore's state
+	// changes (its async native-plugin fetch resolving, or the Settings
+	// toggle flipping), so the Android system color (when available and
+	// enabled) can override the per-user color reactively, not just once at
+	// login. Priority is system color first, see systemAccent.svelte.ts.
+	$effect(() => {
+		if (!auth.user) return;
+		const hue = systemAccentStore.effectiveHue(auth.user.accentHue);
+		applyAccentHue(hue);
+		cacheAccentHue(hue);
+	});
+
 	onMount(() => {
 		themeStore.init();
 		wavySeekStore.init();
+
+		// Trackpad pinch and ctrl+scroll both fire as a 'wheel' event with
+		// ctrlKey set (that's how Chrome/Firefox represent pinch-zoom on a
+		// trackpad, there's no separate gesture event for it outside Safari),
+		// blocking that stops desktop browser zoom the same way touch-action
+		// stops it on mobile. Safari also fires legacy gesture events for
+		// actual pinch, not wheel, so that's blocked separately below.
+		const onWheel = (event: WheelEvent) => {
+			if (event.ctrlKey) event.preventDefault();
+		};
+		window.addEventListener('wheel', onWheel, { passive: false });
+		const onGesture = (event: Event) => event.preventDefault();
+		window.addEventListener('gesturestart', onGesture);
+		window.addEventListener('gesturechange', onGesture);
 
 		if (!isNativePlatform() && 'serviceWorker' in navigator) {
 			navigator.serviceWorker.register('/service-worker.js');
 		}
 
 		if (isNativePlatform()) void outboxStore.init();
+		if (isNativePlatform()) void systemAccentStore.init();
 
 		if (isNativePlatform()) {
 			// Registering any listener here replaces Capacitor's default

@@ -16,6 +16,12 @@ export function formatTimestamp(iso: string, now = new Date()) {
 	});
 }
 
+// Same "blank title shows the date instead" convention used on the card and
+// detail panel, kept here too so the browser tab / window title matches.
+export function recordingDisplayTitle(recording: { title: string; createdAt: string }) {
+	return recording.title || formatTimestamp(recording.createdAt);
+}
+
 // "July" for the current year, "2025 July" otherwise, same convention used
 // throughout the app wherever a year needs to be disambiguated.
 export function monthLabel(date: Date, now = new Date()) {
