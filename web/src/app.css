@@ -69,6 +69,10 @@
 		-webkit-user-select: text;
 		user-select: text;
 	}
+
+	::selection {
+		background-color: color-mix(in oklch, var(--accent-500) 40%, transparent);
+	}
 }
 
 /* Hides the native scrollbar where a custom Scrubber replaces it, Tailwind has no utility for this. */

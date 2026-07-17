@@ -2,19 +2,37 @@
 	import { page } from '$app/state';
 	import AvatarMenu from '$lib/components/AvatarMenu.svelte';
 	import BottomNav from '$lib/components/BottomNav.svelte';
-	import Logo from '$lib/components/Logo.svelte';
+	import Dialog from '$lib/components/Dialog.svelte';
+	import HeaderBrand from '$lib/components/HeaderBrand.svelte';
 	import SearchBar from '$lib/components/SearchBar.svelte';
 	import Sidebar from '$lib/components/Sidebar.svelte';
 	import StatusBarSpacer from '$lib/components/StatusBarSpacer.svelte';
+	import TagChips from '$lib/components/TagChips.svelte';
 	import ThemeToggle from '$lib/components/ThemeToggle.svelte';
 	import { liveRecordingStore } from '$lib/liveRecording.svelte';
 	import { recordingsStore } from '$lib/recordings.svelte';
+	import { selectionStore } from '$lib/selection.svelte';
+	import { tagsStore } from '$lib/tags.svelte';
 	import { onMount } from 'svelte';
 
 	let { children } = $props();
 	let fileInput: HTMLInputElement | undefined = $state();
 	let dragging = $state(false);
 	let dragDepth = 0;
+	let selectionTagPickerOpen = $state(false);
+	let confirmingBulkDelete = $state(false);
+
+	function bulkAddTag(tagId: string) {
+		recordingsStore.addTagToMany(selectionStore.selectedIds, tagId);
+		selectionTagPickerOpen = false;
+		selectionStore.clear();
+	}
+
+	function confirmBulkDelete() {
+		recordingsStore.trashMany(selectionStore.selectedIds);
+		confirmingBulkDelete = false;
+		selectionStore.clear();
+	}
 
 	function onFilesSelected(event: Event) {
 		const files = (event.target as HTMLInputElement).files;
@@ -72,41 +90,81 @@
 <div class="flex h-dvh flex-col overflow-hidden bg-white dark:bg-black">
 	<StatusBarSpacer />
 	<header class="flex h-16 shrink-0 items-center gap-3 border-b border-gray-200 px-6 dark:border-white/10">
-		<a href="/" class="flex items-center gap-2.5">
-			<Logo size="size-7" />
-			<span class="font-wordmark text-base font-semibold text-gray-900 dark:text-gray-100">recoral</span>
-		</a>
+		{#if selectionStore.active}
+			<button
+				class="flex size-8 shrink-0 items-center justify-center rounded-full text-gray-500 transition hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-white/5"
+				aria-label="Cancel selection"
+				onclick={() => selectionStore.clear()}
+			>
+				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="size-4">
+					<path stroke-linecap="round" stroke-linejoin="round" d="M18 6 6 18M6 6l12 12" />
+				</svg>
+			</button>
+			<span class="flex-1 text-sm font-medium text-gray-900 dark:text-gray-100">
+				{selectionStore.count} selected
+			</span>
 
-		<div class="hidden flex-1 justify-center md:flex">
-			<SearchBar class="w-full max-w-md bg-[#e5e7eb] dark:bg-white/5" />
-		</div>
+			{#if tagsStore.list.length > 0}
+				<div class="relative">
+					<button
+						class="rounded-full px-3.5 py-1.5 text-sm text-gray-600 ring-1 ring-gray-200 transition hover:bg-gray-100 dark:text-gray-300 dark:ring-white/10 dark:hover:bg-white/5"
+						onclick={() => (selectionTagPickerOpen = !selectionTagPickerOpen)}
+					>
+						+ Tag
+					</button>
+					{#if selectionTagPickerOpen}
+						<button
+							class="fixed inset-0 z-10 cursor-default"
+							aria-label="Close tag picker"
+							onclick={() => (selectionTagPickerOpen = false)}
+						></button>
+						<div class="card absolute top-full right-0 z-20 mt-1 w-56 p-3">
+							<TagChips tags={tagsStore.list} allTags={tagsStore.list} selected={[]} ontoggle={bulkAddTag} />
+						</div>
+					{/if}
+				</div>
+			{/if}
 
-		<button
-			class="ml-auto flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-sm text-gray-600 transition hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-white/5 md:ml-0"
-			onclick={() => fileInput?.click()}
-		>
-			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="size-4">
-				<path
-					stroke-linecap="round"
-					stroke-linejoin="round"
-					d="M12 16V4m0 0 4 4m-4-4-4 4M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"
-				/>
-			</svg>
-			Import
-		</button>
-		<input
-			bind:this={fileInput}
-			type="file"
-			accept="audio/*"
-			multiple
-			class="hidden"
-			onchange={onFilesSelected}
-		/>
+			<button
+				class="rounded-full px-3.5 py-1.5 text-sm font-medium text-red-600 ring-1 ring-red-200 transition hover:bg-red-50 dark:text-red-400 dark:ring-red-500/30 dark:hover:bg-red-500/10"
+				onclick={() => (confirmingBulkDelete = true)}
+			>
+				Delete
+			</button>
+		{:else}
+			<HeaderBrand />
 
-		<div class="hidden items-center gap-3 md:flex">
-			<ThemeToggle />
-			<AvatarMenu />
-		</div>
+			<div class="hidden flex-1 justify-center md:flex">
+				<SearchBar class="w-full max-w-md bg-[#e5e7eb] dark:bg-white/5" />
+			</div>
+
+			<button
+				class="ml-auto flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-sm text-gray-600 transition hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-white/5 md:ml-0"
+				onclick={() => fileInput?.click()}
+			>
+				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="size-4">
+					<path
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						d="M12 16V4m0 0 4 4m-4-4-4 4M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"
+					/>
+				</svg>
+				Import
+			</button>
+			<input
+				bind:this={fileInput}
+				type="file"
+				accept="audio/*"
+				multiple
+				class="hidden"
+				onchange={onFilesSelected}
+			/>
+
+			<div class="hidden items-center gap-3 md:flex">
+				<ThemeToggle />
+				<AvatarMenu />
+			</div>
+		{/if}
 	</header>
 
 	<div class="flex min-h-0 flex-1">
@@ -117,6 +175,29 @@
 		</main>
 	</div>
 </div>
+
+{#if confirmingBulkDelete}
+	<Dialog onclose={() => (confirmingBulkDelete = false)}>
+		<p class="mb-4 text-sm text-gray-900 dark:text-gray-100">
+			Delete <span class="font-semibold">{selectionStore.count}</span>
+			{selectionStore.count === 1 ? 'recording' : 'recordings'}?
+		</p>
+		<div class="flex gap-2">
+			<button
+				class="flex-1 rounded-full px-4 py-2 text-sm font-medium text-gray-600 ring-1 ring-gray-200 transition hover:bg-gray-100 dark:text-gray-300 dark:ring-white/10 dark:hover:bg-white/5"
+				onclick={() => (confirmingBulkDelete = false)}
+			>
+				Cancel
+			</button>
+			<button
+				class="flex-1 rounded-full bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700"
+				onclick={confirmBulkDelete}
+			>
+				Delete
+			</button>
+		</div>
+	</Dialog>
+{/if}
 
 {#if page.url.pathname === '/' || page.url.pathname === '/favourites' || page.url.pathname === '/archive'}
 	<div

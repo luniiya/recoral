@@ -13,6 +13,11 @@
 	let scrolling = $state(false);
 	let hoverY = $state(0);
 	let scrollingTimeout: ReturnType<typeof setTimeout> | null = null;
+	// Bookkeeping only, not rendered: which segment the thumb was over last,
+	// so crossing into a new one (while actually dragging/hovering it, not
+	// during a passive scroll) can fire a haptic. Reset to null between drags
+	// so landing on the first segment of a new drag never fires one.
+	let lastHapticSegmentKey: string | null = null;
 
 	const totalCount = $derived(segments.reduce((sum, s) => sum + s.count, 0));
 
@@ -48,12 +53,37 @@
 	const hoverSegment = $derived(segmentAtFraction(clamp01(hoverY / (trackHeight || 1))));
 	const scrollSegment = $derived(segmentAtFraction(clamp01(scrollFraction)));
 	const showLabels = $derived(dragging || hovering || scrolling);
+
+	// Barely-there tick as the thumb crosses a month dot while actually being
+	// dragged/hovered, a slightly bigger (but still subtle) one crossing into
+	// a new year, both well under PullToRefresh.svelte's 10ms threshold tick.
+	$effect(() => {
+		if (!dragging && !hovering) {
+			lastHapticSegmentKey = null;
+			return;
+		}
+		const segment = hoverSegment;
+		if (!segment) return;
+		const key = `${segment.year}-${segment.month}`;
+		if (key === lastHapticSegmentKey) return;
+		const previousYear = lastHapticSegmentKey?.split('-')[0];
+		if (lastHapticSegmentKey !== null) {
+			navigator.vibrate?.(previousYear !== undefined && Number(previousYear) !== segment.year ? 5 : 2);
+		}
+		lastHapticSegmentKey = key;
+	});
 	const activeLabel = $derived.by(() => {
 		if (dragging || hovering) return hoverSegment?.label;
 		if (scrolling) return scrollSegment?.label;
 		return undefined;
 	});
-	const labelY = $derived(dragging || hovering ? hoverY : scrollFraction * trackHeight);
+	// Matches the thumb's own position formula below (top = scrollFraction *
+	// (trackHeight - thumb height), plus half the thumb height to get its
+	// center) so the label actually centers on the thumb instead of drifting
+	// away from it as scrollFraction approaches 1.
+	const labelY = $derived(
+		dragging || hovering ? hoverY : scrollFraction * Math.max(trackHeight - 24, 0) + 12
+	);
 
 	function updateScrollFromClientY(clientY: number) {
 		if (!trackEl || !scrollEl) return;
@@ -170,7 +200,7 @@
 		{#if activeLabel}
 			<div
 				id="scrubber-label"
-				class="pointer-events-none absolute right-7 -translate-y-1/2 rounded-lg bg-gray-900 px-2.5 py-1 text-xs font-medium whitespace-nowrap text-white shadow dark:bg-white dark:text-gray-900"
+				class="pointer-events-none absolute right-7 -translate-y-1/2 rounded-lg border border-gray-200/70 bg-white/70 px-2.5 py-1 text-xs font-medium whitespace-nowrap text-gray-900 shadow-sm backdrop-blur-lg dark:border-white/10 dark:bg-black/60 dark:text-gray-100"
 				style:top="{labelY}px"
 			>
 				{activeLabel}

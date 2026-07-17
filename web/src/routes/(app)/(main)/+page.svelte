@@ -6,12 +6,15 @@
 	import RecordingCard from '$lib/components/RecordingCard.svelte';
 	import RecordingDetail from '$lib/components/RecordingDetail.svelte';
 	import Scrubber from '$lib/components/Scrubber.svelte';
+	import VirtualTimeline from '$lib/components/VirtualTimeline.svelte';
 	import { buildScrubberSegments, buildTimeline } from '$lib/dateGroups';
 	import { formatDuration, recordingDisplayTitle } from '$lib/format';
 	import { liveRecordingStore } from '$lib/liveRecording.svelte';
-	import { mobileBack } from '$lib/mobileBack.svelte';
+	import { useListBackHandler } from '$lib/listBack.svelte';
+	import { outboxStore } from '$lib/outbox.svelte';
 	import { isNativePlatform } from '$lib/platform';
 	import { recordingsStore } from '$lib/recordings.svelte';
+	import { useTabTapScrollTop } from '$lib/tabTap.svelte';
 
 	let scrollEl: HTMLDivElement | undefined = $state();
 	let selectedId = $state<string | null>(null);
@@ -19,6 +22,16 @@
 	$effect(() => {
 		if (!liveRecordingStore.lastRecordingId) return;
 		selectedId = liveRecordingStore.consumeLastRecordingId();
+	});
+
+	// A recording opened in the detail panel right after being stopped is
+	// still under its local outbox id until the background upload finishes;
+	// once outbox.svelte.ts's markSynced() swaps that for the real server id,
+	// follow it here instead of the panel losing track of the recording (it'd
+	// no longer match anything in recordingsStore.active) and closing itself.
+	$effect(() => {
+		const remap = outboxStore.lastRemap;
+		if (remap && selectedId === remap.from) selectedId = remap.to;
 	});
 
 	let visibleRecordings = $derived(
@@ -45,14 +58,15 @@
 		if (liveRecordingStore.isRecording) selectedId = null;
 	});
 
-	// Hardware back button on Android should close the detail panel, not exit
-	// the app (it's local state, not a route change, so there's nothing else
-	// for the OS's default back behavior to fall back to).
-	$effect(() => {
-		if (selectedId) mobileBack.set(() => (selectedId = null));
-		else mobileBack.clear();
-		return () => mobileBack.clear();
-	});
+	// Hardware back button on Android should close the detail panel, then
+	// clear an active search, before ever falling through to Capacitor's
+	// default (leave the page / exit the app).
+	useListBackHandler(
+		() => selectedId,
+		() => (selectedId = null)
+	);
+
+	useTabTapScrollTop('/', () => scrollEl);
 </script>
 
 <svelte:head>
@@ -100,23 +114,24 @@
 				{/if}
 			</p>
 
-			<div class="flex flex-col gap-3">
-				{#each timeline as row (row.key)}
-					{#if row.kind === 'recording'}
+			{#if timeline.length === 0}
+				<EmptyState
+					message={recordingsStore.active.length > 0 ? 'No recordings match your search' : 'No recordings yet'}
+				/>
+			{:else}
+				<VirtualTimeline {timeline} {scrollEl}>
+					{#snippet recordingRow(row)}
 						<RecordingCard
 							recording={row.recording}
 							selected={selectedId === row.recording.id}
 							onselect={() => (selectedId = row.recording.id)}
 						/>
-					{:else}
+					{/snippet}
+					{#snippet separatorRow(row)}
 						<DateSeparator level={row.kind} label={row.label} />
-					{/if}
-				{:else}
-					<EmptyState
-						message={recordingsStore.active.length > 0 ? 'No recordings match your search' : 'No recordings yet'}
-					/>
-				{/each}
-			</div>
+					{/snippet}
+				</VirtualTimeline>
+			{/if}
 		</div>
 		</div>
 

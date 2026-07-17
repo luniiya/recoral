@@ -34,9 +34,12 @@
 	});
 
 	// Random accent while logged out unless the admin pinned a fixed one, previewed
-	// live once you're picking your own at signup. The moment auth succeeds, auth.svelte
-	// applies the account's own saved hue instead.
+	// live once you're picking your own at signup. The moment auth succeeds, the root
+	// layout's own effect takes over and applies the account's own saved hue instead,
+	// guarded here too so this one can't still be holding the CSS vars on the login
+	// page's stale preview hue for however long the goto('/') above takes to land.
 	$effect(() => {
+		if (auth.user) return;
 		applyAccentHue(accentHue);
 	});
 
@@ -109,13 +112,13 @@
 	{/if}
 
 	<div class="card relative z-10 w-full max-w-sm p-8">
-		<div class="mb-8 flex flex-col items-start gap-3">
-			<div class="flex items-center gap-3">
+		<div class="mb-4 flex flex-col items-start gap-2">
+			<div class="flex items-center gap-3 self-center">
 				<Logo size="size-14" />
 				<span class="font-wordmark text-3xl font-semibold text-gray-900 dark:text-gray-100">recoral</span>
 			</div>
-			<h1 class="text-lg font-semibold text-gray-900 dark:text-gray-100">
-				{needsSetup ? 'Welcome' : mode === 'login' ? 'Login' : 'Create account'}
+			<h1 class="text-base font-semibold text-gray-700 dark:text-gray-300">
+				{needsSetup ? 'Welcome' : mode === 'login' ? 'Login:' : 'Create account'}
 			</h1>
 			{#if needsSetup}
 				<p class="text-sm text-gray-500 dark:text-gray-400">

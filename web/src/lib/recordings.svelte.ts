@@ -286,6 +286,29 @@ async function deleteForever(id: string) {
 	await api.fetch(`/api/recordings/${id}`, { method: 'DELETE', credentials: 'include' });
 }
 
+// Bulk delete from multi-select: local-only recordings have no bin to go to
+// (never uploaded, same reasoning as the single-recording delete button in
+// RecordingDetail), everything else is a normal soft-trash.
+function trashMany(ids: string[]) {
+	for (const id of ids) {
+		if (isLocalId(id)) void deleteForever(id);
+		else trash(id);
+	}
+}
+
+// Bulk-add from multi-select's "+ tag": always adds, never removes, unlike
+// toggleRecordingTag, since some selected recordings may already carry the
+// tag and a toggle would incorrectly strip it back off those.
+async function addTagToMany(ids: string[], tagId: string) {
+	for (const id of ids) {
+		if (isLocalId(id)) continue;
+		const recording = all.find((r) => r.id === id);
+		if (!recording || recording.tagIds.includes(tagId)) continue;
+		recording.tagIds = [...recording.tagIds, tagId];
+		await api.fetch(`/api/recordings/${id}/tags/${tagId}`, { method: 'POST', credentials: 'include' });
+	}
+}
+
 async function toggleRecordingTag(recordingId: string, tagId: string) {
 	if (isLocalId(recordingId)) return;
 	const recording = all.find((r) => r.id === recordingId);
@@ -327,6 +350,14 @@ function toggleFilterTag(tagId: string) {
 
 function clearFilters() {
 	selectedTagIds = [];
+}
+
+// Tapping a tag chip on a recording (RecordingDetail) to browse everything
+// with that tag: an exclusive filter, not additive like toggleFilterTag
+// (used by the Tags page's own multi-select chips), since "search this tag"
+// reads as a fresh lookup, not "also include this one too".
+function setTagFilter(tagId: string) {
+	selectedTagIds = [tagId];
 }
 
 function setSearch(value: string) {
@@ -386,14 +417,17 @@ export const recordingsStore = {
 	retryTranscription,
 	toggleRecordingTag,
 	toggleFilterTag,
+	setTagFilter,
 	clearFilters,
 	setSearch,
 	toggleFavorite,
 	archive,
 	unarchive,
 	trash,
+	trashMany,
 	restore,
 	deleteForever,
+	addTagToMany,
 	daysLeft,
 	taggedCount
 };

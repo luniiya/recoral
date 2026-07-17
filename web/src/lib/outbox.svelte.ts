@@ -32,6 +32,11 @@ let uploadingId = $state<string | null>(null);
 // cloud+checkmark ("both") icon instead of plain cloud ("server only").
 let localFiles = $state<Record<string, string>>({});
 let loaded = false;
+// Set every time a pending item's id resolves to a real server id, so a page
+// holding onto the old local id (e.g. the just-opened RecordingDetail panel
+// for a recording still mid-upload) can follow it instead of losing track of
+// the recording once it's no longer in `pending` under the old id.
+let lastRemap = $state<{ from: string; to: string } | null>(null);
 
 async function persist() {
 	await Promise.all([
@@ -91,6 +96,7 @@ function setUploading(localId: string | null) {
 async function markSynced(localId: string, serverId: string, filePath: string) {
 	pending = pending.filter((p) => p.localId !== localId);
 	localFiles = { ...localFiles, [serverId]: filePath };
+	lastRemap = { from: localId, to: serverId };
 	await persist();
 }
 
@@ -116,6 +122,9 @@ export const outboxStore = {
 	},
 	get uploadingId() {
 		return uploadingId;
+	},
+	get lastRemap() {
+		return lastRemap;
 	},
 	init,
 	add,

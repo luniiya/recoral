@@ -5,20 +5,23 @@
 	import RecordingCard from '$lib/components/RecordingCard.svelte';
 	import RecordingDetail from '$lib/components/RecordingDetail.svelte';
 	import Scrubber from '$lib/components/Scrubber.svelte';
+	import VirtualTimeline from '$lib/components/VirtualTimeline.svelte';
 	import { buildScrubberSegments, buildTimeline } from '$lib/dateGroups';
 	import { recordingDisplayTitle } from '$lib/format';
-	import { mobileBack } from '$lib/mobileBack.svelte';
+	import { useListBackHandler } from '$lib/listBack.svelte';
 	import { isNativePlatform } from '$lib/platform';
 	import { recordingsStore } from '$lib/recordings.svelte';
+	import { useTabTapScrollTop } from '$lib/tabTap.svelte';
 
 	let scrollEl: HTMLDivElement | undefined = $state();
 	let selectedId = $state<string | null>(null);
 
-	$effect(() => {
-		if (selectedId) mobileBack.set(() => (selectedId = null));
-		else mobileBack.clear();
-		return () => mobileBack.clear();
-	});
+	useListBackHandler(
+		() => selectedId,
+		() => (selectedId = null)
+	);
+
+	useTabTapScrollTop('/favourites', () => scrollEl);
 
 	let visibleRecordings = $derived(
 		recordingsStore.favorites.filter((r) => {
@@ -58,23 +61,24 @@
 				{/if}
 			</p>
 
-			<div class="flex flex-col gap-3">
-				{#each timeline as row (row.key)}
-					{#if row.kind === 'recording'}
+			{#if timeline.length === 0}
+				<EmptyState
+					message={recordingsStore.favorites.length > 0 ? 'No recordings match your search' : 'No favourites yet'}
+				/>
+			{:else}
+				<VirtualTimeline {timeline} {scrollEl}>
+					{#snippet recordingRow(row)}
 						<RecordingCard
 							recording={row.recording}
 							selected={selectedId === row.recording.id}
 							onselect={() => (selectedId = row.recording.id)}
 						/>
-					{:else}
+					{/snippet}
+					{#snippet separatorRow(row)}
 						<DateSeparator level={row.kind} label={row.label} />
-					{/if}
-				{:else}
-					<EmptyState
-						message={recordingsStore.favorites.length > 0 ? 'No recordings match your search' : 'No favourites yet'}
-					/>
-				{/each}
-			</div>
+					{/snippet}
+				</VirtualTimeline>
+			{/if}
 		</div>
 		</div>
 

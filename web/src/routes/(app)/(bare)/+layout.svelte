@@ -1,7 +1,7 @@
 <script lang="ts">
 	import AvatarMenu from '$lib/components/AvatarMenu.svelte';
 	import BottomNav from '$lib/components/BottomNav.svelte';
-	import Logo from '$lib/components/Logo.svelte';
+	import HeaderBrand from '$lib/components/HeaderBrand.svelte';
 	import StatusBarSpacer from '$lib/components/StatusBarSpacer.svelte';
 	import ThemeToggle from '$lib/components/ThemeToggle.svelte';
 
@@ -11,10 +11,7 @@
 <div class="flex h-dvh flex-col overflow-hidden bg-white dark:bg-black">
 	<StatusBarSpacer />
 	<header class="flex h-16 shrink-0 items-center gap-3 border-b border-gray-200 px-6 dark:border-white/10">
-		<a href="/" class="flex flex-1 items-center gap-2.5">
-			<Logo size="size-7" />
-			<span class="font-wordmark text-base font-semibold text-gray-900 dark:text-gray-100">recoral</span>
-		</a>
+		<HeaderBrand class="flex flex-1 items-center gap-2.5" />
 
 		<div class="hidden items-center gap-3 md:flex">
 			<ThemeToggle />

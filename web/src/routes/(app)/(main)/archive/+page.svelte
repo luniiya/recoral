@@ -5,20 +5,20 @@
 	import RecordingCard from '$lib/components/RecordingCard.svelte';
 	import RecordingDetail from '$lib/components/RecordingDetail.svelte';
 	import Scrubber from '$lib/components/Scrubber.svelte';
+	import VirtualTimeline from '$lib/components/VirtualTimeline.svelte';
 	import { buildScrubberSegments, buildTimeline } from '$lib/dateGroups';
 	import { recordingDisplayTitle } from '$lib/format';
-	import { mobileBack } from '$lib/mobileBack.svelte';
+	import { useListBackHandler } from '$lib/listBack.svelte';
 	import { isNativePlatform } from '$lib/platform';
 	import { recordingsStore } from '$lib/recordings.svelte';
 
 	let scrollEl: HTMLDivElement | undefined = $state();
 	let selectedId = $state<string | null>(null);
 
-	$effect(() => {
-		if (selectedId) mobileBack.set(() => (selectedId = null));
-		else mobileBack.clear();
-		return () => mobileBack.clear();
-	});
+	useListBackHandler(
+		() => selectedId,
+		() => (selectedId = null)
+	);
 
 	let selectedRecording = $derived(recordingsStore.archived.find((r) => r.id === selectedId) ?? null);
 	let timeline = $derived(buildTimeline(recordingsStore.archived));
@@ -39,21 +39,22 @@
 			<div class="mx-auto max-w-xl px-6 pt-10 pb-36 md:pb-10">
 				<h1 class="mb-6 text-lg font-semibold text-gray-900 dark:text-gray-100">Archive</h1>
 
-				<div class="flex flex-col gap-3">
-					{#each timeline as row (row.key)}
-						{#if row.kind === 'recording'}
+				{#if timeline.length === 0}
+					<EmptyState message="Nothing archived yet" />
+				{:else}
+					<VirtualTimeline {timeline} {scrollEl}>
+						{#snippet recordingRow(row)}
 							<RecordingCard
 								recording={row.recording}
 								selected={selectedId === row.recording.id}
 								onselect={() => (selectedId = row.recording.id)}
 							/>
-						{:else}
+						{/snippet}
+						{#snippet separatorRow(row)}
 							<DateSeparator level={row.kind} label={row.label} />
-						{/if}
-					{:else}
-						<EmptyState message="Nothing archived yet" />
-					{/each}
-				</div>
+						{/snippet}
+					</VirtualTimeline>
+				{/if}
 			</div>
 		</div>
 

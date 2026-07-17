@@ -1,12 +1,15 @@
 <script lang="ts">
 	import AudioPlayer from '$lib/components/AudioPlayer.svelte';
+	import Dialog from '$lib/components/Dialog.svelte';
 	import EmptyState from '$lib/components/EmptyState.svelte';
 	import RecordingCardHeader from '$lib/components/RecordingCardHeader.svelte';
 	import TagChip from '$lib/components/TagChip.svelte';
 	import { recordingDisplayTitle } from '$lib/format';
 	import { recordingsStore } from '$lib/recordings.svelte';
-	import { groupTrashedTags, type TrashedTagGroup } from '$lib/tagPath';
+	import { groupTrashedTags, tagBreadcrumb, type TrashedTagGroup } from '$lib/tagPath';
 	import { tagsStore } from '$lib/tags.svelte';
+
+	let pendingDelete = $state<{ label: string; onconfirm: () => void } | null>(null);
 
 	type BinItem =
 		| { kind: 'recording'; trashedAt: string; recording: (typeof recordingsStore.trashed)[number] }
@@ -58,7 +61,11 @@
 						</button>
 						<button
 							class="flex-1 rounded-full py-1.5 text-xs font-semibold text-red-600 ring-1 ring-red-200 transition hover:bg-red-50 dark:text-red-400 dark:ring-red-900 dark:hover:bg-red-950/40"
-							onclick={() => recordingsStore.deleteForever(recording.id)}
+							onclick={() =>
+								(pendingDelete = {
+									label: recordingDisplayTitle(recording),
+									onconfirm: () => recordingsStore.deleteForever(recording.id)
+								})}
 						>
 							Delete forever
 						</button>
@@ -83,7 +90,11 @@
 						</button>
 						<button
 							class="flex-1 rounded-full py-1.5 text-xs font-semibold text-red-600 ring-1 ring-red-200 transition hover:bg-red-50 dark:text-red-400 dark:ring-red-900 dark:hover:bg-red-950/40"
-							onclick={() => tagsStore.deleteForever(group.root.id)}
+							onclick={() =>
+								(pendingDelete = {
+									label: tagBreadcrumb(group.root.name),
+									onconfirm: () => tagsStore.deleteForever(group.root.id)
+								})}
 						>
 							Delete forever
 						</button>
@@ -95,3 +106,28 @@
 		{/each}
 	</ul>
 </div>
+
+{#if pendingDelete}
+	<Dialog onclose={() => (pendingDelete = null)}>
+		<p class="mb-4 text-sm text-gray-900 dark:text-gray-100">
+			Permanently delete <span class="font-semibold">{pendingDelete.label}</span>? This can't be undone.
+		</p>
+		<div class="flex gap-2">
+			<button
+				class="flex-1 rounded-full px-4 py-2 text-sm font-medium text-gray-600 ring-1 ring-gray-200 transition hover:bg-gray-100 dark:text-gray-300 dark:ring-white/10 dark:hover:bg-white/5"
+				onclick={() => (pendingDelete = null)}
+			>
+				Cancel
+			</button>
+			<button
+				class="flex-1 rounded-full bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700"
+				onclick={() => {
+					pendingDelete?.onconfirm();
+					pendingDelete = null;
+				}}
+			>
+				Delete
+			</button>
+		</div>
+	</Dialog>
+{/if}

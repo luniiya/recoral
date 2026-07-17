@@ -17,6 +17,10 @@
 		deleteIcon?: 'trash' | 'cross';
 		onclick?: () => void;
 		ondelete?: () => void;
+		// Alternative to the hover-only corner delete icon (no hover on touch):
+		// holding the chip down for HOLD_MS calls this instead of onclick, so a
+		// mistimed tap can't remove something a real press-and-hold would.
+		onholddelete?: () => void;
 	}
 
 	let {
@@ -27,8 +31,39 @@
 		interactive = true,
 		deleteIcon = 'trash',
 		onclick,
-		ondelete
+		ondelete,
+		onholddelete
 	}: Props = $props();
+
+	const HOLD_MS = 550;
+	let holdTimer: ReturnType<typeof setTimeout> | null = null;
+	let held = false;
+
+	function onPointerDown() {
+		if (!onholddelete) return;
+		held = false;
+		holdTimer = setTimeout(() => {
+			held = true;
+			holdTimer = null;
+			navigator.vibrate?.(2);
+			onholddelete?.();
+		}, HOLD_MS);
+	}
+
+	function cancelHold() {
+		if (holdTimer) clearTimeout(holdTimer);
+		holdTimer = null;
+	}
+
+	function handleClick() {
+		// The hold already fired ondelete's replacement above, a released tap
+		// on top of that shouldn't also count as a normal click.
+		if (held) {
+			held = false;
+			return;
+		}
+		onclick?.();
+	}
 
 	let displayLabel = $derived(label ?? tagLeafLabel(tag.name));
 
@@ -93,7 +128,11 @@
 		style:--chip-ring={ringColor}
 		style:--chip-ring-width={selected ? '2px' : '1.5px'}
 		style:background-color={fill}
-		{onclick}
+		onclick={handleClick}
+		onpointerdown={onPointerDown}
+		onpointerup={cancelHold}
+		onpointerleave={cancelHold}
+		onpointercancel={cancelHold}
 	>
 		{@render dot()}
 		{displayLabel}

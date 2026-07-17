@@ -1,12 +1,16 @@
 <script lang="ts">
+	import type { Tag } from '@recoral/shared';
 	import AudioPlayer from './AudioPlayer.svelte';
+	import TagChip from './TagChip.svelte';
 	import TagChips from './TagChips.svelte';
+	import TagRemoveConfirm from './TagRemoveConfirm.svelte';
 	import Waveform from './Waveform.svelte';
 	import { formatTimestamp, recordingDisplayTitle } from '$lib/format';
 	import { isNativePlatform } from '$lib/platform';
 	import type { DisplayRecording } from '$lib/recordings.svelte';
 	import { recordingsStore } from '$lib/recordings.svelte';
 	import { tagsStore } from '$lib/tags.svelte';
+	import { parentTag, tagBreadcrumb } from '$lib/tagPath';
 	import StatusBarSpacer from './StatusBarSpacer.svelte';
 
 	interface Props {
@@ -25,6 +29,12 @@
 
 	let activeTab = $state<'audio' | 'transcription'>('audio');
 	let tagPickerOpen = $state(false);
+	let pendingRemoveTag = $state<Tag | null>(null);
+
+	function searchByTag(tag: Tag) {
+		recordingsStore.setTagFilter(tag.id);
+		onclose();
+	}
 	let playbackTime = $state(0);
 	let playbackPlaying = $state(false);
 	let playbackEl = $state<HTMLAudioElement | undefined>(undefined);
@@ -256,12 +266,16 @@
 		/>
 
 		<div class="relative flex flex-wrap items-center gap-1.5">
-			<TagChips
-				tags={tagsStore.list.filter((t) => recording.tagIds.includes(t.id))}
-				allTags={tagsStore.list}
-				selected={recording.tagIds}
-				ontoggle={(tagId) => recordingsStore.toggleRecordingTag(recording.id, tagId)}
-			/>
+			{#each tagsStore.list.filter((t) => recording.tagIds.includes(t.id)) as tag (tag.id)}
+				<TagChip
+					{tag}
+					label={tagBreadcrumb(tag.name)}
+					parentHue={parentTag(tag, tagsStore.list)?.hue ?? null}
+					selected
+					onclick={() => searchByTag(tag)}
+					onholddelete={() => (pendingRemoveTag = tag)}
+				/>
+			{/each}
 			{#if tagsStore.list.length > 0 && !isLocal}
 				<button
 					class="rounded-full px-2.5 py-1 text-xs text-gray-400 ring-1 ring-gray-200 transition hover:bg-gray-100 dark:ring-white/10 dark:hover:bg-white/5"
@@ -287,6 +301,17 @@
 				</div>
 			{/if}
 		</div>
+
+		{#if pendingRemoveTag}
+			<TagRemoveConfirm
+				label={tagBreadcrumb(pendingRemoveTag.name)}
+				onconfirm={() => {
+					if (pendingRemoveTag) recordingsStore.toggleRecordingTag(recording.id, pendingRemoveTag.id);
+					pendingRemoveTag = null;
+				}}
+				oncancel={() => (pendingRemoveTag = null)}
+			/>
+		{/if}
 	</div>
 
 	<div class="mx-5 my-4 flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl bg-accent-50 dark:bg-accent-500/10">

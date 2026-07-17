@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Matches web's accent 500 default (oklch(69% 0.17 26), evaluates to
+         f26a61, see web/src/app.css). Native colorAccent/colorControlActivated
+         drive things CSS can't reach, like the WebView's own text-selection
+         handles. -->
+    <color name="colorPrimary">#f26a61</color>
+    <color name="colorPrimaryDark">#d24d47</color>
+    <color name="colorAccent">#f26a61</color>
+</resources>

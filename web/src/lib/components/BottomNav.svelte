@@ -2,6 +2,7 @@
 	import { page } from '$app/state';
 	import { auth } from '$lib/auth.svelte';
 	import { navIcons } from '$lib/navIcons';
+	import { tabTapStore } from '$lib/tabTap.svelte';
 	import Avatar from './Avatar.svelte';
 
 	const items = [
@@ -25,6 +26,11 @@
 	{#each items as item (item.href)}
 		<a
 			href={item.href}
+			onclick={(e) => {
+				if (page.url.pathname !== item.href) return;
+				e.preventDefault();
+				tabTapStore.tap(item.href);
+			}}
 			class="flex flex-1 flex-col items-center gap-1 py-2.5 text-xs font-medium
 				{isActive(item.href) ? 'text-accent-600 dark:text-accent-400' : 'text-gray-500 dark:text-gray-400'}"
 		>
