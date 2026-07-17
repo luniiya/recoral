@@ -2,6 +2,17 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
+/* Wordmark only (see .font-wordmark below), not the app's body text. Self-hosted
+   rather than a Google Fonts <link> since this is a self-hosted app, single
+   variable-weight file covers the 400-700 range the wordmark ever uses. */
+@font-face {
+	font-family: 'Rubik';
+	font-style: normal;
+	font-weight: 400 700;
+	font-display: swap;
+	src: url('/fonts/rubik-latin-variable.woff2') format('woff2');
+}
+
 @theme {
 	/* resolved through --accent-* custom properties (see :root) so a user's
 	   chosen accent hue can be swapped at runtime without recompiling CSS */
@@ -79,4 +90,24 @@
 
 @utility card {
 	@apply rounded-xl border border-gray-200 bg-white dark:border-white/10 dark:bg-neutral-900;
+}
+
+@utility font-wordmark {
+	font-family: 'Rubik', sans-serif;
+}
+
+/* The logo art is a black-on-transparent silhouette (design/logo black and
+   transparent.png) masked with the accent color, so it recolors at runtime
+   with the rest of the app instead of being a fixed-color raster. */
+@utility logo-mark {
+	display: inline-block;
+	background-color: var(--accent-500);
+	mask-image: url('/logo-mask.png');
+	-webkit-mask-image: url('/logo-mask.png');
+	mask-size: contain;
+	-webkit-mask-size: contain;
+	mask-repeat: no-repeat;
+	-webkit-mask-repeat: no-repeat;
+	mask-position: center;
+	-webkit-mask-position: center;
 }

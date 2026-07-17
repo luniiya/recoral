@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
+	import Logo from '$lib/components/Logo.svelte';
 	import { onboarding } from '$lib/onboarding.svelte';
 	import { themeStore } from '$lib/theme.svelte';
 	import { onMount } from 'svelte';
@@ -59,7 +60,7 @@
 <section class="relative flex min-h-dvh items-center justify-center bg-white px-4 dark:bg-black">
 	<div class="card relative z-10 w-full max-w-sm p-8">
 		<div class="mb-8 flex flex-col items-center gap-2">
-			<img src="/logo.png" alt="recoral" class="size-12 rounded-full object-cover" />
+			<Logo size="size-12" />
 			<h1 class="text-lg font-semibold text-gray-900 dark:text-gray-100">Welcome to recoral</h1>
 			<p class="text-center text-sm text-gray-500 dark:text-gray-400">
 				Connect to your recoral server, or record fully offline with no account, ever.

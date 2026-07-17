@@ -271,15 +271,19 @@ export function setTranscriptResult(id: string, transcript: string) {
 	db.run("UPDATE recordings SET transcript = ?, transcript_status = 'done' WHERE id = ?", [transcript, id]);
 }
 
-// Recordings that have never been transcribed successfully: either nothing's
-// ever run on them (created before transcription was turned on, or while it
-// was off) or a previous attempt failed. Not trashed, since there's no point
-// burning GPU time transcribing something sitting in the bin.
+// Recordings that have never even been attempted (created before
+// transcription was turned on, or while it was off). Deliberately NOT
+// 'failed' too: a failed attempt usually means genuinely silent/corrupt
+// audio whisper returned nothing useful for, and this sweep runs on every
+// server boot plus every settings save, so including 'failed' here meant
+// the exact same doomed recording got retried forever on every restart,
+// burning real time for nothing. A failed recording now stays failed until
+// the user explicitly retries it from the UI (the Retry button already
+// calls enqueueTranscription() directly, bypassing this sweep entirely).
+// Not trashed, since there's no point transcribing something in the bin.
 export function listUntranscribed(): string[] {
 	const rows = db
-		.query<{ id: string }, []>(
-			"SELECT id FROM recordings WHERE transcript_status IN ('none', 'failed') AND trashed_at IS NULL"
-		)
+		.query<{ id: string }, []>("SELECT id FROM recordings WHERE transcript_status = 'none' AND trashed_at IS NULL")
 		.all();
 	return rows.map((r) => r.id);
 }

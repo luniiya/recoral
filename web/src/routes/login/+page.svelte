@@ -5,6 +5,7 @@
 	import { api } from '$lib/api.svelte';
 	import { auth } from '$lib/auth.svelte';
 	import ColorPicker from '$lib/components/ColorPicker.svelte';
+	import Logo from '$lib/components/Logo.svelte';
 	import ThemeToggle from '$lib/components/ThemeToggle.svelte';
 	import { onboarding } from '$lib/onboarding.svelte';
 	import { isNativePlatform } from '$lib/platform';
@@ -108,17 +109,16 @@
 	{/if}
 
 	<div class="card relative z-10 w-full max-w-sm p-8">
-		<div class="mb-8 flex flex-col items-center gap-2">
-			<img src="/logo.png" alt="recoral" class="size-12 rounded-full object-cover" />
+		<div class="mb-8 flex flex-col items-start gap-3">
+			<div class="flex items-center gap-3">
+				<Logo size="size-14" />
+				<span class="font-wordmark text-3xl font-semibold text-gray-900 dark:text-gray-100">recoral</span>
+			</div>
 			<h1 class="text-lg font-semibold text-gray-900 dark:text-gray-100">
-				{needsSetup
-					? 'Welcome to recoral'
-					: mode === 'login'
-						? 'Log in to recoral'
-						: 'Create your recoral account'}
+				{needsSetup ? 'Welcome' : mode === 'login' ? 'Login' : 'Create account'}
 			</h1>
 			{#if needsSetup}
-				<p class="text-center text-sm text-gray-500 dark:text-gray-400">
+				<p class="text-sm text-gray-500 dark:text-gray-400">
 					This server doesn't have an account yet. Set up the first one, it'll be the admin.
 				</p>
 			{/if}

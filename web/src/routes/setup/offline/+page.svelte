@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
+	import Logo from '$lib/components/Logo.svelte';
 	import { onboarding } from '$lib/onboarding.svelte';
 
 	function connectInstead() {
@@ -15,7 +16,7 @@
 <section class="flex min-h-dvh items-center justify-center bg-white px-4 dark:bg-black">
 	<div class="card w-full max-w-sm p-8 text-center">
 		<div class="mb-4 flex flex-col items-center gap-2">
-			<img src="/logo.png" alt="recoral" class="size-12 rounded-full object-cover" />
+			<Logo size="size-12" />
 			<h1 class="text-lg font-semibold text-gray-900 dark:text-gray-100">Offline mode isn't ready yet</h1>
 		</div>
 		<p class="mb-6 text-sm text-gray-500 dark:text-gray-400">

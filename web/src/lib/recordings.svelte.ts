@@ -196,7 +196,14 @@ async function addRecording(
 	// Filename extension matters server-side (extensionFor() in recordings.ts
 	// prefers it over the blob's own MIME type), so a hardcoded .webm here
 	// would mislabel native recordings, which are real .m4a/AAC content.
-	const ext = blob.type.split('/')[1]?.split(';')[0] || 'webm';
+	// `audio/mp4` (what the native recorder's blob is tagged as, see
+	// liveRecording.svelte.ts) maps to `.m4a` specifically, not the literal
+	// `.mp4` MIME subtype: it's audio-only MPEG-4/AAC content, the same file
+	// the native side already saved on-device with a `.m4a` name, `.mp4`
+	// conventionally implies a video-capable container even though the box
+	// format is technically identical.
+	const mimeSubtype = blob.type.split('/')[1]?.split(';')[0];
+	const ext = mimeSubtype === 'mp4' ? 'm4a' : mimeSubtype || 'webm';
 	const result = await upload(blob, `recording.${ext}`, title, durationSeconds, description);
 	if (result.error) {
 		importError = result.error;

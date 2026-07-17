@@ -24,7 +24,7 @@ function toSettings(row: SettingsRow): Settings {
 		transcriptionEnabled: row.transcription_enabled === 1,
 		transcriptionModel: (TRANSCRIPTION_MODELS as string[]).includes(row.transcription_model)
 			? (row.transcription_model as TranscriptionModel)
-			: "small"
+			: "tiny"
 	};
 }
 
@@ -39,7 +39,7 @@ export function getSettings(): Settings {
 				serverStorageLimitMb: 204800,
 				maxImportSizeMb: 1024,
 				transcriptionEnabled: true,
-				transcriptionModel: "small"
+				transcriptionModel: "tiny"
 			};
 }
 

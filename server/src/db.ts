@@ -83,7 +83,7 @@ db.run(`
 		server_storage_limit_mb INTEGER DEFAULT 204800,
 		max_import_size_mb INTEGER NOT NULL DEFAULT 1024,
 		transcription_enabled INTEGER NOT NULL DEFAULT 1,
-		transcription_model TEXT NOT NULL DEFAULT 'small'
+		transcription_model TEXT NOT NULL DEFAULT 'tiny'
 	)
 `);
 db.run("INSERT OR IGNORE INTO settings (id, default_accent_hue, signup_enabled) VALUES (1, NULL, 1)");
@@ -96,7 +96,7 @@ ensureColumn("settings", "max_import_size_mb", "max_import_size_mb INTEGER NOT N
 // Docker service isn't actually running, jobs just sit failed rather than
 // breaking anything else.
 ensureColumn("settings", "transcription_enabled", "transcription_enabled INTEGER NOT NULL DEFAULT 1");
-ensureColumn("settings", "transcription_model", "transcription_model TEXT NOT NULL DEFAULT 'small'");
+ensureColumn("settings", "transcription_model", "transcription_model TEXT NOT NULL DEFAULT 'tiny'");
 
 db.run(`
 	CREATE TABLE IF NOT EXISTS recordings (

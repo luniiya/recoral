@@ -19,7 +19,7 @@ export function setMediaSessionMetadata(title: string) {
 	navigator.mediaSession.metadata = new MediaMetadata({
 		title,
 		artist: 'recoral',
-		artwork: [{ src: '/logo.png', sizes: '512x512', type: 'image/png' }]
+		artwork: [{ src: '/logo-512.png', sizes: '512x512', type: 'image/png' }]
 	});
 }
 

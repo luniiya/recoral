@@ -52,7 +52,7 @@
 </svelte:head>
 
 <div class="mb-6 flex items-center gap-3">
-	<BackButton href="/account" label="Back to account" />
+	<BackButton mobileHref="/account" desktopHref="/" label="Back" />
 	<h1 class="text-lg font-semibold text-gray-900 dark:text-gray-100">Account settings</h1>
 </div>
 

@@ -2,6 +2,7 @@
 	import { page } from '$app/state';
 	import AvatarMenu from '$lib/components/AvatarMenu.svelte';
 	import BottomNav from '$lib/components/BottomNav.svelte';
+	import Logo from '$lib/components/Logo.svelte';
 	import SearchBar from '$lib/components/SearchBar.svelte';
 	import Sidebar from '$lib/components/Sidebar.svelte';
 	import StatusBarSpacer from '$lib/components/StatusBarSpacer.svelte';
@@ -72,8 +73,8 @@
 	<StatusBarSpacer />
 	<header class="flex h-16 shrink-0 items-center gap-3 border-b border-gray-200 px-6 dark:border-white/10">
 		<a href="/" class="flex items-center gap-2.5">
-			<img src="/logo.png" alt="recoral" class="size-7 rounded-full object-cover" />
-			<span class="font-semibold text-gray-900 dark:text-gray-100">recoral</span>
+			<Logo size="size-7" />
+			<span class="font-wordmark text-base font-semibold text-gray-900 dark:text-gray-100">recoral</span>
 		</a>
 
 		<div class="hidden flex-1 justify-center md:flex">
