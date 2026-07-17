@@ -1,3 +1,7 @@
+import http from "node:http";
+import https from "node:https";
+import { URL } from "node:url";
+
 import {
 	getRecordingForTranscription,
 	listStuckTranscriptions,
@@ -7,14 +11,8 @@ import {
 } from "./recordings";
 import { getSettings } from "./settings";
 
-// The transcription service is its own Docker Compose service (whisper.cpp
-// + ROCm/HIP, see transcription/), reachable over the internal compose
-// network under its service name. Overridable for local dev without Docker.
 const TRANSCRIPTION_URL = process.env.TRANSCRIPTION_URL ?? "http://transcription:8090";
 
-// A GPU is a single-consumer resource, so this queue processes one recording
-// at a time rather than firing off concurrent requests the service would
-// just have to serialize on its end anyway.
 const queue: string[] = [];
 let processing = false;
 
@@ -26,9 +24,6 @@ export function enqueueTranscription(recordingId: string) {
 	void processQueue();
 }
 
-// Recordings still marked pending/processing when the server last shut down
-// (crash, restart) need requeuing on boot, otherwise they're stuck showing
-// "transcribing…" forever with nothing actually working on them.
 export function requeueStuckTranscriptions() {
 	if (!getSettings().transcriptionEnabled) return;
 	for (const id of listStuckTranscriptions()) {
@@ -37,11 +32,6 @@ export function requeueStuckTranscriptions() {
 	void processQueue();
 }
 
-// Sweeps every recording that's never been transcribed successfully (never
-// ran at all, or a past attempt failed) and enqueues it. Called on boot and
-// whenever the admin settings are saved with transcription on, so recordings
-// that predate the feature (or were created while it was off) still
-// eventually get picked up automatically, not just newly-created ones.
 export function enqueueAllUntranscribed() {
 	if (!getSettings().transcriptionEnabled) return;
 	for (const id of listUntranscribed()) {
@@ -58,27 +48,112 @@ async function processQueue() {
 	try {
 		while (queue.length > 0) {
 			const id = queue.shift()!;
-			await transcribeOne(id);
+			try {
+				await transcribeOne(id);
+			} catch (err) {
+				// Defensive catch — transcribeOne has its own try-catch but DB
+				// calls outside it (getRecordingForTranscription, setTranscriptStatus)
+				// can throw and would otherwise kill the whole queue.
+				console.error(`processQueue: unexpected error for ${id}:`, err);
+				try { setTranscriptStatus(id, "failed"); } catch {}
+			}
 		}
 	} finally {
 		processing = false;
 	}
 }
 
+// Bun v1.3.x fetch() has a hard-coded 5-minute socket timeout that fires
+// regardless of AbortSignal, which is shorter than CPU whisper inference for
+// even small files. Node's http module has no built-in timeout, so we use it
+// directly to avoid Bun killing long-running transcriptions.
+function postMultipart(
+	urlStr: string,
+	fields: Record<string, string>,
+	file: { name: string; data: Buffer; mimeType: string },
+	timeoutMs: number
+): Promise<unknown> {
+	return new Promise((resolve, reject) => {
+		const boundary = `----RecoralBoundary${Date.now().toString(16)}`;
+		const CRLF = "\r\n";
+
+		const parts: Buffer[] = [];
+		parts.push(Buffer.from(
+			`--${boundary}${CRLF}` +
+			`Content-Disposition: form-data; name="file"; filename="${file.name}"${CRLF}` +
+			`Content-Type: ${file.mimeType}${CRLF}${CRLF}`
+		));
+		parts.push(file.data);
+		parts.push(Buffer.from(CRLF));
+		for (const [name, value] of Object.entries(fields)) {
+			parts.push(Buffer.from(
+				`--${boundary}${CRLF}` +
+				`Content-Disposition: form-data; name="${name}"${CRLF}${CRLF}` +
+				`${value}${CRLF}`
+			));
+		}
+		parts.push(Buffer.from(`--${boundary}--${CRLF}`));
+		const body = Buffer.concat(parts);
+
+		const url = new URL(urlStr);
+		const transport = url.protocol === "https:" ? https : http;
+		const req = transport.request({
+			hostname: url.hostname,
+			port: url.port ? parseInt(url.port) : (url.protocol === "https:" ? 443 : 80),
+			path: url.pathname + url.search,
+			method: "POST",
+			headers: {
+				"Content-Type": `multipart/form-data; boundary=${boundary}`,
+				"Content-Length": body.length,
+			},
+		}, (res) => {
+			const chunks: Buffer[] = [];
+			res.on("data", (chunk: Buffer) => chunks.push(chunk));
+			res.on("end", () => {
+				const text = Buffer.concat(chunks).toString("utf-8");
+				if (res.statusCode && res.statusCode >= 400) {
+					reject(new Error(`transcription service responded ${res.statusCode}: ${text}`));
+				} else {
+					try {
+						resolve(JSON.parse(text));
+					} catch {
+						reject(new Error(`non-JSON response from transcription service: ${text.slice(0, 200)}`));
+					}
+				}
+			});
+		});
+
+		const timer = setTimeout(() => {
+			req.destroy(new Error(`transcription timed out after ${timeoutMs / 60000} minutes`));
+		}, timeoutMs);
+
+		req.on("error", (err) => {
+			clearTimeout(timer);
+			reject(err);
+		});
+		req.on("close", () => clearTimeout(timer));
+
+		req.write(body);
+		req.end();
+	});
+}
+
 async function transcribeOne(id: string) {
 	const audio = getRecordingForTranscription(id);
 	if (!audio) return;
 
-	setTranscriptStatus(id, "processing");
 	try {
-		const form = new FormData();
-		form.append("file", Bun.file(audio.path), audio.path.split("/").pop() ?? "audio");
-		form.append("model", getSettings().transcriptionModel);
+		setTranscriptStatus(id, "processing");
+		const buffer = Buffer.from(await Bun.file(audio.path).arrayBuffer());
+		const filename = audio.path.split("/").pop() ?? "audio";
 
-		const res = await fetch(`${TRANSCRIPTION_URL}/transcribe`, { method: "POST", body: form });
-		if (!res.ok) throw new Error(`transcription service responded ${res.status}: ${await res.text()}`);
+		const body = await postMultipart(
+			`${TRANSCRIPTION_URL}/transcribe`,
+			{ model: getSettings().transcriptionModel },
+			{ name: filename, data: buffer, mimeType: audio.mimeType },
+			30 * 60 * 1000  // 30-minute hard limit
+		) as { text?: unknown };
 
-		const body = (await res.json()) as { text?: unknown };
 		const text = typeof body.text === "string" ? body.text.trim() : "";
 		if (!text) throw new Error("transcription service returned no text");
 
