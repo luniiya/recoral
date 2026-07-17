@@ -37,10 +37,15 @@
 	// Card-wide drag-select (touching and dragging over other cards while
 	// already selecting extends the selection to them, Google Photos/Gmail-
 	// style, with auto-scroll near the top/bottom edge to reach further ones).
-	// touch-action is only ever locked to none for the duration of an actually
-	// armed gesture (see onPointerDown below), never unconditionally while
-	// selectionStore.active, or the list couldn't be scrolled at all for as
-	// long as anything was selected.
+	// This relies on touch-action:none being baked onto the card reactively
+	// the moment selectionStore.active turns on (see the button's class below,
+	// `touch-none` whenever active), not set mid-gesture: that's what actually
+	// makes Android WebView honor it (a version that instead set touch-action
+	// via JS partway into an already-started touch was not reliably honored,
+	// native scroll kept winning underneath our own scrollTop resets). Because
+	// native scroll for this touch is blocked from before it even started,
+	// nothing else can move scrollTop during an armed drag except the
+	// deliberate edge auto-scroll below.
 	function startDragSelect(scrollEl: HTMLElement | null, baseline: string[], resetTouchAction?: () => void) {
 		// Fixed to the card the drag actually started on, not reassigned as the
 		// finger moves: each move re-selects the *whole* span from here to
@@ -56,32 +61,23 @@
 		const startId = recording.id;
 		let lastId = recording.id;
 		let edgeScrollDirection = 0;
-
-		// touch-action/preventDefault are best-effort here (see the big comment
-		// above), Android WebView doesn't reliably honor either once they're
-		// applied mid-gesture rather than baked in before the touch started.
-		// This is the actual guarantee: every frame for as long as the drag is
-		// armed, force scrollEl back to a locked position, only intentionally
-		// advanced by the edge auto-scroll logic below. Whatever native scroll
-		// the browser thinks it's doing gets overwritten before the next paint,
-		// so it's never visible, regardless of whether touch-action "worked".
-		let lockedScrollTop = scrollEl?.scrollTop ?? 0;
-		let lockFrame: number | null = null;
 		let dragEnded = false;
+		let edgeFrame: number | null = null;
 
-		function runScrollLock() {
+		function runEdgeScroll() {
 			if (dragEnded || !scrollEl) {
-				lockFrame = null;
+				edgeFrame = null;
 				return;
 			}
-			lockedScrollTop = Math.max(
-				0,
-				Math.min(scrollEl.scrollHeight - scrollEl.clientHeight, lockedScrollTop + edgeScrollDirection)
-			);
-			if (scrollEl.scrollTop !== lockedScrollTop) scrollEl.scrollTop = lockedScrollTop;
-			lockFrame = requestAnimationFrame(runScrollLock);
+			if (edgeScrollDirection !== 0) {
+				scrollEl.scrollTop = Math.max(
+					0,
+					Math.min(scrollEl.scrollHeight - scrollEl.clientHeight, scrollEl.scrollTop + edgeScrollDirection)
+				);
+			}
+			edgeFrame = requestAnimationFrame(runEdgeScroll);
 		}
-		lockFrame = requestAnimationFrame(runScrollLock);
+		edgeFrame = requestAnimationFrame(runEdgeScroll);
 
 		function updateEdgeScroll(clientY: number) {
 			if (!scrollEl) return;
@@ -100,13 +96,7 @@
 		}
 
 		function onMove(event: PointerEvent) {
-			event.preventDefault();
-			console.log(
-				'[drag] move, scrollTop:',
-				Math.round(scrollEl?.scrollTop ?? -1),
-				'lockedScrollTop:',
-				Math.round(lockedScrollTop)
-			);
+			console.log('[drag] move, scrollTop:', Math.round(scrollEl?.scrollTop ?? -1));
 			updateEdgeScroll(event.clientY);
 			// elementsFromPoint (plural), not elementFromPoint: the floating
 			// mobile search bar and the bottom nav are fixed-position overlays
@@ -137,13 +127,15 @@
 		function onUp() {
 			dragEnded = true;
 			edgeScrollDirection = 0;
-			if (lockFrame !== null) cancelAnimationFrame(lockFrame);
+			if (edgeFrame !== null) cancelAnimationFrame(edgeFrame);
 			resetTouchAction?.();
 			window.removeEventListener('pointermove', onMove);
 			window.removeEventListener('pointerup', onUp);
 			window.removeEventListener('pointercancel', onUp);
 		}
-		window.addEventListener('pointermove', onMove, { passive: false });
+		// passive: touch-action:none already blocks the browser's own default
+		// handling of this touch, no preventDefault needed to fight it.
+		window.addEventListener('pointermove', onMove, { passive: true });
 		window.addEventListener('pointerup', onUp);
 		window.addEventListener('pointercancel', onUp);
 	}
@@ -154,13 +146,14 @@
 	// deliberate, so a normal tap-to-open-detail never mistakenly arms) and
 	// "already selecting, press-and-pause to extend by dragging" (180ms,
 	// lower bar since intent's already established): stay still for the
-	// delay and it arms (touch-none set synchronously, not just via a
-	// reactive class, and locked for the rest of this gesture); move more
-	// than MOVE_CANCEL_PX before that and it's read as a scroll attempt
-	// instead, cancelling cleanly with touch-action never touched so the
-	// browser scrolls normally. Without this, *any* touch-and-move on a card
-	// while already selecting used to lock into drag-select immediately,
-	// which made the list unscrollable the whole time selection was active.
+	// delay and it arms (touch-none locked for the rest of this gesture); move
+	// more than MOVE_CANCEL_PX before that and it's read as a scroll attempt
+	// instead. Entering fresh, that just means letting the still-untouched
+	// browser handle it; already selecting, touch-none is already baked onto
+	// the card (see the class below), so onEarlyMove has to scroll it by hand
+	// instead (see manualScrolling below). Without the delay/threshold at all,
+	// *any* touch-and-move on a card while already selecting would lock into
+	// drag-select immediately, unscrollable the whole time selection is on.
 	function onPointerDown(event: PointerEvent) {
 		held = false;
 		armCancelled = false;
@@ -168,19 +161,49 @@
 		const scrollEl = target.closest<HTMLElement>('.no-native-scrollbar');
 		const startX = event.clientX;
 		const startY = event.clientY;
+		let lastY = event.clientY;
 		const enteringFresh = !selectionStore.active;
 		const delay = enteringFresh ? HOLD_MS : DRAG_ARM_MS;
+		// While already selecting, this card has touch-action:none baked in
+		// reactively before this touch even started (see the button's class
+		// below), so the browser never scrolls it natively. A plain swipe here
+		// (moved past the threshold before the arm timer fired) has to be
+		// scrolled by hand instead, or the list would just look frozen for any
+		// normal swipe while selecting. Entering fresh (first hold, nothing
+		// selected yet) skips this entirely: touch-action is still default
+		// then, so a cancelled arm just lets the browser's own scroll take over
+		// like always.
+		let manualScrolling = false;
 
 		console.log('[arm] pointerdown, delay', delay, 'active', selectionStore.active);
 
 		function onEarlyMove(moveEvent: PointerEvent) {
+			if (manualScrolling) {
+				if (scrollEl) {
+					const dy = moveEvent.clientY - lastY;
+					scrollEl.scrollTop = Math.max(
+						0,
+						Math.min(scrollEl.scrollHeight - scrollEl.clientHeight, scrollEl.scrollTop - dy)
+					);
+				}
+				lastY = moveEvent.clientY;
+				return;
+			}
 			const dx = moveEvent.clientX - startX;
 			const dy = moveEvent.clientY - startY;
 			const dist = Math.hypot(dx, dy);
 			if (dist <= MOVE_CANCEL_PX) return;
 			console.log('[arm] cancelled by move, dist', Math.round(dist));
 			armCancelled = true;
-			cleanupArm();
+			if (holdTimer) clearTimeout(holdTimer);
+			holdTimer = null;
+			if (enteringFresh || !scrollEl) {
+				cleanupArm();
+				return;
+			}
+			console.log('[scroll] manual mode engaged');
+			manualScrolling = true;
+			lastY = moveEvent.clientY;
 		}
 		function onEarlyRelease(releaseEvent: PointerEvent) {
 			console.log('[arm] cancelled by', releaseEvent.type);
@@ -281,6 +304,7 @@
 		: previewed
 			? 'border-accent-200 bg-accent-50/50 dark:border-accent-500/20 dark:bg-accent-500/5'
 			: 'hover:bg-gray-50 dark:hover:bg-white/5'}
+		{selectionStore.active ? 'touch-none' : ''}
 		{recording.syncStatus === 'uploading' ? 'syncing-ring' : ''}"
 	onclick={handleClick}
 	onpointerdown={onPointerDown}
