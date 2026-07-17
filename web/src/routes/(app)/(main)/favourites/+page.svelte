@@ -39,6 +39,7 @@
 	let selectedRecording = $derived(recordingsStore.favorites.find((r) => r.id === selectedId) ?? null);
 	let timeline = $derived(buildTimeline(visibleRecordings));
 	let scrubberSegments = $derived(buildScrubberSegments(visibleRecordings));
+	let orderedIds = $derived(visibleRecordings.map((r) => r.id));
 </script>
 
 <svelte:head>
@@ -72,6 +73,7 @@
 							recording={row.recording}
 							selected={selectedId === row.recording.id}
 							onselect={() => (selectedId = row.recording.id)}
+							{orderedIds}
 						/>
 					{/snippet}
 					{#snippet separatorRow(row)}

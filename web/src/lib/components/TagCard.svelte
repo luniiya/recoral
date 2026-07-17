@@ -1,9 +1,12 @@
 <script lang="ts">
-	import { collectTagIds, type TagNode } from '$lib/tagPath';
+	import { collectTagIds, tagBreadcrumb, type TagNode } from '$lib/tagPath';
 	import { recordingsStore } from '$lib/recordings.svelte';
 	import { tagsStore } from '$lib/tags.svelte';
 	import ColorPicker from './ColorPicker.svelte';
+	import Dialog from './Dialog.svelte';
 	import TagChip from './TagChip.svelte';
+
+	let pendingTrash = $state<{ id: string; label: string } | null>(null);
 
 	function countLabel(node: TagNode) {
 		const count = recordingsStore.taggedCount(collectTagIds(node));
@@ -132,7 +135,7 @@
 					class="flex size-8 shrink-0 items-center justify-center rounded-full text-gray-400 transition hover:bg-gray-100 hover:text-red-500 dark:hover:bg-white/10"
 					aria-label={`Move ${node.label} to bin`}
 					title="Move to bin"
-					onclick={() => tagsStore.trash(tag.id)}
+					onclick={() => (pendingTrash = { id: tag.id, label: tagBreadcrumb(tag.name) })}
 				>
 					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="size-4.5">
 						<path
@@ -161,7 +164,7 @@
 							label={child.label}
 							parentHue={node.tag?.hue ?? null}
 							onclick={() => startEditSubtag(child)}
-							ondelete={() => tagsStore.trash(childTag.id)}
+							ondelete={() => (pendingTrash = { id: childTag.id, label: tagBreadcrumb(childTag.name) })}
 						/>
 
 						{#if editingSubtagPath === child.path}
@@ -239,3 +242,28 @@
 		</div>
 	</div>
 </div>
+
+{#if pendingTrash}
+	<Dialog onclose={() => (pendingTrash = null)}>
+		<p class="mb-4 text-sm text-gray-900 dark:text-gray-100">
+			Move <span class="font-semibold">{pendingTrash.label}</span> to the bin?
+		</p>
+		<div class="flex gap-2">
+			<button
+				class="flex-1 rounded-full px-4 py-2 text-sm font-medium text-gray-600 ring-1 ring-gray-200 transition hover:bg-gray-100 dark:text-gray-300 dark:ring-white/10 dark:hover:bg-white/5"
+				onclick={() => (pendingTrash = null)}
+			>
+				Cancel
+			</button>
+			<button
+				class="flex-1 rounded-full bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700"
+				onclick={() => {
+					if (pendingTrash) tagsStore.trash(pendingTrash.id);
+					pendingTrash = null;
+				}}
+			>
+				Move to bin
+			</button>
+		</div>
+	</Dialog>
+{/if}

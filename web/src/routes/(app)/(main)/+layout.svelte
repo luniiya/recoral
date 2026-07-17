@@ -10,6 +10,7 @@
 	import TagChips from '$lib/components/TagChips.svelte';
 	import ThemeToggle from '$lib/components/ThemeToggle.svelte';
 	import { liveRecordingStore } from '$lib/liveRecording.svelte';
+	import { pageSelectStore } from '$lib/pageSelect.svelte';
 	import { recordingsStore } from '$lib/recordings.svelte';
 	import { selectionStore } from '$lib/selection.svelte';
 	import { tagsStore } from '$lib/tags.svelte';
@@ -21,6 +22,17 @@
 	let dragDepth = 0;
 	let selectionTagPickerOpen = $state(false);
 	let confirmingBulkDelete = $state(false);
+	let refreshing = $state(false);
+
+	async function refresh() {
+		if (refreshing) return;
+		refreshing = true;
+		try {
+			await recordingsStore.load();
+		} finally {
+			refreshing = false;
+		}
+	}
 
 	function bulkAddTag(tagId: string) {
 		recordingsStore.addTagToMany(selectionStore.selectedIds, tagId);
@@ -85,11 +97,37 @@
 		const timeout = setTimeout(() => recordingsStore.dismissImportError(), 4000);
 		return () => clearTimeout(timeout);
 	});
+
+	onMount(() => {
+		function onKeydown(e: KeyboardEvent) {
+			if (e.key === 'Shift') selectionStore.setShiftHeld(true);
+			else if (e.key === 'Escape' && selectionStore.active) selectionStore.clear();
+		}
+		function onKeyup(e: KeyboardEvent) {
+			if (e.key === 'Shift') selectionStore.setShiftHeld(false);
+		}
+		// Losing focus (alt-tab, devtools, etc.) while physically still holding
+		// shift would otherwise leave shiftHeld stuck true with no keyup to
+		// clear it once focus returns.
+		function onBlur() {
+			selectionStore.setShiftHeld(false);
+		}
+
+		window.addEventListener('keydown', onKeydown);
+		window.addEventListener('keyup', onKeyup);
+		window.addEventListener('blur', onBlur);
+
+		return () => {
+			window.removeEventListener('keydown', onKeydown);
+			window.removeEventListener('keyup', onKeyup);
+			window.removeEventListener('blur', onBlur);
+		};
+	});
 </script>
 
 <div class="flex h-dvh flex-col overflow-hidden bg-white dark:bg-black">
 	<StatusBarSpacer />
-	<header class="flex h-16 shrink-0 items-center gap-3 border-b border-gray-200 px-6 dark:border-white/10">
+	<header class="relative flex h-16 shrink-0 items-center gap-3 border-b border-gray-200 px-6 dark:border-white/10">
 		{#if selectionStore.active}
 			<button
 				class="flex size-8 shrink-0 items-center justify-center rounded-full text-gray-500 transition hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-white/5"
@@ -134,23 +172,74 @@
 		{:else}
 			<HeaderBrand />
 
-			<div class="hidden flex-1 justify-center md:flex">
-				<SearchBar class="w-full max-w-md bg-[#e5e7eb] dark:bg-white/5" />
+			<!-- Absolutely positioned (not a flex-1 middle child) so it centers on
+				 the actual screen/header width, not just the leftover space between
+				 the brand/select/import clusters, which shifts around as those
+				 change width (e.g. Select appearing/disappearing per-route). -->
+			<div class="pointer-events-none absolute inset-x-0 top-1/2 hidden -translate-y-1/2 justify-center md:flex">
+				<SearchBar class="pointer-events-auto w-full max-w-md bg-[#e5e7eb] dark:bg-white/5" />
 			</div>
 
-			<button
-				class="ml-auto flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-sm text-gray-600 transition hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-white/5 md:ml-0"
-				onclick={() => fileInput?.click()}
-			>
-				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="size-4">
-					<path
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						d="M12 16V4m0 0 4 4m-4-4-4 4M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"
-					/>
-				</svg>
-				Import
-			</button>
+			<div class="ml-auto flex items-center gap-2">
+				{#if page.url.pathname === '/' || page.url.pathname === '/favourites' || page.url.pathname === '/archive' || pageSelectStore.onStartSelecting}
+					<button
+						class="group hidden items-center overflow-hidden rounded-full px-2.5 py-1.5 text-sm text-gray-600 transition-colors hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-white/5 md:flex"
+						onclick={() => (pageSelectStore.onStartSelecting ? pageSelectStore.onStartSelecting() : selectionStore.startSelecting())}
+					>
+						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="size-4 shrink-0">
+							<circle cx="12" cy="12" r="9" />
+							<path stroke-linecap="round" stroke-linejoin="round" d="m8 12.5 2.5 2.5L16 9.5" />
+						</svg>
+						<span
+							class="max-w-0 overflow-hidden opacity-0 transition-all duration-300 ease-out whitespace-nowrap group-hover:ml-1.5 group-hover:max-w-[5rem] group-hover:opacity-100 group-focus-visible:ml-1.5 group-focus-visible:max-w-[5rem] group-focus-visible:opacity-100"
+						>
+							Select
+						</span>
+					</button>
+				{/if}
+
+				<button
+					class="group flex items-center overflow-hidden rounded-full px-2.5 py-1.5 text-sm text-gray-600 transition-colors hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-white/5"
+					onclick={() => fileInput?.click()}
+				>
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="size-4 shrink-0">
+						<path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							d="M12 16V4m0 0 4 4m-4-4-4 4M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"
+						/>
+					</svg>
+					<span
+						class="ml-1.5 max-w-[5rem] overflow-hidden opacity-100 transition-all duration-300 ease-out whitespace-nowrap md:ml-0 md:max-w-0 md:opacity-0 md:group-hover:ml-1.5 md:group-hover:max-w-[5rem] md:group-hover:opacity-100 md:group-focus-visible:ml-1.5 md:group-focus-visible:max-w-[5rem] md:group-focus-visible:opacity-100"
+					>
+						Import
+					</span>
+				</button>
+
+				<button
+					class="group hidden items-center overflow-hidden rounded-full px-2.5 py-1.5 text-sm text-gray-600 transition-colors hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-white/5 md:flex"
+					onclick={refresh}
+				>
+					<svg
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="1.8"
+						class="size-4 shrink-0 {refreshing ? 'animate-spin' : ''}"
+					>
+						<path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							d="M4 4v5h5M20 20v-5h-5M4.5 9a8 8 0 0 1 14.5-3M19.5 15a8 8 0 0 1-14.5 3"
+						/>
+					</svg>
+					<span
+						class="max-w-0 overflow-hidden opacity-0 transition-all duration-300 ease-out whitespace-nowrap group-hover:ml-1.5 group-hover:max-w-[5rem] group-hover:opacity-100 group-focus-visible:ml-1.5 group-focus-visible:max-w-[5rem] group-focus-visible:opacity-100"
+					>
+						Refresh
+					</span>
+				</button>
+			</div>
 			<input
 				bind:this={fileInput}
 				type="file"

@@ -49,6 +49,10 @@
 		currentTime?: number;
 		playing?: boolean;
 		audioEl?: HTMLAudioElement;
+		// Bin cards show the recording's fixed total length instead of a
+		// counting-down remaining time, more useful at a glance in a list you're
+		// not actively scrubbing through.
+		showTotalTime?: boolean;
 		// Only passed where a favorite even applies (a real, synced recording);
 		// on native, this replaces the volume slider spot since phones already
 		// have hardware volume, leaving that side otherwise empty felt wasted.
@@ -62,6 +66,7 @@
 		currentTime = $bindable(0),
 		playing = $bindable(false),
 		audioEl = $bindable(undefined),
+		showTotalTime = false,
 		favorite,
 		onToggleFavorite
 	}: Props = $props();
@@ -418,7 +423,7 @@
 			></div>
 		</div>
 		<span class="w-10 shrink-0 text-xs tabular-nums text-gray-400">
-			-{formatTime(Math.max(0, duration - currentTime))}
+			{showTotalTime ? formatTime(duration) : `-${formatTime(Math.max(0, duration - currentTime))}`}
 		</span>
 	</div>
 

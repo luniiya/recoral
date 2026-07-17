@@ -3,6 +3,7 @@
 	import { api } from '$lib/api.svelte';
 	import { auth } from '$lib/auth.svelte';
 	import { readLocalCache, writeLocalCache } from '$lib/localCache';
+	import { isNativePlatform } from '$lib/platform';
 	import { onMount } from 'svelte';
 
 	interface CachedStatus {
@@ -77,7 +78,11 @@
 		{serverOnline ? 'Server online' : 'Server unreachable'}
 	</span>
 	<span class="flex items-center gap-2">
-		{#if version}<span>server v{version}</span>{/if}
-		<span>app v{APP_VERSION}</span>
+		{#if version}<span>v{version}</span>{/if}
+		{#if isNativePlatform()}
+			<span class="rounded-full bg-accent-500 px-2 py-0.5 text-[10px] font-semibold text-white">
+				v{APP_VERSION} (app)
+			</span>
+		{/if}
 	</span>
 </div>

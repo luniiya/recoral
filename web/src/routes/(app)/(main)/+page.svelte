@@ -50,6 +50,7 @@
 	let selectedRecording = $derived(recordingsStore.active.find((r) => r.id === selectedId) ?? null);
 	let timeline = $derived(buildTimeline(visibleRecordings));
 	let scrubberSegments = $derived(buildScrubberSegments(visibleRecordings));
+	let orderedIds = $derived(visibleRecordings.map((r) => r.id));
 
 	// A recording can now start from the mobile floating button in the
 	// layout too, not just this page's own button, so clear the open detail
@@ -125,6 +126,7 @@
 							recording={row.recording}
 							selected={selectedId === row.recording.id}
 							onselect={() => (selectedId = row.recording.id)}
+							{orderedIds}
 						/>
 					{/snippet}
 					{#snippet separatorRow(row)}

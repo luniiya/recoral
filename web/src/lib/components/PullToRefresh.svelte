@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { selectionStore } from '$lib/selection.svelte';
+
 	// Native-only (see isNativePlatform() gate at each call site): pull down
 	// while already scrolled to the top of `scrollEl` to force a refresh from
 	// the server, the standard mobile pattern. Real-time sync already pushes
@@ -23,13 +25,23 @@
 	let hapticFired = false;
 
 	function onTouchStart(event: TouchEvent) {
-		if (!scrollEl || scrollEl.scrollTop > 0 || refreshing) return;
+		// A card's own hold-to-select drag gesture (RecordingCard.svelte) needs
+		// full control of touch movement once selection mode is active, this
+		// would otherwise race it and win, since it's listening for the same
+		// physical gesture independently on the scroll container.
+		if (!scrollEl || scrollEl.scrollTop > 0 || refreshing || selectionStore.active) return;
 		tracking = true;
 		hapticFired = false;
 		startY = event.touches[0].clientY;
 	}
 
 	function onTouchMove(event: TouchEvent) {
+		if (selectionStore.active) {
+			tracking = false;
+			pulling = false;
+			pullDistance = 0;
+			return;
+		}
 		if (!tracking || !scrollEl) return;
 		if (scrollEl.scrollTop > 0) {
 			tracking = false;
