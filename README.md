@@ -1,4 +1,4 @@
-# recoral
+<img src="design/banner%20wide%20downscaled.png" alt="recoral" width="100%" />
 
 Self-hostable voice recorder, a Google Recorder replacement, the vision is pretty much [Immich](https://github.com/immich-app/immich)'s architecture but for audio instead of photos.
 
