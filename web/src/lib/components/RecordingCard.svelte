@@ -4,6 +4,7 @@
 	import { rangeBetween, selectionStore } from '$lib/selection.svelte';
 	import { parentTag } from '$lib/tagPath';
 	import { tagsStore } from '$lib/tags.svelte';
+	import { viewportStore } from '$lib/viewport.svelte';
 	import RecordingCardHeader from './RecordingCardHeader.svelte';
 	import TagChip from './TagChip.svelte';
 
@@ -23,11 +24,13 @@
 	} = $props();
 
 	const HOLD_MS = 550;
-	// Shorter than HOLD_MS: once already selecting, the deliberate-intent bar
-	// is lower (you're already committed to picking things), it just needs to
-	// be enough to tell "pausing to drag-select" apart from "swiping to
-	// scroll" before locking touch-action, not a full fresh-entry hold.
-	const DRAG_ARM_MS = 180;
+	// Close to HOLD_MS, not much shorter: this is the window a touch has to
+	// sit still in before it's read as "pause to drag-select" rather than
+	// "swiping to scroll" while already selecting. Too short (was 180ms) and
+	// an ordinary scroll swipe kept getting mistaken for a drag-select pause
+	// before the finger had moved far enough to prove otherwise, making the
+	// list feel hard to scroll normally while selecting.
+	const DRAG_ARM_MS = 400;
 	const MOVE_CANCEL_PX = 10;
 	const EDGE_ZONE_PX = 72;
 	const EDGE_SCROLL_MAX_SPEED = 14;
@@ -37,16 +40,11 @@
 	// Card-wide drag-select (touching and dragging over other cards while
 	// already selecting extends the selection to them, Google Photos/Gmail-
 	// style, with auto-scroll near the top/bottom edge to reach further ones).
-	// This relies on touch-action:none being baked onto the card reactively
-	// the moment selectionStore.active turns on (see the button's class below,
-	// `touch-none` whenever active), not set mid-gesture: that's what actually
-	// makes Android WebView honor it (a version that instead set touch-action
-	// via JS partway into an already-started touch was not reliably honored,
-	// native scroll kept winning underneath our own scrollTop resets). Because
-	// native scroll for this touch is blocked from before it even started,
-	// nothing else can move scrollTop during an armed drag except the
-	// deliberate edge auto-scroll below.
-	function startDragSelect(scrollEl: HTMLElement | null, baseline: string[], resetTouchAction?: () => void) {
+	// This relies on touch-action:none being baked onto every card unconditionally
+	// (see the button's class below), never native scroll for a card touch to
+	// begin with, so nothing else can move scrollTop during an armed drag
+	// except the deliberate edge auto-scroll below.
+	function startDragSelect(scrollEl: HTMLElement | null, baseline: string[]) {
 		// Fixed to the card the drag actually started on, not reassigned as the
 		// finger moves: each move re-selects the *whole* span from here to
 		// wherever the finger is now (via rangeBetween, same helper shift+click
@@ -128,7 +126,6 @@
 			dragEnded = true;
 			edgeScrollDirection = 0;
 			if (edgeFrame !== null) cancelAnimationFrame(edgeFrame);
-			resetTouchAction?.();
 			window.removeEventListener('pointermove', onMove);
 			window.removeEventListener('pointerup', onUp);
 			window.removeEventListener('pointercancel', onUp);
@@ -142,19 +139,34 @@
 
 	let armCancelled = false;
 
-	// Single mechanism for both "first hold to enter selection mode" (550ms,
+	// Cards are touch-none on mobile *always* (see the class below, gated only
+	// on viewportStore.isDesktop, not on selectionStore.active): scroll-
+	// blocking has to be baked into the DOM before every touch starts, not
+	// flipped on mid-gesture, or Android WebView won't reliably honor it
+	// (confirmed: a version that stayed default until the very first hold
+	// armed, then flipped touch-action on mid-touch, kept losing the race to
+	// native scroll for that first hold specifically — by the time it
+	// flipped, the WebView had already committed the touch to its own
+	// scroll). Since native scroll on a card is now never available on
+	// mobile, ALL scrolling that starts on a card there (selecting or not,
+	// first hold or not) has to be driven by hand here. None of this mobile
+	// gesture machinery runs on desktop at all (see the early return in
+	// onPointerDown below), mouse users only ever get click/shift+click.
+	//
+	// Single mechanism for both "first hold to enter selection mode" (HOLD_MS,
 	// deliberate, so a normal tap-to-open-detail never mistakenly arms) and
-	// "already selecting, press-and-pause to extend by dragging" (180ms,
-	// lower bar since intent's already established): stay still for the
-	// delay and it arms (touch-none locked for the rest of this gesture); move
-	// more than MOVE_CANCEL_PX before that and it's read as a scroll attempt
-	// instead. Entering fresh, that just means letting the still-untouched
-	// browser handle it; already selecting, touch-none is already baked onto
-	// the card (see the class below), so onEarlyMove has to scroll it by hand
-	// instead (see manualScrolling below). Without the delay/threshold at all,
-	// *any* touch-and-move on a card while already selecting would lock into
-	// drag-select immediately, unscrollable the whole time selection is on.
+	// "already selecting, press-and-pause to extend by dragging" (DRAG_ARM_MS):
+	// stay still for the delay and it arms, continuing straight into
+	// drag-select without a release, for either case identically. Move more
+	// than MOVE_CANCEL_PX before that fires and it's read as a scroll attempt
+	// instead, handed off to manual scrolling for the rest of this same
+	// gesture.
 	function onPointerDown(event: PointerEvent) {
+		// Desktop never gets the hold-to-select-drag gesture at all, mouse
+		// users select via plain click and shift/ctrl+click only (see
+		// handleClick below), holding a mouse button down and dragging to
+		// sweep-select isn't a pattern used anywhere else in this app.
+		if (viewportStore.isDesktop) return;
 		held = false;
 		armCancelled = false;
 		const target = event.currentTarget as HTMLElement;
@@ -164,15 +176,6 @@
 		let lastY = event.clientY;
 		const enteringFresh = !selectionStore.active;
 		const delay = enteringFresh ? HOLD_MS : DRAG_ARM_MS;
-		// While already selecting, this card has touch-action:none baked in
-		// reactively before this touch even started (see the button's class
-		// below), so the browser never scrolls it natively. A plain swipe here
-		// (moved past the threshold before the arm timer fired) has to be
-		// scrolled by hand instead, or the list would just look frozen for any
-		// normal swipe while selecting. Entering fresh (first hold, nothing
-		// selected yet) skips this entirely: touch-action is still default
-		// then, so a cancelled arm just lets the browser's own scroll take over
-		// like always.
 		let manualScrolling = false;
 
 		console.log('[arm] pointerdown, delay', delay, 'active', selectionStore.active);
@@ -197,7 +200,7 @@
 			armCancelled = true;
 			if (holdTimer) clearTimeout(holdTimer);
 			holdTimer = null;
-			if (enteringFresh || !scrollEl) {
+			if (!scrollEl) {
 				cleanupArm();
 				return;
 			}
@@ -229,11 +232,6 @@
 			if (armCancelled) return;
 			held = true;
 			console.log('[arm] ARMED');
-			// Direct, synchronous style mutation, not a reactive class: a class
-			// only lands in the real DOM on Svelte's next render flush, a
-			// fraction too late for Android WebView to still honor it if a
-			// touchmove for this same gesture is already in flight by then.
-			target.style.touchAction = 'none';
 			navigator.vibrate?.(2);
 			const baseline = selectionStore.selectedIds;
 			if (enteringFresh) {
@@ -241,9 +239,7 @@
 			} else {
 				selectionStore.add(recording.id);
 			}
-			startDragSelect(scrollEl, baseline, () => {
-				target.style.touchAction = '';
-			});
+			startDragSelect(scrollEl, baseline);
 		}, delay);
 	}
 
@@ -299,12 +295,12 @@
 <button
 	data-recording-id={recording.id}
 	class="card relative w-full p-4 text-left transition
+		{viewportStore.isDesktop ? '' : 'touch-none'}
 		{selected || multiSelected
 		? 'border-accent-400 bg-accent-50 dark:bg-accent-500/10'
 		: previewed
 			? 'border-accent-200 bg-accent-50/50 dark:border-accent-500/20 dark:bg-accent-500/5'
 			: 'hover:bg-gray-50 dark:hover:bg-white/5'}
-		{selectionStore.active ? 'touch-none' : ''}
 		{recording.syncStatus === 'uploading' ? 'syncing-ring' : ''}"
 	onclick={handleClick}
 	onpointerdown={onPointerDown}

@@ -88,6 +88,22 @@
 		window.addEventListener('gesturestart', onGesture);
 		window.addEventListener('gesturechange', onGesture);
 
+		// -webkit-touch-callout:none (app.css) only stops iOS Safari's own
+		// long-press callout. On Android/Chrome (which is what the plain mobile
+		// web version runs in, unlike the Capacitor APK's WebView, which never
+		// hit this) a long enough touch-and-hold fires a real 'contextmenu'
+		// event instead, popping the browser's right-click-style menu right on
+		// top of RecordingCard's own hold-to-select gesture. Same "native-
+		// feeling app, not a document" reasoning as the touch-callout rule:
+		// blocked everywhere except text inputs, which still need it for
+		// copy/paste.
+		const onContextMenu = (event: MouseEvent) => {
+			const target = event.target as HTMLElement;
+			if (target.closest('input, textarea, [contenteditable]')) return;
+			event.preventDefault();
+		};
+		window.addEventListener('contextmenu', onContextMenu);
+
 		if (!isNativePlatform() && 'serviceWorker' in navigator) {
 			navigator.serviceWorker.register('/service-worker.js');
 		}
