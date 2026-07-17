@@ -58,10 +58,15 @@
 	/* This is a native-feeling app, not a document: text selection is only
 	   meaningful on the title/description fields in RecordingDetail (both real
 	   <input>s), everywhere else (cards, sidebar, buttons) selecting on a
-	   long-press/drag was just an accidental side effect, not a feature. */
+	   long-press/drag was just an accidental side effect, not a feature.
+	   touch-callout: none stops Android/iOS's own native long-press context
+	   menu (share/save-image style callout) from firing around the same ~500ms
+	   mark as RecordingCard's own custom hold-to-select gesture and cancelling
+	   it via pointercancel before that timer gets a chance to fire. */
 	body {
 		-webkit-user-select: none;
 		user-select: none;
+		-webkit-touch-callout: none;
 	}
 	input,
 	textarea,

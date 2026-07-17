@@ -23,45 +23,122 @@
 	} = $props();
 
 	const HOLD_MS = 550;
+	// Shorter than HOLD_MS: once already selecting, the deliberate-intent bar
+	// is lower (you're already committed to picking things), it just needs to
+	// be enough to tell "pausing to drag-select" apart from "swiping to
+	// scroll" before locking touch-action, not a full fresh-entry hold.
+	const DRAG_ARM_MS = 180;
+	const MOVE_CANCEL_PX = 10;
+	const EDGE_ZONE_PX = 72;
+	const EDGE_SCROLL_MAX_SPEED = 14;
 	let holdTimer: ReturnType<typeof setTimeout> | null = null;
 	let held = false;
 
-	// After the hold enters selection mode, staying pressed and dragging the
-	// finger up/down over other cards selects them too, without lifting and
-	// re-tapping each one, same gesture Google Photos/Gmail use for touch
-	// multi-select. touch-action: none (not overflow: hidden, which was
-	// mutating the scroll container's own scrollability mid-touch and seems to
-	// make WebView cancel the touch sequence outright, silently killing these
-	// listeners before any drag movement was ever processed) on both the
-	// origin card and its scroll container, plus preventDefault in pointermove
-	// itself as the actual scroll-blocking mechanism.
-	function startDragSelect(originEl: HTMLElement) {
-		console.log('[dragselect] start, scrollEl found:', !!originEl.closest('.no-native-scrollbar'));
+	// Card-wide drag-select (touching and dragging over other cards while
+	// already selecting extends the selection to them, Google Photos/Gmail-
+	// style, with auto-scroll near the top/bottom edge to reach further ones).
+	// touch-action is only ever locked to none for the duration of an actually
+	// armed gesture (see onPointerDown below), never unconditionally while
+	// selectionStore.active, or the list couldn't be scrolled at all for as
+	// long as anything was selected.
+	function startDragSelect(scrollEl: HTMLElement | null, baseline: string[], resetTouchAction?: () => void) {
+		// Fixed to the card the drag actually started on, not reassigned as the
+		// finger moves: each move re-selects the *whole* span from here to
+		// wherever the finger is now (via rangeBetween, same helper shift+click
+		// uses), so a fast drag that jumps straight from card A to card D in one
+		// sampled pointermove still fills in B and C, instead of only adding
+		// whichever single card elementFromPoint happened to catch that tick.
+		// baseline is whatever was already selected *before* this drag (from
+		// earlier actions, not this gesture), recomputing the whole selection as
+		// baseline + current range every move (not merging into it) is what
+		// lets dragging back up past cards this same drag added actually drop
+		// them again instead of only ever growing.
+		const startId = recording.id;
 		let lastId = recording.id;
-		const scrollEl = originEl.closest<HTMLElement>('.no-native-scrollbar');
-		const previousCardTouchAction = originEl.style.touchAction;
-		const previousScrollTouchAction = scrollEl?.style.touchAction ?? '';
-		originEl.style.touchAction = 'none';
-		if (scrollEl) scrollEl.style.touchAction = 'none';
+		let edgeScrollDirection = 0;
+
+		// touch-action/preventDefault are best-effort here (see the big comment
+		// above), Android WebView doesn't reliably honor either once they're
+		// applied mid-gesture rather than baked in before the touch started.
+		// This is the actual guarantee: every frame for as long as the drag is
+		// armed, force scrollEl back to a locked position, only intentionally
+		// advanced by the edge auto-scroll logic below. Whatever native scroll
+		// the browser thinks it's doing gets overwritten before the next paint,
+		// so it's never visible, regardless of whether touch-action "worked".
+		let lockedScrollTop = scrollEl?.scrollTop ?? 0;
+		let lockFrame: number | null = null;
+		let dragEnded = false;
+
+		function runScrollLock() {
+			if (dragEnded || !scrollEl) {
+				lockFrame = null;
+				return;
+			}
+			lockedScrollTop = Math.max(
+				0,
+				Math.min(scrollEl.scrollHeight - scrollEl.clientHeight, lockedScrollTop + edgeScrollDirection)
+			);
+			if (scrollEl.scrollTop !== lockedScrollTop) scrollEl.scrollTop = lockedScrollTop;
+			lockFrame = requestAnimationFrame(runScrollLock);
+		}
+		lockFrame = requestAnimationFrame(runScrollLock);
+
+		function updateEdgeScroll(clientY: number) {
+			if (!scrollEl) return;
+			const rect = scrollEl.getBoundingClientRect();
+			const distanceFromTop = clientY - rect.top;
+			const distanceFromBottom = rect.bottom - clientY;
+			if (distanceFromTop < EDGE_ZONE_PX) {
+				const strength = 1 - Math.max(0, distanceFromTop) / EDGE_ZONE_PX;
+				edgeScrollDirection = -Math.ceil(strength * EDGE_SCROLL_MAX_SPEED);
+			} else if (distanceFromBottom < EDGE_ZONE_PX) {
+				const strength = 1 - Math.max(0, distanceFromBottom) / EDGE_ZONE_PX;
+				edgeScrollDirection = Math.ceil(strength * EDGE_SCROLL_MAX_SPEED);
+			} else {
+				edgeScrollDirection = 0;
+			}
+		}
 
 		function onMove(event: PointerEvent) {
-			console.log('[dragselect] move', event.clientX, event.clientY);
 			event.preventDefault();
-			const el = (document.elementFromPoint(event.clientX, event.clientY) as HTMLElement | null)?.closest<HTMLElement>(
-				'[data-recording-id]'
+			console.log(
+				'[drag] move, scrollTop:',
+				Math.round(scrollEl?.scrollTop ?? -1),
+				'lockedScrollTop:',
+				Math.round(lockedScrollTop)
 			);
-			console.log('[dragselect] elementFromPoint hit:', el?.dataset.recordingId ?? 'none');
+			updateEdgeScroll(event.clientY);
+			// elementsFromPoint (plural), not elementFromPoint: the floating
+			// mobile search bar and the bottom nav are fixed-position overlays
+			// that sit visually on top of the list, so a plain elementFromPoint
+			// hits *them* instead of the card underneath whenever the finger
+			// passes over that screen region, silently skipping cards there.
+			// The full z-order stack lets this see straight through to the card
+			// without needing those overlays to become click-through/invisible.
+			const stack = document.elementsFromPoint(event.clientX, event.clientY);
+			const el = stack.map((hit) => (hit as HTMLElement).closest<HTMLElement>('[data-recording-id]')).find((hit) => hit);
 			const id = el?.dataset.recordingId;
 			if (!id || id === lastId) return;
 			lastId = id;
-			navigator.vibrate?.(2);
-			console.log('[dragselect] adding', id);
-			selectionStore.add(id);
+			// One short pulse per newly-selected card, not one pulse per move
+			// event: a fast drag can sweep several new cards into the range in a
+			// single sampled pointermove, and a lone vibrate(2) there would
+			// under-represent that compared to dragging slowly across the same
+			// cards one at a time.
+			const previouslySelected = new Set(selectionStore.selectedIds);
+			const nextSelection = [...baseline, ...rangeBetween(orderedIds, startId, id)];
+			const newlyAdded = nextSelection.filter((sid) => !previouslySelected.has(sid)).length;
+			if (newlyAdded > 0) {
+				const pulses = Math.min(newlyAdded, 6);
+				navigator.vibrate?.(Array.from({ length: pulses }, () => [2, 40]).flat());
+			}
+			selectionStore.setSelection(nextSelection);
 		}
 		function onUp() {
-			console.log('[dragselect] end');
-			originEl.style.touchAction = previousCardTouchAction;
-			if (scrollEl) scrollEl.style.touchAction = previousScrollTouchAction;
+			dragEnded = true;
+			edgeScrollDirection = 0;
+			if (lockFrame !== null) cancelAnimationFrame(lockFrame);
+			resetTouchAction?.();
 			window.removeEventListener('pointermove', onMove);
 			window.removeEventListener('pointerup', onUp);
 			window.removeEventListener('pointercancel', onUp);
@@ -71,21 +148,80 @@
 		window.addEventListener('pointercancel', onUp);
 	}
 
+	let armCancelled = false;
+
+	// Single mechanism for both "first hold to enter selection mode" (550ms,
+	// deliberate, so a normal tap-to-open-detail never mistakenly arms) and
+	// "already selecting, press-and-pause to extend by dragging" (180ms,
+	// lower bar since intent's already established): stay still for the
+	// delay and it arms (touch-none set synchronously, not just via a
+	// reactive class, and locked for the rest of this gesture); move more
+	// than MOVE_CANCEL_PX before that and it's read as a scroll attempt
+	// instead, cancelling cleanly with touch-action never touched so the
+	// browser scrolls normally. Without this, *any* touch-and-move on a card
+	// while already selecting used to lock into drag-select immediately,
+	// which made the list unscrollable the whole time selection was active.
 	function onPointerDown(event: PointerEvent) {
 		held = false;
+		armCancelled = false;
 		const target = event.currentTarget as HTMLElement;
-		holdTimer = setTimeout(() => {
-			held = true;
+		const scrollEl = target.closest<HTMLElement>('.no-native-scrollbar');
+		const startX = event.clientX;
+		const startY = event.clientY;
+		const enteringFresh = !selectionStore.active;
+		const delay = enteringFresh ? HOLD_MS : DRAG_ARM_MS;
+
+		console.log('[arm] pointerdown, delay', delay, 'active', selectionStore.active);
+
+		function onEarlyMove(moveEvent: PointerEvent) {
+			const dx = moveEvent.clientX - startX;
+			const dy = moveEvent.clientY - startY;
+			const dist = Math.hypot(dx, dy);
+			if (dist <= MOVE_CANCEL_PX) return;
+			console.log('[arm] cancelled by move, dist', Math.round(dist));
+			armCancelled = true;
+			cleanupArm();
+		}
+		function onEarlyRelease(releaseEvent: PointerEvent) {
+			console.log('[arm] cancelled by', releaseEvent.type);
+			armCancelled = true;
+			cleanupArm();
+		}
+		function cleanupArm() {
+			if (holdTimer) clearTimeout(holdTimer);
 			holdTimer = null;
+			window.removeEventListener('pointermove', onEarlyMove);
+			window.removeEventListener('pointerup', onEarlyRelease);
+			window.removeEventListener('pointercancel', onEarlyRelease);
+		}
+
+		window.addEventListener('pointermove', onEarlyMove, { passive: true });
+		window.addEventListener('pointerup', onEarlyRelease);
+		window.addEventListener('pointercancel', onEarlyRelease);
+
+		holdTimer = setTimeout(() => {
+			holdTimer = null;
+			cleanupArm();
+			console.log('[arm] timer fired, cancelled?', armCancelled);
+			if (armCancelled) return;
+			held = true;
+			console.log('[arm] ARMED');
+			// Direct, synchronous style mutation, not a reactive class: a class
+			// only lands in the real DOM on Svelte's next render flush, a
+			// fraction too late for Android WebView to still honor it if a
+			// touchmove for this same gesture is already in flight by then.
+			target.style.touchAction = 'none';
 			navigator.vibrate?.(2);
-			// enter() replaces the whole selection with just this card, correct
-			// for starting a fresh one but not when selection mode's already
-			// active (holding an already-selected card to start a new drag-select
-			// from there shouldn't wipe out everything else already picked).
-			if (selectionStore.active) selectionStore.add(recording.id);
-			else selectionStore.enter(recording.id);
-			startDragSelect(target);
-		}, HOLD_MS);
+			const baseline = selectionStore.selectedIds;
+			if (enteringFresh) {
+				selectionStore.enter(recording.id);
+			} else {
+				selectionStore.add(recording.id);
+			}
+			startDragSelect(scrollEl, baseline, () => {
+				target.style.touchAction = '';
+			});
+		}, delay);
 	}
 
 	function cancelHold() {
@@ -103,11 +239,19 @@
 			selectionStore.selectRange(rangeBetween(orderedIds, selectionStore.anchorId, recording.id));
 			return;
 		}
+		if (selectionStore.active) {
+			// held stays false here, meaning the arm timer never fired (this
+			// was a plain quick tap, not a press-and-pause-to-drag), so nothing
+			// pre-added this card yet, a plain toggle is exactly right.
+			navigator.vibrate?.(2);
+			selectionStore.toggle(recording.id);
+			return;
+		}
 		// Ctrl/Cmd+click is the desktop mouse shortcut for toggling a card into
 		// selection instantly, same idea as a file manager, without waiting out
 		// the hold (which still works with a mouse too, held-mousedown, but
 		// feels sluggish compared to touch where it's the natural gesture).
-		if (selectionStore.active || event.ctrlKey || event.metaKey) {
+		if (event.ctrlKey || event.metaKey) {
 			navigator.vibrate?.(2);
 			selectionStore.toggle(recording.id);
 			return;

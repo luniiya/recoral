@@ -48,6 +48,15 @@ function selectRange(ids: string[]) {
 	selectedIds = [...merged];
 }
 
+// Replaces the whole selection outright (deduped), for the touch drag-select
+// gesture: each move recomputes baseline-selection ∪ current-drag-range and
+// calls this with it, so dragging back up past cards the drag itself added
+// actually drops them again, instead of selectRange's merge-only semantics
+// which can never shrink a selection once a card's been swept over once.
+function setSelection(ids: string[]) {
+	selectedIds = [...new Set(ids)];
+}
+
 function startSelecting() {
 	forcedActive = true;
 }
@@ -101,6 +110,7 @@ export const selectionStore = {
 	toggle,
 	add,
 	selectRange,
+	setSelection,
 	startSelecting,
 	setShiftHeld,
 	setHovered,
