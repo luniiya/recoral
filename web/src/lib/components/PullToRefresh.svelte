@@ -17,10 +17,15 @@
 	let pullDistance = $state(0);
 	let startY = 0;
 	let tracking = false;
+	// Fires the vibration once per crossing into "release to refresh", not on
+	// every touchmove tick while held past it, and resets on release so the
+	// next pull can trigger it again.
+	let hapticFired = false;
 
 	function onTouchStart(event: TouchEvent) {
 		if (!scrollEl || scrollEl.scrollTop > 0 || refreshing) return;
 		tracking = true;
+		hapticFired = false;
 		startY = event.touches[0].clientY;
 	}
 
@@ -42,6 +47,12 @@
 		// Resisted drag (each pixel of finger movement adds less as you pull
 		// further), the standard pull-to-refresh feel, not a 1:1 follow.
 		pullDistance = Math.min(MAX_PULL, delta * 0.5);
+		if (pullDistance >= THRESHOLD && !hapticFired) {
+			hapticFired = true;
+			navigator.vibrate?.(10);
+		} else if (pullDistance < THRESHOLD) {
+			hapticFired = false;
+		}
 		event.preventDefault();
 	}
 
@@ -81,22 +92,38 @@
 </script>
 
 {#if pulling || refreshing}
-	<div
-		class="pointer-events-none absolute top-0 right-0 left-0 z-20 flex justify-center overflow-hidden"
-		style:height="{pullDistance}px"
-		style:transition={refreshing ? 'height 0.2s ease' : undefined}
-	>
-		<div class="flex items-end pb-1.5">
-			<svg
-				viewBox="0 0 24 24"
-				fill="none"
-				class="size-5 text-accent-500 {refreshing ? 'animate-spin' : ''}"
-				style:transform={refreshing ? undefined : `rotate(${progress * 180}deg)`}
-				style:opacity={refreshing ? 1 : progress}
-			>
-				<circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2.5" stroke-opacity="0.25" />
-				<path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" />
-			</svg>
-		</div>
+	<div class="pointer-events-none absolute top-0 right-0 left-0 z-20 h-[3px] overflow-hidden">
+		{#if refreshing}
+			<div class="loading-bar absolute inset-y-0 w-2/5 rounded-full bg-accent-500"></div>
+		{:else}
+			<!-- Grows from the center outward as you pull, not a fixed-origin
+				 fill, so it reads as "building up toward release" rather than a
+				 progress bar counting up from one edge. No transition on width
+				 itself while actively dragging (must track the finger exactly),
+				 only the opacity gets a tiny smoothing pass. -->
+			<div
+				class="absolute inset-y-0 left-1/2 rounded-full bg-accent-500 transition-opacity duration-100"
+				style:width="{progress * 100}%"
+				style:transform="translateX(-50%)"
+				style:opacity={Math.max(0.35, progress)}
+			></div>
+		{/if}
 	</div>
 {/if}
+
+<style>
+	/* Classic Material indeterminate progress bar: a segment sliding fully
+	   across, looping, rather than the pull-side bar's center-out growth. */
+	.loading-bar {
+		animation: loading-slide 1.1s ease-in-out infinite;
+	}
+
+	@keyframes loading-slide {
+		0% {
+			left: -40%;
+		}
+		100% {
+			left: 100%;
+		}
+	}
+</style>
