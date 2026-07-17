@@ -65,7 +65,7 @@
 	// `timeupdate` only fires a handful of times a second and irregularly, so
 	// driving the scroll straight off `currentTime` looks jerky. While
 	// playing, read the media element's real currentTime every rAF frame
-	// instead — that's ground truth updated live by the browser (including
+	// instead, that's ground truth updated live by the browser (including
 	// during a seek), so there's no extrapolation to drift or jump. While
 	// paused, prefer the live element value too: `currentTime` only updates
 	// on `timeupdate`, so it can lag behind where the rAF loop had already

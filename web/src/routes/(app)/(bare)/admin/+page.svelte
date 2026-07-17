@@ -255,11 +255,11 @@
 							onchange={(e) =>
 								patchSettings({ transcriptionModel: e.currentTarget.value as Settings['transcriptionModel'] })}
 						>
-							<option value="tiny">Tiny — fastest, least accurate</option>
-							<option value="base">Base — fast</option>
-							<option value="small">Small — balanced (recommended)</option>
-							<option value="medium">Medium — slower, more accurate</option>
-							<option value="large">Large — slowest, most accurate</option>
+							<option value="tiny">Tiny (fastest, least accurate)</option>
+							<option value="base">Base (fast)</option>
+							<option value="small">Small (balanced, recommended)</option>
+							<option value="medium">Medium (slower, more accurate)</option>
+							<option value="large">Large (slowest, most accurate)</option>
 						</select>
 					</label>
 				{/if}

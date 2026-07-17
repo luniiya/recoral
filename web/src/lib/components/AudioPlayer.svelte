@@ -3,7 +3,7 @@
 	// the viewBox and the SVG's actual rendered size are set to the same
 	// pixel values (no preserveAspectRatio scaling), so a stroke-width here
 	// maps 1:1 to real pixels instead of getting squished by the track's
-	// short height — that squish was what made the wave render far thinner
+	// short height, that squish was what made the wave render far thinner
 	// than the buffered/remaining bars it sits next to.
 	const WAVE_WIDTH = 1200;
 	// Taller than the track itself so the wave has real room to swing; its
@@ -132,7 +132,7 @@
 	// their first run (mount, before playback ever starts) they short-circuit
 	// without establishing `playing` as a dependency at all. If this flag
 	// isn't itself reactive, flipping it true from the start effect gives
-	// them no reason to ever re-run — confirmed via logs: Playback.update()
+	// them no reason to ever re-run. Confirmed via logs: Playback.update()
 	// never fired again after the initial start(), the notification's
 	// playing/position state was frozen from that first call forever after.
 	let nativeSessionStarted = $state(false);
@@ -168,7 +168,7 @@
 	// effect runs before the effect further below that recalculates smoothTime
 	// for the just-paused case (both depend on `playing`, and Svelte runs
 	// effects in declaration order), so untracking smoothTime here was reading
-	// a one-rAF-frame-stale value at the exact moment of pausing — small in
+	// a one-rAF-frame-stale value at the exact moment of pausing. Small in
 	// isolation, but combined with speed dropping to 0 a beat late, this is
 	// what made the notification's progress bar visibly creep past the real
 	// paused position instead of freezing exactly there.

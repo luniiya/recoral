@@ -51,7 +51,7 @@ async function processQueue() {
 			try {
 				await transcribeOne(id);
 			} catch (err) {
-				// Defensive catch — transcribeOne has its own try-catch but DB
+				// Defensive catch, transcribeOne has its own try-catch but DB
 				// calls outside it (getRecordingForTranscription, setTranscriptStatus)
 				// can throw and would otherwise kill the whole queue.
 				console.error(`processQueue: unexpected error for ${id}:`, err);

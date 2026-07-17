@@ -1,0 +1,80 @@
+name: Publish Docker images
+
+# Builds and pushes the pre-built images that docker-compose.yml (as
+# downloaded by an end user, see README) actually pulls, so nobody has to
+# build from source themselves. See RELEASE.md for the full walkthrough,
+# including the one-time step of making the GHCR packages public after the
+# very first run of this workflow.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  server:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/recoral:latest
+            ghcr.io/${{ github.repository_owner }}/recoral:${{ github.event.release.tag_name || 'dev' }}
+
+  # CPU build, the default everyone gets (see docker-compose.yml and
+  # RELEASE.md for the opt-in ROCm variant).
+  transcription-cpu:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: ./transcription
+          file: ./transcription/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/recoral-transcription:latest
+            ghcr.io/${{ github.repository_owner }}/recoral-transcription:${{ github.event.release.tag_name || 'dev' }}
+
+  # Opt-in GPU variant, not pulled by default. Slow (compiles whisper.cpp
+  # from source against the ROCm toolchain) and unverified by CI beyond "it
+  # builds" (no GPU runner available here to actually exercise it).
+  transcription-rocm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: ./transcription
+          file: ./transcription/Dockerfile.rocm
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/recoral-transcription:latest-rocm
+            ghcr.io/${{ github.repository_owner }}/recoral-transcription:${{ github.event.release.tag_name || 'dev' }}-rocm

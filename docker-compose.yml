@@ -15,11 +15,32 @@ services:
     depends_on:
       - transcription
 
-  # GPU-accelerated ASR (whisper.cpp + ROCm/HIP), kept as its own service
-  # rather than folded into the main container: a completely different
-  # runtime profile (GPU base image, device passthrough, heavy build deps)
-  # from the lean Bun+SQLite server above. Gated by the transcriptionEnabled
-  # admin setting; the main server just calls this over the compose network.
+  # ASR (whisper.cpp), kept as its own service rather than folded into the
+  # main container: a completely different runtime profile (heavy build
+  # deps, long-running whisper-cli invocations) from the lean Bun+SQLite
+  # server above. Gated by the transcriptionEnabled admin setting; the main
+  # server just calls this over the compose network.
+  #
+  # CPU by default (no GPU device passthrough at all): the real first
+  # deployment target for this project has no GPU, and hardware backend has
+  # to be picked before startup, not toggled from within the app, since it
+  # means a genuinely different container image (a different compiled
+  # binary), not a runtime setting.
+  #
+  # Have a compatible AMD GPU (ROCm, gfx1100/gfx1101 tested)? Uncomment the
+  # `build`/`image` override below and the `extends` block, matching Immich's
+  # own hwaccel.ml.yml pattern:
+  #
+  #   build:
+  #     context: ./transcription
+  #     dockerfile: Dockerfile.rocm
+  #   extends:
+  #     file: hwaccel.transcription.yml
+  #     service: rocm
+  #
+  # (if pulling published images instead of building locally, use the
+  # `-rocm` tag suffix instead of the build override, e.g.
+  # ghcr.io/luniiya/recoral-transcription:latest-rocm)
   transcription:
     build: ./transcription
     environment:
@@ -27,14 +48,6 @@ services:
       - MODELS_DIR=/models
     volumes:
       - recoral-transcription-models:/models
-    devices:
-      - /dev/kfd
-      - /dev/dri
-    group_add:
-      - video
-      - render
-    security_opt:
-      - seccomp=unconfined
     restart: unless-stopped
 
 volumes:

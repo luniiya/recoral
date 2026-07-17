@@ -19,7 +19,7 @@
 	// server API or the active/archived/trashed/favorites split, which all
 	// already share one in-memory list. Heights are estimates, not measured
 	// (own trailing 12px baked in per row, replacing the old container's
-	// gap-3, see the individual row wrapper divs below) — same "close enough,
+	// gap-3, see the individual row wrapper divs below). Same "close enough,
 	// cards are close to uniform height" tradeoff Scrubber.svelte already
 	// makes for its own position math, not pixel-perfect but good enough that
 	// drift is imperceptible.

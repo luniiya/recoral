@@ -1,0 +1,18 @@
+# Optional hardware-acceleration profiles for the transcription service,
+# same pattern Immich uses for its own hwaccel.ml.yml: one stanza per
+# backend, just the extra devices/permissions that backend needs on top of
+# the base service in docker-compose.yml. Not used unless a user explicitly
+# extends from it (see the commented block in docker-compose.yml), CPU is
+# the default with nothing from this file applied at all.
+services:
+  cpu: {}
+
+  rocm:
+    group_add:
+      - video
+      - render
+    devices:
+      - /dev/kfd
+      - /dev/dri
+    security_opt:
+      - seccomp=unconfined

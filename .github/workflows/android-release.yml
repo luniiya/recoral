@@ -1,0 +1,59 @@
+name: Build Android APK
+
+# Attaches an installable APK to each GitHub Release. Currently a debug
+# build (see RELEASE.md): no signing keystore exists yet, so this is not a
+# properly release-signed build. Fine for now since that's exactly how
+# every APK this project has shipped so far has been tested, but worth
+# fixing before relying on this for real installs across app updates,
+# since a debug-signed APK can't be verified by Android as "the same app"
+# update to update the way a consistently-signed one can.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: android-actions/setup-android@v4
+
+      - run: bun install --frozen-lockfile
+
+      - run: bun run --cwd web build
+
+      - run: bunx cap sync android
+        working-directory: mobile
+
+      - run: chmod +x ./gradlew && ./gradlew assembleDebug
+        working-directory: mobile/android
+
+      - name: Rename APK
+        run: cp mobile/android/app/build/outputs/apk/debug/app-debug.apk recoral-debug.apk
+
+      - name: Attach APK to release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: recoral-debug.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload build artifact
+        if: github.event_name != 'release'
+        uses: actions/upload-artifact@v4
+        with:
+          name: recoral-debug-apk
+          path: recoral-debug.apk

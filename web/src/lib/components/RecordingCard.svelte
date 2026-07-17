@@ -145,7 +145,7 @@
 	// flipped on mid-gesture, or Android WebView won't reliably honor it
 	// (confirmed: a version that stayed default until the very first hold
 	// armed, then flipped touch-action on mid-touch, kept losing the race to
-	// native scroll for that first hold specifically — by the time it
+	// native scroll for that first hold specifically, by the time it
 	// flipped, the WebView had already committed the touch to its own
 	// scroll). Since native scroll on a card is now never available on
 	// mobile, ALL scrolling that starts on a card there (selecting or not,

@@ -1,12 +1,12 @@
 FROM oven/bun:1-alpine AS build
 WORKDIR /app
 
-COPY package.json ./
+COPY package.json bun.lock ./
 COPY server/package.json server/package.json
 COPY web/package.json web/package.json
 COPY mobile/package.json mobile/package.json
 COPY packages/shared/package.json packages/shared/package.json
-RUN bun install
+RUN bun install --frozen-lockfile
 
 COPY . .
 RUN bun run --cwd web build

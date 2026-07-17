@@ -24,7 +24,7 @@ import com.recoral.app.R;
 // uses for recording. This exists because a bare embedded WebView does NOT
 // surface the Web Media Session API to the OS the way the Chrome app does
 // (that integration is Chrome's own native code, not something any WebView
-// host gets for free) — confirmed by checking dumpsys notification while
+// host gets for free), confirmed by checking dumpsys notification while
 // playing with only the Web Media Session API wired up: no notification
 // channel for playback ever got created. This service is the actual fix.
 //
@@ -89,7 +89,7 @@ public class PlaybackService extends Service {
     }
 
     // Takes the full initial state (not just a title) so the very first
-    // notification posted is already correct — leaving playing/position out
+    // notification posted is already correct, leaving playing/position out
     // here meant the first frame always showed "Paused" even mid-playback,
     // since nothing had told the service otherwise yet.
     public void start(String initialTitle, boolean isPlaying, long initialPositionMs, long initialDurationMs, String colorHex) {
@@ -139,7 +139,7 @@ public class PlaybackService extends Service {
             // The redesigned Android media card (the one in the notification
             // shade's "media" slot, distinct from a plain notification) draws
             // its background from a Palette extraction over album art, not
-            // from Notification.setColor() directly — confirmed by testing:
+            // from Notification.setColor() directly, confirmed by testing:
             // setColor()/setColorized() alone left the card a fixed default
             // color regardless of what was passed. A solid-color bitmap gives
             // Palette something real to extract, which is what actually lets
@@ -196,7 +196,7 @@ public class PlaybackService extends Service {
 
                 // The redesigned media card (see applyColor()'s comment above)
                 // appears to only reserve its two flanking button slots for
-                // "skip track" semantics, not "seek within track" — mapped to
+                // "skip track" semantics, not "seek within track", mapped to
                 // the same ±10s behavior here since this app has no concept of
                 // a previous/next track to skip to anyway.
                 @Override

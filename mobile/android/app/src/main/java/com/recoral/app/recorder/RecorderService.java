@@ -57,7 +57,7 @@ public class RecorderService extends Service {
     private long pauseStartTime = 0L;
     private long accumulatedPauseDuration = 0L;
 
-    // Ticks the notification's text with live elapsed time (e.g. "Recording — 0:23")
+    // Ticks the notification's text with live elapsed time (e.g. "Recording: 0:23")
     // once a second while actually recording, so the persistent notification reads
     // as "this is actively happening" rather than a static, possibly-stale label.
     private final Handler tickerHandler = new Handler(Looper.getMainLooper());
@@ -65,7 +65,7 @@ public class RecorderService extends Service {
         @Override
         public void run() {
             if (status != RecordingStatus.RECORDING) return;
-            updateNotification("Recording — " + formatDuration(calculateDuration()));
+            updateNotification("Recording: " + formatDuration(calculateDuration()));
             tickerHandler.postDelayed(this, 1000);
         }
     };

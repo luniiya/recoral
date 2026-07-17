@@ -1,17 +1,10 @@
-# Builds whisper.cpp from source with the ROCm/HIP backend, targeting
-# gfx1100/gfx1101 (RX 7900 XTX / RX 7800 XT) by default. No official
-# prebuilt ROCm image exists for whisper.cpp (ggml-org only ships
-# CPU/CUDA/Vulkan variants), so this compiles from source against ROCm's
-# own HIP toolchain instead.
-#
-# NOTE: written and reviewed but not build-verified in this environment (no
-# AMD GPU / ROCm toolchain available here). Run
-# `docker compose build transcription` on the real host; if it fails, the
-# most likely fixes are bumping the rocm/dev-ubuntu-22.04 tag to match your
-# installed ROCm/driver version, or adjusting AMDGPU_TARGETS for your card.
-FROM rocm/dev-ubuntu-22.04:6.2
-
-ARG AMDGPU_TARGETS="gfx1100;gfx1101"
+# Builds whisper.cpp from source, CPU-only. Originally targeted ROCm/HIP for
+# an AMD RX 7900 XTX/7800 XT (gfx1100/gfx1101), based on a wrong assumption
+# about the real deployment server's hardware, discovered only once actually
+# deployed there: it's an Intel Jasper Lake N5105 with no GPU capable of any
+# of this. Revisit a GPU backend only if self-hosting on real GPU hardware
+# becomes an actual target again, and confirm the hardware first next time.
+FROM debian:bookworm-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
 		git cmake build-essential ffmpeg ca-certificates curl unzip \
@@ -24,7 +17,7 @@ ENV PATH="/root/.bun/bin:${PATH}"
 WORKDIR /app
 RUN git clone --depth 1 https://github.com/ggml-org/whisper.cpp.git whisper.cpp
 WORKDIR /app/whisper.cpp
-RUN cmake -B build -DGGML_HIP=1 -DAMDGPU_TARGETS="${AMDGPU_TARGETS}" -DCMAKE_BUILD_TYPE=Release \
+RUN cmake -B build -DCMAKE_BUILD_TYPE=Release \
 	&& cmake --build build --config Release -j"$(nproc)"
 
 WORKDIR /app
