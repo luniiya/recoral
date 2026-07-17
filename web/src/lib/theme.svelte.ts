@@ -25,9 +25,19 @@ async function syncStatusBar(resolved: 'light' | 'dark') {
 	await StatusBar.setStyle({ style: resolved === 'dark' ? Style.Dark : Style.Light });
 }
 
+// The installed PWA's window chrome/titlebar (desktop) reads this, and it
+// used to be a hardcoded accent color left over from before the page
+// background/top bar convention settled on pure white/black (never a fixed
+// accent, see CLAUDE.md), which is why it showed up as a jarring orange
+// titlebar regardless of the app's actual light/dark state.
+function syncThemeColorMeta(resolved: 'light' | 'dark') {
+	document.querySelector('meta[name="theme-color"]')?.setAttribute('content', resolved === 'dark' ? '#000000' : '#ffffff');
+}
+
 function applyClass(pref: ThemePreference) {
 	const resolved = resolve(pref);
 	document.documentElement.classList.toggle('dark', resolved === 'dark');
+	syncThemeColorMeta(resolved);
 	syncStatusBar(resolved);
 }
 

@@ -8,14 +8,23 @@
 		/>
 		<meta name="text-scale" content="scale" />
 		<link rel="manifest" href="/manifest.json" />
-		<meta name="theme-color" content="#e2664a" />
+		<meta name="theme-color" content="#ffffff" />
 		<link rel="apple-touch-icon" href="/logo.png" />
 		<script>
 			(function () {
 				try {
 					var stored = localStorage.getItem('recoral-theme');
 					var dark = stored ? stored === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
-					if (dark) document.documentElement.classList.add('dark');
+					if (dark) {
+						document.documentElement.classList.add('dark');
+						// Page background/top bar are pure white/black, never a
+						// fixed accent color (see CLAUDE.md's design language),
+						// so the installed PWA's window chrome should match
+						// that instead of a stale hardcoded orange. Set here,
+						// synchronously, so there's no flash of the wrong
+						// color before theme.svelte.ts takes over.
+						document.querySelector('meta[name="theme-color"]').setAttribute('content', '#000000');
+					}
 				} catch (e) {}
 
 				try {
