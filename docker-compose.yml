@@ -10,7 +10,11 @@ services:
       - DATA_DIR=/data
       - TRANSCRIPTION_URL=http://transcription:8090
     volumes:
-      - recoral-data:/data
+      # Bind mount, not a named volume: recordings/database should live
+      # somewhere obvious and easy to back up (right next to this compose
+      # file by default), not buried under Docker's own /var/lib/docker/
+      # volumes/ storage. Same pattern Immich uses (UPLOAD_LOCATION).
+      - ${RECORAL_DATA_LOCATION:-./data}:/data
     restart: unless-stopped
     depends_on:
       - transcription
@@ -47,9 +51,5 @@ services:
       - PORT=8090
       - MODELS_DIR=/models
     volumes:
-      - recoral-transcription-models:/models
+      - ${RECORAL_MODELS_LOCATION:-./data/models}:/models
     restart: unless-stopped
-
-volumes:
-  recoral-data:
-  recoral-transcription-models:

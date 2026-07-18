@@ -1,5 +1,5 @@
 <script lang="ts">
-	import Logo from './Logo.svelte';
+	import LogoWordmark from './LogoWordmark.svelte';
 
 	interface Props {
 		class?: string;
@@ -9,6 +9,5 @@
 </script>
 
 <a href="/" class={className}>
-	<Logo size="size-7" />
-	<span class="font-wordmark text-base font-semibold text-gray-900 dark:text-gray-100">recoral</span>
+	<LogoWordmark />
 </a>

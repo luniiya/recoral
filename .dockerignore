@@ -6,3 +6,14 @@ web/.svelte-kit/
 CLAUDE.md
 TODO.md
 README.md
+
+# Local dev data/test artifacts, gitignored already but not dockerignored:
+# a real local dev run of start-dev.sh writes recordings/DB here, and this
+# was quietly bloating the build context to 1GB+ on every single docker
+# build, sent to the daemon over and over for no reason (none of this is
+# ever referenced by the Dockerfile). Same for a personal Google Takeout
+# export sitting at the repo root (270MB, also gitignored, also unused by
+# the build).
+server/data/
+*.zip
+Takeout/

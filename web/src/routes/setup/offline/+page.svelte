@@ -1,12 +1,29 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
-	import Logo from '$lib/components/Logo.svelte';
+	import { applyAccentHue, cacheAccentHue } from '$lib/accent';
+	import LogoWordmark from '$lib/components/LogoWordmark.svelte';
 	import { onboarding } from '$lib/onboarding.svelte';
+	import { isNativePlatform } from '$lib/platform';
+	import { systemAccentStore } from '$lib/systemAccent.svelte';
+	import { onMount } from 'svelte';
 
 	function connectInstead() {
 		onboarding.reset();
 		goto('/setup');
 	}
+
+	// Same reasoning as /setup: no account/server exists yet, so this
+	// follows the phone's own Material You color instead.
+	onMount(() => {
+		if (isNativePlatform()) {
+			void systemAccentStore.init().then(() => {
+				if (!systemAccentStore.enabled || !systemAccentStore.available) return;
+				const hue = systemAccentStore.effectiveHue(0);
+				applyAccentHue(hue);
+				cacheAccentHue(hue);
+			});
+		}
+	});
 </script>
 
 <svelte:head>
@@ -16,7 +33,7 @@
 <section class="flex min-h-dvh items-center justify-center bg-white px-4 dark:bg-black">
 	<div class="card w-full max-w-sm p-8 text-center">
 		<div class="mb-4 flex flex-col items-center gap-2">
-			<Logo size="size-12" />
+			<LogoWordmark size="size-12" textSize="text-2xl" colored />
 			<h1 class="text-lg font-semibold text-gray-900 dark:text-gray-100">Offline mode isn't ready yet</h1>
 		</div>
 		<p class="mb-6 text-sm text-gray-500 dark:text-gray-400">

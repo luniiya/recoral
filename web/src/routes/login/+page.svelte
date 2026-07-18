@@ -5,7 +5,7 @@
 	import { api } from '$lib/api.svelte';
 	import { auth } from '$lib/auth.svelte';
 	import ColorPicker from '$lib/components/ColorPicker.svelte';
-	import Logo from '$lib/components/Logo.svelte';
+	import LogoWordmark from '$lib/components/LogoWordmark.svelte';
 	import ThemeToggle from '$lib/components/ThemeToggle.svelte';
 	import { onboarding } from '$lib/onboarding.svelte';
 	import { isNativePlatform } from '$lib/platform';
@@ -23,6 +23,11 @@
 	// Bootstrap from whatever app.html already painted (cached fixed color, or a
 	// prior random pick) so there's nothing to correct visually once JS runs.
 	let accentHue = $state(readCachedAccentHue() ?? Math.floor(Math.random() * 360));
+	// No cached hue means either a first-ever visit or a server with no pinned
+	// default (see the onMount below, which clears the cache specifically for
+	// the random case), a reasonable guess before settings actually load,
+	// confirmed/corrected once they do. See Logo.svelte for why this matters.
+	let randomAccent = $state(readCachedAccentHue() === null);
 	let signupEnabled = $state(true);
 	let backgroundImage = $state<string | null>(null);
 	let error = $state('');
@@ -53,6 +58,15 @@
 	});
 
 	onMount(async () => {
+		// Mobile only: no server is picked yet (onboarding.mode === null), so
+		// there's no real backend to ask, this login page is about to be
+		// redirected away from by the root layout's own guard anyway. Without
+		// this, the request resolves same-origin against the WebView's own
+		// bundled app shell instead of a real server, hits its own SPA
+		// fallback, and gets index.html back where JSON was expected,
+		// `.json()` then throws a raw "Unexpected token '<'" parse error.
+		if (onboarding.needsSetup) return;
+
 		const [settingsRes, setupRes] = await Promise.all([
 			api.fetch('/api/settings'),
 			api.fetch('/api/setup-status')
@@ -69,9 +83,11 @@
 		if (settings.defaultAccentHue !== null) {
 			accentHue = settings.defaultAccentHue;
 			cacheAccentHue(settings.defaultAccentHue);
+			randomAccent = false;
 		} else {
 			cacheAccentHue(null);
 			accentHue = Math.floor(Math.random() * 360);
+			randomAccent = true;
 		}
 		if (!signupEnabled) mode = 'login';
 		backgroundImage = settings.backgroundImage;
@@ -113,10 +129,12 @@
 
 	<div class="card relative z-10 w-full max-w-sm p-8">
 		<div class="mb-4 flex flex-col items-start gap-2">
-			<div class="flex items-center gap-3 self-center">
-				<Logo size="size-14" />
-				<span class="font-wordmark text-3xl font-semibold text-gray-900 dark:text-gray-100">recoral</span>
-			</div>
+			<LogoWordmark size="size-14" textSize="text-3xl" colored={randomAccent && !needsSetup && mode !== 'register'} />
+			{#if isNativePlatform()}
+				<p class="self-center text-center text-sm text-gray-400">
+					Server: <span class="text-gray-600 dark:text-gray-300">{serverUrl}</span>
+				</p>
+			{/if}
 			<h1 class="text-base font-semibold text-gray-700 dark:text-gray-300">
 				{needsSetup ? 'Welcome' : mode === 'login' ? 'Login:' : 'Create account'}
 			</h1>
@@ -131,12 +149,6 @@
 			{#if error}
 				<p class="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600 dark:bg-red-950/40 dark:text-red-400">
 					{error}
-				</p>
-			{/if}
-
-			{#if isNativePlatform()}
-				<p class="text-center text-sm text-gray-400">
-					Server: <span class="text-gray-600 dark:text-gray-300">{serverUrl}</span>
 				</p>
 			{/if}
 

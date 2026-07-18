@@ -1,7 +1,10 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
-	import Logo from '$lib/components/Logo.svelte';
+	import { applyAccentHue, cacheAccentHue } from '$lib/accent';
+	import LogoWordmark from '$lib/components/LogoWordmark.svelte';
 	import { onboarding } from '$lib/onboarding.svelte';
+	import { isNativePlatform } from '$lib/platform';
+	import { systemAccentStore } from '$lib/systemAccent.svelte';
 	import { themeStore } from '$lib/theme.svelte';
 	import { onMount } from 'svelte';
 
@@ -45,6 +48,23 @@
 		goto('/setup/offline');
 	}
 
+	// No account/server exists yet to have a saved accent, so this screen
+	// (and /setup/offline) follows the phone's own Material You color
+	// instead, same priority the logged-in app already gives system color
+	// over a picked one. Once a server's picked, the login page takes over
+	// and applies that server's own accent config instead (its admin-pinned
+	// default, or a random one if the admin never pinned one).
+	onMount(() => {
+		if (isNativePlatform()) {
+			void systemAccentStore.init().then(() => {
+				if (!systemAccentStore.enabled || !systemAccentStore.available) return;
+				const hue = systemAccentStore.effectiveHue(0);
+				applyAccentHue(hue);
+				cacheAccentHue(hue);
+			});
+		}
+	});
+
 	// This screen only ever appears in the native app (before a server/account
 	// exists to have a saved theme preference), so it always follows system.
 	onMount(() => {
@@ -60,8 +80,8 @@
 <section class="relative flex min-h-dvh items-center justify-center bg-white px-4 dark:bg-black">
 	<div class="card relative z-10 w-full max-w-sm p-8">
 		<div class="mb-8 flex flex-col items-center gap-2">
-			<Logo size="size-12" />
-			<h1 class="text-lg font-semibold text-gray-900 dark:text-gray-100">Welcome to recoral</h1>
+			<LogoWordmark size="size-12" textSize="text-2xl" colored />
+			<h1 class="text-lg font-semibold text-gray-900 dark:text-gray-100">Welcome</h1>
 			<p class="text-center text-sm text-gray-500 dark:text-gray-400">
 				Connect to your recoral server, or record fully offline with no account, ever.
 			</p>

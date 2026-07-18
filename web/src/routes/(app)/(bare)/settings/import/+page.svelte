@@ -1,7 +1,7 @@
 <script lang="ts">
 	import BackButton from '$lib/components/BackButton.svelte';
 	import Confetti from '$lib/components/Confetti.svelte';
-	import Logo from '$lib/components/Logo.svelte';
+	import RecoralColoredLogo from '$lib/components/RecoralColoredLogo.svelte';
 	import StatCard from '$lib/components/StatCard.svelte';
 	import { api } from '$lib/api.svelte';
 
@@ -153,7 +153,7 @@
 				onclick={() => chooseFormat('recoral')}
 			>
 				<div class="flex size-10 shrink-0 items-center justify-center">
-					<Logo size="size-9" />
+					<RecoralColoredLogo size="size-9" />
 				</div>
 				<div class="min-w-0 flex-1">
 					<p class="text-sm font-medium text-gray-900 dark:text-gray-100">recoral export</p>
