@@ -4,6 +4,8 @@ import { Directory, Filesystem } from '@capacitor/filesystem';
 import { api } from './api.svelte';
 import { readLocalCache, writeLocalCache } from './localCache';
 import { outboxStore } from './outbox.svelte';
+import { ancestorTagIds } from './tagPath';
+import { tagsStore } from './tags.svelte';
 
 const TRASH_RETENTION_DAYS = 30;
 
@@ -30,6 +32,12 @@ let all = $state<Recording[]>(readLocalCache<Recording[]>(CACHED_RECORDINGS_KEY,
 let loaded = $state(false);
 let search = $state('');
 let selectedTagIds = $state<string[]>([]);
+// yyyy-mm-dd (native <input type="date"> format), inclusive on both ends,
+// either end can be open (null) for a one-sided range. Combines with
+// selectedTagIds and search as an AND, same as they combine with each other,
+// see recordingFilter.ts.
+let dateFrom = $state<string | null>(null);
+let dateTo = $state<string | null>(null);
 let importError = $state<string | null>(null);
 
 function pendingAsRecordings(): DisplayRecording[] {
@@ -299,6 +307,24 @@ function trashMany(ids: string[]) {
 	}
 }
 
+// Adding a tag also adds all of its ancestor tags as real membership (not
+// just something the filter panel cascades at query time), so a recording
+// tagged only with "voiceacting/certainvoice" genuinely belongs to
+// "voiceacting" too everywhere tagIds gets checked directly, e.g. exports.
+// Removing a tag never removes ancestors, a deliberate one-way rule with no
+// reference-counting against sibling subtags, see toggleRecordingTag.
+async function addTagWithAncestors(recording: Recording, tagId: string) {
+	const tag = tagsStore.list.find((t) => t.id === tagId);
+	const missing = (tag ? ancestorTagIds(tag, tagsStore.list) : []).filter((id) => !recording.tagIds.includes(id));
+	const newIds = [...missing, tagId];
+	recording.tagIds = [...recording.tagIds, ...newIds];
+	await Promise.all(
+		newIds.map((id) =>
+			api.fetch(`/api/recordings/${recording.id}/tags/${id}`, { method: 'POST', credentials: 'include' })
+		)
+	);
+}
+
 // Bulk-add from multi-select's "+ tag": always adds, never removes, unlike
 // toggleRecordingTag, since some selected recordings may already carry the
 // tag and a toggle would incorrectly strip it back off those.
@@ -307,8 +333,7 @@ async function addTagToMany(ids: string[], tagId: string) {
 		if (isLocalId(id)) continue;
 		const recording = all.find((r) => r.id === id);
 		if (!recording || recording.tagIds.includes(tagId)) continue;
-		recording.tagIds = [...recording.tagIds, tagId];
-		await api.fetch(`/api/recordings/${id}/tags/${tagId}`, { method: 'POST', credentials: 'include' });
+		await addTagWithAncestors(recording, tagId);
 	}
 }
 
@@ -316,12 +341,12 @@ async function toggleRecordingTag(recordingId: string, tagId: string) {
 	if (isLocalId(recordingId)) return;
 	const recording = all.find((r) => r.id === recordingId);
 	if (!recording) return;
-	const has = recording.tagIds.includes(tagId);
-	recording.tagIds = has ? recording.tagIds.filter((id) => id !== tagId) : [...recording.tagIds, tagId];
-	await api.fetch(`/api/recordings/${recordingId}/tags/${tagId}`, {
-		method: has ? 'DELETE' : 'POST',
-		credentials: 'include'
-	});
+	if (recording.tagIds.includes(tagId)) {
+		recording.tagIds = recording.tagIds.filter((id) => id !== tagId);
+		await api.fetch(`/api/recordings/${recordingId}/tags/${tagId}`, { method: 'DELETE', credentials: 'include' });
+		return;
+	}
+	await addTagWithAncestors(recording, tagId);
 }
 
 // Used to poll a single recording while its transcript is pending/processing
@@ -351,8 +376,28 @@ function toggleFilterTag(tagId: string) {
 		: [...selectedTagIds, tagId];
 }
 
+// Used by the filter panel to select/deselect a tag together with all of its
+// subtags in one click (ids computed by the caller via tagPath.ts's
+// subtagIds()). Adds every id if any are missing, so a partially-selected
+// subtree becomes fully selected in one click rather than toggling into a
+// confusing mixed state; only removes them all once every one is already
+// selected.
+function toggleFilterTagGroup(ids: string[]) {
+	const allSelected = ids.every((id) => selectedTagIds.includes(id));
+	selectedTagIds = allSelected
+		? selectedTagIds.filter((id) => !ids.includes(id))
+		: [...new Set([...selectedTagIds, ...ids])];
+}
+
+function setDateRange(from: string | null, to: string | null) {
+	dateFrom = from;
+	dateTo = to;
+}
+
 function clearFilters() {
 	selectedTagIds = [];
+	dateFrom = null;
+	dateTo = null;
 }
 
 // Tapping a tag chip on a recording (RecordingDetail) to browse everything
@@ -401,6 +446,12 @@ export const recordingsStore = {
 	get selectedTagIds() {
 		return selectedTagIds;
 	},
+	get dateFrom() {
+		return dateFrom;
+	},
+	get dateTo() {
+		return dateTo;
+	},
 	get importError() {
 		return importError;
 	},
@@ -420,7 +471,9 @@ export const recordingsStore = {
 	retryTranscription,
 	toggleRecordingTag,
 	toggleFilterTag,
+	toggleFilterTagGroup,
 	setTagFilter,
+	setDateRange,
 	clearFilters,
 	setSearch,
 	toggleFavorite,

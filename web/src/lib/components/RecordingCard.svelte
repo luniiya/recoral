@@ -2,7 +2,7 @@
 	import { formatTimestamp } from '$lib/format';
 	import type { DisplayRecording } from '$lib/recordings.svelte';
 	import { rangeBetween, selectionStore } from '$lib/selection.svelte';
-	import { parentTag } from '$lib/tagPath';
+	import { parentTag, visibleTagIds } from '$lib/tagPath';
 	import { tagsStore } from '$lib/tags.svelte';
 	import { viewportStore } from '$lib/viewport.svelte';
 	import RecordingCardHeader from './RecordingCardHeader.svelte';
@@ -22,6 +22,13 @@
 		onselect: () => void;
 		orderedIds?: string[];
 	} = $props();
+
+	// Read-only display: hides a tag if a more specific one already shown
+	// covers it (e.g. only "voiceacting/certainvoice" shows, not also its
+	// parent "voiceacting"), see tagPath.ts's visibleTagIds().
+	let visibleTags = $derived(
+		tagsStore.list.filter((t) => visibleTagIds(recording.tagIds, tagsStore.list).includes(t.id))
+	);
 
 	const HOLD_MS = 550;
 	// Close to HOLD_MS, not much shorter: this is the window a touch has to
@@ -329,9 +336,9 @@
 		{#if recording.title}
 			<p class="mt-1 text-xs text-gray-400">{formatTimestamp(recording.createdAt)}</p>
 		{/if}
-		{#if recording.tagIds.length > 0}
+		{#if visibleTags.length > 0}
 			<div class="mt-2 flex flex-wrap gap-1">
-				{#each tagsStore.list.filter((t) => recording.tagIds.includes(t.id)) as tag (tag.id)}
+				{#each visibleTags as tag (tag.id)}
 					<TagChip {tag} interactive={false} parentHue={parentTag(tag, tagsStore.list)?.hue ?? null} />
 				{/each}
 			</div>

@@ -10,7 +10,7 @@
 	import type { DisplayRecording } from '$lib/recordings.svelte';
 	import { recordingsStore } from '$lib/recordings.svelte';
 	import { tagsStore } from '$lib/tags.svelte';
-	import { parentTag, tagBreadcrumb } from '$lib/tagPath';
+	import { parentTag, tagBreadcrumb, visibleTagIds } from '$lib/tagPath';
 	import StatusBarSpacer from './StatusBarSpacer.svelte';
 
 	interface Props {
@@ -26,6 +26,13 @@
 	// just permanently (there's no bin for something not even uploaded yet).
 	let isLocal = $derived(recording.syncStatus === 'local');
 	let hasLocalFile = $derived(!!recordingsStore.localFilePath(recording.id));
+
+	// Read-only summary row only, see tagPath.ts's visibleTagIds(): hides a tag
+	// if a more specific one already shown covers it. The tag picker below
+	// deliberately does NOT use this, it needs to show true membership.
+	let visibleTags = $derived(
+		tagsStore.list.filter((t) => visibleTagIds(recording.tagIds, tagsStore.list).includes(t.id))
+	);
 
 	let activeTab = $state<'audio' | 'transcription'>('audio');
 	let tagPickerOpen = $state(false);
@@ -266,7 +273,7 @@
 		/>
 
 		<div class="relative flex flex-wrap items-center gap-1.5">
-			{#each tagsStore.list.filter((t) => recording.tagIds.includes(t.id)) as tag (tag.id)}
+			{#each visibleTags as tag (tag.id)}
 				<TagChip
 					{tag}
 					label={tagBreadcrumb(tag.name)}

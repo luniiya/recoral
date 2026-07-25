@@ -10,6 +10,7 @@
 	import { recordingDisplayTitle } from '$lib/format';
 	import { useListBackHandler } from '$lib/listBack.svelte';
 	import { isNativePlatform } from '$lib/platform';
+	import { hasActiveRecordingFilter, matchesRecordingFilter } from '$lib/recordingFilter';
 	import { recordingsStore } from '$lib/recordings.svelte';
 
 	let scrollEl: HTMLDivElement | undefined = $state();
@@ -20,10 +21,25 @@
 		() => (selectedId = null)
 	);
 
+	// The header filter panel is visible on this page too (same as
+	// Recordings/Favourites), so it needs to actually apply here rather than
+	// silently doing nothing, which is what happened before this list ever
+	// consulted search/tag/date state.
+	let visibleRecordings = $derived(
+		recordingsStore.archived.filter((r) =>
+			matchesRecordingFilter(r, {
+				search: recordingsStore.search,
+				tagIds: recordingsStore.selectedTagIds,
+				dateFrom: recordingsStore.dateFrom,
+				dateTo: recordingsStore.dateTo
+			})
+		)
+	);
+
 	let selectedRecording = $derived(recordingsStore.archived.find((r) => r.id === selectedId) ?? null);
-	let timeline = $derived(buildTimeline(recordingsStore.archived));
-	let scrubberSegments = $derived(buildScrubberSegments(recordingsStore.archived));
-	let orderedIds = $derived(recordingsStore.archived.map((r) => r.id));
+	let timeline = $derived(buildTimeline(visibleRecordings));
+	let scrubberSegments = $derived(buildScrubberSegments(visibleRecordings));
+	let orderedIds = $derived(visibleRecordings.map((r) => r.id));
 </script>
 
 <svelte:head>
@@ -38,10 +54,20 @@
 	>
 		<div bind:this={scrollEl} class="no-native-scrollbar h-full overflow-y-auto">
 			<div class="mx-auto max-w-xl px-6 pt-10 pb-36 md:pb-10">
-				<h1 class="mb-6 text-lg font-semibold text-gray-900 dark:text-gray-100">Archive</h1>
+				<h1 class="mb-1 text-lg font-semibold text-gray-900 dark:text-gray-100">Archive</h1>
+
+				<p class="mb-5 text-xs font-medium text-gray-400">
+					{#if recordingsStore.search.trim() || hasActiveRecordingFilter({ tagIds: recordingsStore.selectedTagIds, dateFrom: recordingsStore.dateFrom, dateTo: recordingsStore.dateTo })}
+						{visibleRecordings.length} {visibleRecordings.length === 1 ? 'result' : 'results'}
+					{:else}
+						{recordingsStore.archived.length} archived
+					{/if}
+				</p>
 
 				{#if timeline.length === 0}
-					<EmptyState message="Nothing archived yet" />
+					<EmptyState
+						message={recordingsStore.archived.length > 0 ? 'No recordings match your search' : 'Nothing archived yet'}
+					/>
 				{:else}
 					<VirtualTimeline {timeline} {scrollEl}>
 						{#snippet recordingRow(row)}

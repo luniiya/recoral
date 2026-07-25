@@ -13,6 +13,7 @@
 	import { useListBackHandler } from '$lib/listBack.svelte';
 	import { outboxStore } from '$lib/outbox.svelte';
 	import { isNativePlatform } from '$lib/platform';
+	import { hasActiveRecordingFilter, matchesRecordingFilter } from '$lib/recordingFilter';
 	import { recordingsStore } from '$lib/recordings.svelte';
 	import { useTabTapScrollTop } from '$lib/tabTap.svelte';
 
@@ -35,16 +36,14 @@
 	});
 
 	let visibleRecordings = $derived(
-		recordingsStore.active.filter((r) => {
-			const query = recordingsStore.search.trim().toLowerCase();
-			const matchesQuery =
-				!query || r.title.toLowerCase().includes(query) || r.description.toLowerCase().includes(query);
-
-			const filterTags = recordingsStore.selectedTagIds;
-			const matchesTags = filterTags.length === 0 || filterTags.some((id) => r.tagIds.includes(id));
-
-			return matchesQuery && matchesTags;
-		})
+		recordingsStore.active.filter((r) =>
+			matchesRecordingFilter(r, {
+				search: recordingsStore.search,
+				tagIds: recordingsStore.selectedTagIds,
+				dateFrom: recordingsStore.dateFrom,
+				dateTo: recordingsStore.dateTo
+			})
+		)
 	);
 
 	let selectedRecording = $derived(recordingsStore.active.find((r) => r.id === selectedId) ?? null);
@@ -108,7 +107,7 @@
 			</div>
 
 			<p class="mb-3 text-xs font-medium text-gray-400">
-				{#if recordingsStore.search.trim() || recordingsStore.selectedTagIds.length > 0}
+				{#if recordingsStore.search.trim() || hasActiveRecordingFilter({ tagIds: recordingsStore.selectedTagIds, dateFrom: recordingsStore.dateFrom, dateTo: recordingsStore.dateTo })}
 					{visibleRecordings.length} {visibleRecordings.length === 1 ? 'result' : 'results'}
 				{:else}
 					{recordingsStore.active.length} {recordingsStore.active.length === 1 ? 'recording' : 'recordings'}

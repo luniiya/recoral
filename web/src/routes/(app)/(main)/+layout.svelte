@@ -175,8 +175,14 @@
 			<!-- Absolutely positioned (not a flex-1 middle child) so it centers on
 				 the actual screen/header width, not just the leftover space between
 				 the brand/select/import clusters, which shifts around as those
-				 change width (e.g. Select appearing/disappearing per-route). -->
-			<div class="pointer-events-none absolute inset-x-0 top-1/2 hidden -translate-y-1/2 justify-center md:flex">
+				 change width (e.g. Select appearing/disappearing per-route).
+				 Centered via inset-0 + flex, deliberately not a top-1/2/
+				 -translate-y-1/2 transform: a `transform` on an ancestor traps any
+				 position:fixed descendant (FilterPanel's Dialog popover) into this
+				 box as its containing block instead of the viewport, which is
+				 exactly what broke that popover's centering, stacking, and
+				 click-outside-to-close all at once. -->
+			<div class="pointer-events-none absolute inset-0 hidden items-center justify-center md:flex">
 				<SearchBar class="pointer-events-auto w-full max-w-md bg-[#e5e7eb] dark:bg-white/5" />
 			</div>
 

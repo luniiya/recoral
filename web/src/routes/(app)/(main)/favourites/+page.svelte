@@ -10,6 +10,7 @@
 	import { recordingDisplayTitle } from '$lib/format';
 	import { useListBackHandler } from '$lib/listBack.svelte';
 	import { isNativePlatform } from '$lib/platform';
+	import { hasActiveRecordingFilter, matchesRecordingFilter } from '$lib/recordingFilter';
 	import { recordingsStore } from '$lib/recordings.svelte';
 	import { useTabTapScrollTop } from '$lib/tabTap.svelte';
 
@@ -24,16 +25,14 @@
 	useTabTapScrollTop('/favourites', () => scrollEl);
 
 	let visibleRecordings = $derived(
-		recordingsStore.favorites.filter((r) => {
-			const query = recordingsStore.search.trim().toLowerCase();
-			const matchesQuery =
-				!query || r.title.toLowerCase().includes(query) || r.description.toLowerCase().includes(query);
-
-			const filterTags = recordingsStore.selectedTagIds;
-			const matchesTags = filterTags.length === 0 || filterTags.some((id) => r.tagIds.includes(id));
-
-			return matchesQuery && matchesTags;
-		})
+		recordingsStore.favorites.filter((r) =>
+			matchesRecordingFilter(r, {
+				search: recordingsStore.search,
+				tagIds: recordingsStore.selectedTagIds,
+				dateFrom: recordingsStore.dateFrom,
+				dateTo: recordingsStore.dateTo
+			})
+		)
 	);
 
 	let selectedRecording = $derived(recordingsStore.favorites.find((r) => r.id === selectedId) ?? null);
@@ -55,7 +54,7 @@
 		<div bind:this={scrollEl} class="no-native-scrollbar h-full overflow-y-auto">
 			<div class="mx-auto max-w-xl px-6 pt-10 pb-36 md:pb-10">
 			<p class="mb-3 text-xs font-medium text-gray-400">
-				{#if recordingsStore.search.trim() || recordingsStore.selectedTagIds.length > 0}
+				{#if recordingsStore.search.trim() || hasActiveRecordingFilter({ tagIds: recordingsStore.selectedTagIds, dateFrom: recordingsStore.dateFrom, dateTo: recordingsStore.dateTo })}
 					{visibleRecordings.length} {visibleRecordings.length === 1 ? 'result' : 'results'}
 				{:else}
 					{recordingsStore.favorites.length} {recordingsStore.favorites.length === 1 ? 'favourite' : 'favourites'}

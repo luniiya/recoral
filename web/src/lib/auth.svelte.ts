@@ -129,8 +129,20 @@ async function updateAccount(updates: { accentHue?: number; avatar?: string | nu
 	setUser(data as User);
 }
 
-async function logout() {
-	await api.fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
+function logout() {
+	// Telling the server is best-effort and must never block clearing the
+	// local session, which has to work instantly even fully offline (this was
+	// exactly the "sign out button does nothing offline" bug: the old code
+	// awaited this call first, so an unreachable server just hung forever
+	// with no timeout). Fired before setToken(null) below so the request
+	// still captures the real Authorization header while it's building, not
+	// after it's already been cleared.
+	api
+		.fetch('/api/auth/logout', { method: 'POST', credentials: 'include', signal: AbortSignal.timeout(8000) })
+		.catch(() => {
+			// Couldn't reach the server to invalidate the session there.
+			// Nothing more to do locally, already logged out below regardless.
+		});
 	api.setToken(null);
 	setUser(null);
 }

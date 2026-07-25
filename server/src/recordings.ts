@@ -59,7 +59,10 @@ function tagIdsFor(recordingId: string): string[] {
 	return rows.map((r) => r.tag_id);
 }
 
-function toRecording(row: RecordingRow): Recording {
+// tagIds is optional so single-row lookups (getRecording, etc.) can keep
+// falling back to a single tagIdsFor() query, while listRecordings (below)
+// passes in a batch-fetched map instead of triggering one query per row.
+function toRecording(row: RecordingRow, tagIds?: string[]): Recording {
 	return {
 		id: row.id,
 		title: row.title,
@@ -71,7 +74,7 @@ function toRecording(row: RecordingRow): Recording {
 		favorite: row.favorite === 1,
 		archivedAt: row.archived_at,
 		trashedAt: row.trashed_at,
-		tagIds: tagIdsFor(row.id)
+		tagIds: tagIds ?? tagIdsFor(row.id)
 	};
 }
 
@@ -101,7 +104,28 @@ export function listRecordings(userId: string): Recording[] {
 	const rows = db
 		.query<RecordingRow, [string]>("SELECT * FROM recordings WHERE user_id = ? ORDER BY created_at DESC")
 		.all(userId);
-	return rows.map(toRecording);
+
+	// One query for every recording's tags instead of one query per recording:
+	// with a four-figure library, that N+1 made bun:sqlite's synchronous calls
+	// block the whole server (single JS thread) for the entire list fetch,
+	// confirmed via a real profile (4.62s LCP) after seeding ~1000 test
+	// recordings. Joined by user_id directly rather than an IN(...) of every
+	// recording id, which risks hitting SQLite's bound-parameter limit on a
+	// large enough library.
+	const tagRows = db
+		.query<{ recording_id: string; tag_id: string }, [string]>(
+			"SELECT rt.recording_id, rt.tag_id FROM recording_tags rt JOIN recordings r ON r.id = rt.recording_id WHERE r.user_id = ?"
+		)
+		.all(userId);
+
+	const tagsByRecording = new Map<string, string[]>();
+	for (const { recording_id, tag_id } of tagRows) {
+		const list = tagsByRecording.get(recording_id);
+		if (list) list.push(tag_id);
+		else tagsByRecording.set(recording_id, [tag_id]);
+	}
+
+	return rows.map((row) => toRecording(row, tagsByRecording.get(row.id)));
 }
 
 export function findByHash(userId: string, hash: string): Recording | null {

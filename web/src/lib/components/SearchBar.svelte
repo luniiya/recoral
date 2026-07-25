@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { recordingsStore } from '$lib/recordings.svelte';
-	import SearchFilter from './SearchFilter.svelte';
+	import FilterPanel from './FilterPanel.svelte';
 
 	let { class: className = '' }: { class?: string } = $props();
 </script>
@@ -19,5 +19,5 @@
 		value={recordingsStore.search}
 		oninput={(e) => recordingsStore.setSearch(e.currentTarget.value)}
 	/>
-	<SearchFilter />
+	<FilterPanel />
 </div>
