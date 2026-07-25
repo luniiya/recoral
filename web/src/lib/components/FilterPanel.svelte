@@ -7,6 +7,12 @@
 	import Dialog from './Dialog.svelte';
 	import TagChips from './TagChips.svelte';
 
+	const searchFieldOptions = [
+		{ key: 'title', label: 'Title' },
+		{ key: 'description', label: 'Description' },
+		{ key: 'transcript', label: 'Transcript' }
+	] as const;
+
 	let dateActive = $derived(recordingsStore.dateFrom !== null || recordingsStore.dateTo !== null);
 	let count = $derived(recordingsStore.selectedTagIds.length + (dateActive ? 1 : 0));
 
@@ -34,6 +40,10 @@
 		const tag = tagsStore.list.find((t) => t.id === tagId);
 		if (!tag) return;
 		recordingsStore.toggleFilterTagGroup(subtagIds(tag, tagsStore.list));
+	}
+
+	function setSearchField(field: 'title' | 'description' | 'transcript', value: boolean) {
+		recordingsStore.setSearchFields({ ...recordingsStore.searchFields, [field]: value });
 	}
 </script>
 
@@ -79,6 +89,26 @@
 								<path stroke-linecap="round" d="M5 5l14 14M19 5 5 19" />
 							</svg>
 						</button>
+					</div>
+				</div>
+
+				<div class="flex flex-col gap-2">
+					<span class="form-label">Search in</span>
+					<div class="flex flex-wrap gap-1.5">
+						{#each searchFieldOptions as opt (opt.key)}
+							{@const active = recordingsStore.searchFields[opt.key]}
+							<button
+								type="button"
+								aria-pressed={active}
+								class="rounded-full px-3 py-1 text-xs font-medium transition-all duration-100 ease-out active:scale-90
+									{active
+									? 'bg-accent-50 text-accent-700 ring-1 ring-accent-200 dark:bg-accent-500/15 dark:text-accent-400 dark:ring-accent-500/30'
+									: 'text-gray-500 ring-1 ring-gray-200 hover:bg-gray-100 dark:text-gray-400 dark:ring-white/10 dark:hover:bg-white/5'}"
+								onclick={() => setSearchField(opt.key, !active)}
+							>
+								{opt.label}
+							</button>
+						{/each}
 					</div>
 				</div>
 

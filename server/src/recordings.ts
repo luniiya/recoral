@@ -100,18 +100,15 @@ export function getRecording(userId: string, id: string): Recording | null {
 	return row ? toRecording(row) : null;
 }
 
-export function listRecordings(userId: string): Recording[] {
-	const rows = db
-		.query<RecordingRow, [string]>("SELECT * FROM recordings WHERE user_id = ? ORDER BY created_at DESC")
-		.all(userId);
-
-	// One query for every recording's tags instead of one query per recording:
-	// with a four-figure library, that N+1 made bun:sqlite's synchronous calls
-	// block the whole server (single JS thread) for the entire list fetch,
-	// confirmed via a real profile (4.62s LCP) after seeding ~1000 test
-	// recordings. Joined by user_id directly rather than an IN(...) of every
-	// recording id, which risks hitting SQLite's bound-parameter limit on a
-	// large enough library.
+// One query for every recording's tags instead of one query per recording:
+// with a four-figure library, that N+1 made bun:sqlite's synchronous calls
+// block the whole server (single JS thread) for the entire list fetch,
+// confirmed via a real profile (4.62s LCP) after seeding ~1000 test
+// recordings. Joined by user_id directly rather than an IN(...) of every
+// recording id, which risks hitting SQLite's bound-parameter limit on a
+// large enough library. Shared by listRecordings and searchRecordings, both
+// need the same batch fetch.
+function tagsByRecordingForUser(userId: string): Map<string, string[]> {
 	const tagRows = db
 		.query<{ recording_id: string; tag_id: string }, [string]>(
 			"SELECT rt.recording_id, rt.tag_id FROM recording_tags rt JOIN recordings r ON r.id = rt.recording_id WHERE r.user_id = ?"
@@ -124,7 +121,61 @@ export function listRecordings(userId: string): Recording[] {
 		if (list) list.push(tag_id);
 		else tagsByRecording.set(recording_id, [tag_id]);
 	}
+	return tagsByRecording;
+}
 
+export function listRecordings(userId: string): Recording[] {
+	const rows = db
+		.query<RecordingRow, [string]>("SELECT * FROM recordings WHERE user_id = ? ORDER BY created_at DESC")
+		.all(userId);
+	const tagsByRecording = tagsByRecordingForUser(userId);
+	return rows.map((row) => toRecording(row, tagsByRecording.get(row.id)));
+}
+
+// Escapes SQLite LIKE wildcards (% and _) in the user's own query text, so
+// typing a literal "%" or "_" searches for that character instead of acting
+// as a wildcard.
+function escapeLike(value: string): string {
+	return value.replace(/[\\%_]/g, "\\$&");
+}
+
+export interface SearchFields {
+	title: boolean;
+	description: boolean;
+	transcript: boolean;
+}
+
+// Plain LIKE, chronological (not relevance) order, matching how the client's
+// own local fallback search already behaves, see recordingFilter.ts. A real
+// ranked full-text search (SQLite FTS5) is a known future upgrade, not
+// needed yet, see TODO.md. `fields` scopes which column(s) get matched,
+// mirroring the same toggles the filter panel exposes client-side, so
+// switching one off means the same thing whether the local match or this
+// endpoint ends up answering.
+export function searchRecordings(userId: string, query: string, fields: SearchFields): Recording[] {
+	const pattern = `%${escapeLike(query)}%`;
+	const conditions: string[] = [];
+	const params: string[] = [userId];
+	if (fields.title) {
+		conditions.push("title LIKE ? ESCAPE '\\'");
+		params.push(pattern);
+	}
+	if (fields.description) {
+		conditions.push("description LIKE ? ESCAPE '\\'");
+		params.push(pattern);
+	}
+	if (fields.transcript) {
+		conditions.push("transcript LIKE ? ESCAPE '\\'");
+		params.push(pattern);
+	}
+	if (conditions.length === 0) return [];
+
+	const rows = db
+		.query<RecordingRow, string[]>(
+			`SELECT * FROM recordings WHERE user_id = ? AND (${conditions.join(" OR ")}) ORDER BY created_at DESC`
+		)
+		.all(...params);
+	const tagsByRecording = tagsByRecordingForUser(userId);
 	return rows.map((row) => toRecording(row, tagsByRecording.get(row.id)));
 }
 

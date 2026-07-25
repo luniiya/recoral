@@ -4,6 +4,7 @@ import { Directory, Filesystem } from '@capacitor/filesystem';
 import { api } from './api.svelte';
 import { readLocalCache, writeLocalCache } from './localCache';
 import { outboxStore } from './outbox.svelte';
+import type { SearchFields } from './recordingFilter';
 import { ancestorTagIds } from './tagPath';
 import { tagsStore } from './tags.svelte';
 
@@ -31,6 +32,27 @@ const CACHED_RECORDINGS_KEY = 'recoral_cached_recordings';
 let all = $state<Recording[]>(readLocalCache<Recording[]>(CACHED_RECORDINGS_KEY, []));
 let loaded = $state(false);
 let search = $state('');
+// Which fields count as a match, toggleable in the filter panel. Transcript
+// defaults off (a transcript is a big loose blob of text, a hit there is
+// less "intentional" than a title/description match), title/description
+// default on.
+let searchFields = $state<SearchFields>({ title: true, description: true, transcript: false });
+// Ids the server confirmed match the current `search` + `searchFields`
+// combination, once it answers, or null if there's no server answer yet for
+// that exact combination (still debouncing, in flight, offline, or timed
+// out). See recordingFilter.ts's matchesSearch(): the local substring match
+// (already covering title/description/transcript, the whole library is
+// always loaded client-side today) is what's shown instantly and what's used
+// whenever this is null, this is purely a reconcile-when-available layer on
+// top, forward-looking for whenever search needs to cover data the client
+// doesn't have loaded, see TODO.md.
+let serverSearchIds = $state<string[] | null>(null);
+let serverSearchKey = $state<string | null>(null);
+let searchDebounce: ReturnType<typeof setTimeout> | null = null;
+
+function searchKey(query: string, fields: SearchFields): string {
+	return `${query}|${fields.title ? 1 : 0}|${fields.description ? 1 : 0}|${fields.transcript ? 1 : 0}`;
+}
 let selectedTagIds = $state<string[]>([]);
 // yyyy-mm-dd (native <input type="date"> format), inclusive on both ends,
 // either end can be open (null) for a one-sided range. Combines with
@@ -408,8 +430,58 @@ function setTagFilter(tagId: string) {
 	selectedTagIds = [tagId];
 }
 
+// Debounced so typing doesn't fire a request per keystroke; the local
+// substring match (recordingFilter.ts) already shows instant results the
+// whole time this is in flight, so there's no rush.
+const SEARCH_DEBOUNCE_MS = 300;
+
+async function searchServer(query: string, fields: SearchFields) {
+	try {
+		const params = new URLSearchParams({
+			q: query,
+			title: fields.title ? '1' : '0',
+			description: fields.description ? '1' : '0',
+			transcript: fields.transcript ? '1' : '0'
+		});
+		const res = await api.fetch(`/api/recordings/search?${params}`, {
+			credentials: 'include',
+			signal: AbortSignal.timeout(8000)
+		});
+		if (!res.ok) return;
+		const results: Recording[] = await res.json();
+		// The query or field toggles could've changed again while this was in
+		// flight; only apply it if it's still the exact combination currently
+		// active.
+		if (searchKey(query, fields) !== searchKey(search.trim().toLowerCase(), searchFields)) return;
+		serverSearchIds = results.map((r) => r.id);
+		serverSearchKey = searchKey(query, fields);
+	} catch {
+		// Offline or timed out: nothing to do, the local match already covers
+		// this today (see the comment on serverSearchIds above), so no error
+		// state is needed here.
+	}
+}
+
 function setSearch(value: string) {
 	search = value;
+	if (searchDebounce) clearTimeout(searchDebounce);
+	const query = value.trim().toLowerCase();
+	if (!query) {
+		serverSearchIds = null;
+		serverSearchKey = null;
+		return;
+	}
+	searchDebounce = setTimeout(() => searchServer(query, searchFields), SEARCH_DEBOUNCE_MS);
+}
+
+// Toggling a search field is a discrete click, not rapid typing, so this
+// fires immediately rather than debouncing like setSearch above.
+function setSearchFields(fields: SearchFields) {
+	searchFields = fields;
+	if (searchDebounce) clearTimeout(searchDebounce);
+	const query = search.trim().toLowerCase();
+	if (!query) return;
+	void searchServer(query, fields);
 }
 
 function daysLeft(recording: Recording) {
@@ -442,6 +514,16 @@ export const recordingsStore = {
 	},
 	get search() {
 		return search;
+	},
+	get searchFields() {
+		return searchFields;
+	},
+	// null unless the server has actually answered for this exact current
+	// query + field-toggle combination (see setSearch/searchServer above), so
+	// a stale answer for a query/scope the user has since changed never gets
+	// applied.
+	get serverSearchIds() {
+		return serverSearchKey === searchKey(search.trim().toLowerCase(), searchFields) ? serverSearchIds : null;
 	},
 	get selectedTagIds() {
 		return selectedTagIds;
@@ -476,6 +558,7 @@ export const recordingsStore = {
 	setDateRange,
 	clearFilters,
 	setSearch,
+	setSearchFields,
 	toggleFavorite,
 	archive,
 	unarchive,

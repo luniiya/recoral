@@ -29,6 +29,7 @@ import {
 	listRecordings,
 	purgeExpiredTrash,
 	QuotaError,
+	searchRecordings,
 	updateRecording,
 	userStorageBytes
 } from "./recordings";
@@ -164,6 +165,13 @@ const server = Bun.serve({
 	// ceiling; the actual admin-configurable limit (Settings.maxImportSizeMb,
 	// default 1GiB) is enforced in the /api/import/takeout route itself.
 	maxRequestBodySize: 10 * 1024 * 1024 * 1024,
+	// Bun's default idle timeout is 10s. /api/export streams a zip of the
+	// user's whole library (dataExport.ts), which for a four-figure library
+	// can go quiet for longer than that while archiving/compressing between
+	// flushed chunks, confirmed via a real "request timed out after 10
+	// seconds" log killing the connection with nothing ever reaching the
+	// browser. 255 is the max Bun allows (stored as a single byte internally).
+	idleTimeout: 255,
 	routes: withCors({
 		"/api/health": () => Response.json({ status: "ok", version: APP_VERSION }),
 
@@ -451,6 +459,33 @@ const server = Bun.serve({
 					}
 					if (err instanceof QuotaError) return Response.json({ error: err.message }, { status: 413 });
 					return authErrorResponse(err) ?? Response.json({ error: (err as Error).message }, { status: 400 });
+				}
+			}
+		},
+
+		// Server-side search: the client always searches its own already-loaded
+		// copy first (instant, see recordingFilter.ts), then reconciles with
+		// this once it answers. Exists mainly so search can eventually cover
+		// data the client doesn't have loaded in bulk, not because today's
+		// client-side match is missing anything, see TODO.md. title/
+		// description/transcript params each default to "on" (true unless
+		// explicitly "0") so the endpoint still searches everything if called
+		// without them, matching searchRecordings()'s own defaults.
+		"/api/recordings/search": {
+			GET: (req) => {
+				try {
+					const user = requireUser(req);
+					const url = new URL(req.url);
+					const query = url.searchParams.get("q")?.trim() ?? "";
+					if (!query) return Response.json([]);
+					const fields = {
+						title: url.searchParams.get("title") !== "0",
+						description: url.searchParams.get("description") !== "0",
+						transcript: url.searchParams.get("transcript") !== "0"
+					};
+					return Response.json(searchRecordings(user.id, query, fields));
+				} catch (err) {
+					return authErrorResponse(err) ?? new Response(null, { status: 401 });
 				}
 			}
 		},

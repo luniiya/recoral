@@ -28,6 +28,8 @@
 		recordingsStore.favorites.filter((r) =>
 			matchesRecordingFilter(r, {
 				search: recordingsStore.search,
+				searchFields: recordingsStore.searchFields,
+				serverSearchIds: recordingsStore.serverSearchIds,
 				tagIds: recordingsStore.selectedTagIds,
 				dateFrom: recordingsStore.dateFrom,
 				dateTo: recordingsStore.dateTo

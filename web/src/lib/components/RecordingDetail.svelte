@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { Tag } from '@recoral/shared';
 	import AudioPlayer from './AudioPlayer.svelte';
+	import Dialog from './Dialog.svelte';
 	import TagChip from './TagChip.svelte';
 	import TagChips from './TagChips.svelte';
 	import TagRemoveConfirm from './TagRemoveConfirm.svelte';
@@ -37,6 +38,12 @@
 	let activeTab = $state<'audio' | 'transcription'>('audio');
 	let tagPickerOpen = $state(false);
 	let pendingRemoveTag = $state<Tag | null>(null);
+	// Only reachable for a not-yet-uploaded local recording (isLocal), see the
+	// delete button below: was a native browser confirm() before, the one
+	// destructive-action confirm in the app that never got the same
+	// frosted-glass Dialog treatment as every other one (bulk delete, tag
+	// trash, tag remove).
+	let pendingDeleteLocal = $state(false);
 
 	function searchByTag(tag: Tag) {
 		recordingsStore.setTagFilter(tag.id);
@@ -231,12 +238,11 @@
 				title={isLocal ? 'Delete' : 'Move to bin'}
 				onclick={() => {
 					if (isLocal) {
-						if (!confirm('Delete this recording? It has not been uploaded yet, this cannot be undone.')) return;
-						recordingsStore.deleteForever(recording.id);
+						pendingDeleteLocal = true;
 					} else {
 						recordingsStore.trash(recording.id);
+						onclose();
 					}
-					onclose();
 				}}
 			>
 				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="size-4">
@@ -318,6 +324,32 @@
 				}}
 				oncancel={() => (pendingRemoveTag = null)}
 			/>
+		{/if}
+
+		{#if pendingDeleteLocal}
+			<Dialog onclose={() => (pendingDeleteLocal = false)}>
+				<p class="mb-4 text-sm text-gray-900 dark:text-gray-100">
+					Delete this recording? It has not been uploaded yet, this cannot be undone.
+				</p>
+				<div class="flex gap-2">
+					<button
+						class="flex-1 rounded-full px-4 py-2 text-sm font-medium text-gray-600 ring-1 ring-gray-200 transition hover:bg-gray-100 dark:text-gray-300 dark:ring-white/10 dark:hover:bg-white/5"
+						onclick={() => (pendingDeleteLocal = false)}
+					>
+						Cancel
+					</button>
+					<button
+						class="flex-1 rounded-full bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700"
+						onclick={() => {
+							pendingDeleteLocal = false;
+							recordingsStore.deleteForever(recording.id);
+							onclose();
+						}}
+					>
+						Delete
+					</button>
+				</div>
+			</Dialog>
 		{/if}
 	</div>
 
