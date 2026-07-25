@@ -1,0 +1,35 @@
+# Opt-in GPU variant: builds whisper.cpp from source with the CUDA backend.
+# NOT the default (see ./Dockerfile for that), CPU is what everyone gets
+# unless they deliberately opt into this file (see hwaccel.transcription.yml
+# and the commented block in docker-compose.yml for how to enable it).
+# Needs the NVIDIA Container Toolkit on the host for the container to
+# actually see the GPU at runtime (the `driver: nvidia` device reservation
+# in hwaccel.transcription.yml's cuda entry), separate from just having an
+# NVIDIA card, most distros don't ship it by default.
+FROM nvidia/cuda:12.4.1-devel-ubuntu22.04
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+		git cmake build-essential ffmpeg ca-certificates curl unzip \
+	&& rm -rf /var/lib/apt/lists/*
+
+# Bun runs the thin HTTP wrapper (server.ts) around the whisper-cli binary.
+RUN curl -fsSL https://bun.sh/install | bash
+ENV PATH="/root/.bun/bin:${PATH}"
+
+WORKDIR /app
+RUN git clone --depth 1 https://github.com/ggml-org/whisper.cpp.git whisper.cpp
+WORKDIR /app/whisper.cpp
+RUN cmake -B build -DGGML_CUDA=1 -DCMAKE_BUILD_TYPE=Release \
+	&& cmake --build build --config Release -j"$(nproc)"
+
+WORKDIR /app
+COPY package.json ./
+RUN bun install --production
+COPY server.ts ./
+
+ENV MODELS_DIR=/models
+ENV WHISPER_CLI=/app/whisper.cpp/build/bin/whisper-cli
+ENV PORT=8090
+
+EXPOSE 8090
+CMD ["bun", "run", "server.ts"]

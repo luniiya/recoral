@@ -31,9 +31,9 @@ services:
   # means a genuinely different container image (a different compiled
   # binary), not a runtime setting.
   #
-  # Have a compatible AMD GPU (ROCm, gfx1100/gfx1101 tested)? Uncomment the
-  # `build`/`image` override below and the `extends` block, matching Immich's
-  # own hwaccel.ml.yml pattern:
+  # Have a compatible GPU? Uncomment the `build`/`image` override below and
+  # the `extends` block, matching Immich's own hwaccel.ml.yml pattern.
+  # AMD (ROCm, gfx1100/gfx1101 tested):
   #
   #   build:
   #     context: ./transcription
@@ -42,8 +42,17 @@ services:
   #     file: hwaccel.transcription.yml
   #     service: rocm
   #
+  # NVIDIA (CUDA, needs the NVIDIA Container Toolkit on the host):
+  #
+  #   build:
+  #     context: ./transcription
+  #     dockerfile: Dockerfile.cuda
+  #   extends:
+  #     file: hwaccel.transcription.yml
+  #     service: cuda
+  #
   # (if pulling published images instead of building locally, use the
-  # `-rocm` tag suffix instead of the build override, e.g.
+  # `-rocm`/`-cuda` tag suffix instead of the build override, e.g.
   # ghcr.io/luniiya/recoral-transcription:latest-rocm)
   transcription:
     build: ./transcription

@@ -25,15 +25,16 @@ services:
       - transcription
 
   # ASR (whisper.cpp). CPU by default, no GPU device passthrough. Have a
-  # compatible AMD GPU (ROCm, gfx1100/gfx1101 tested)? Change the image tag
-  # below to `latest-rocm` and uncomment the extends block, matching
+  # compatible AMD or NVIDIA GPU? Change the image tag below to `latest-rocm`
+  # or `latest-cuda` and uncomment the matching extends block, matching
   # Immich's own hwaccel.ml.yml pattern. Hardware backend has to be picked
   # before startup (it's a different built image), not toggled at runtime.
+  # CUDA needs the NVIDIA Container Toolkit installed on the host.
   transcription:
     image: ghcr.io/luniiya/recoral-transcription:${RECORAL_VERSION:-latest}
     # extends:
     #   file: hwaccel.transcription.yml
-    #   service: rocm
+    #   service: rocm # or cuda
     environment:
       - PORT=8090
       - MODELS_DIR=/models
