@@ -44,11 +44,32 @@ function apiUrl(path: string): string {
 	return `${baseUrl}${path}`;
 }
 
+// Diagnostic only, see bootLog.ts: every request through this wrapper
+// (which is all of them, this is the only place fetch() gets called against
+// the API) is timed and its outcome logged, so a hang or a slow server is
+// visible without guessing. No timeout is applied here yet, deliberately,
+// so the logs first show how long an unreachable server actually takes to
+// fail on its own before deciding what timeout value would even make sense.
+async function timedFetch(path: string, init: RequestInit): Promise<Response> {
+	const url = apiUrl(path);
+	const startedAt = Date.now();
+	console.log(`[api] -> ${init.method ?? 'GET'} ${url}`);
+	try {
+		const res = await fetch(url, init);
+		console.log(`[api] <- ${init.method ?? 'GET'} ${url} ${res.status} (${Date.now() - startedAt}ms)`);
+		return res;
+	} catch (err) {
+		const kind = err instanceof DOMException && err.name === 'AbortError' ? 'aborted' : 'network error';
+		console.log(`[api] xx ${init.method ?? 'GET'} ${url} ${kind} after ${Date.now() - startedAt}ms:`, err);
+		throw err;
+	}
+}
+
 function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
-	if (!token) return fetch(apiUrl(path), init);
+	if (!token) return timedFetch(path, init);
 	const headers = new Headers(init.headers);
 	headers.set('Authorization', `Bearer ${token}`);
-	return fetch(apiUrl(path), { ...init, headers });
+	return timedFetch(path, { ...init, headers });
 }
 
 export const api = {

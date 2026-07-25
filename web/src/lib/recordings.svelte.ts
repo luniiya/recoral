@@ -131,7 +131,10 @@ function readDuration(url: string): Promise<number> {
 
 async function load() {
 	try {
-		const res = await api.fetch('/api/recordings', { credentials: 'include' });
+		// Bounded, see tags.svelte.ts's load() / auth.svelte.ts's refresh() for
+		// why: an unreachable server otherwise leaves this hanging for however
+		// long the OS network stack takes to give up on its own.
+		const res = await api.fetch('/api/recordings', { credentials: 'include', signal: AbortSignal.timeout(8000) });
 		if (res.ok) {
 			all = await res.json();
 			writeLocalCache(CACHED_RECORDINGS_KEY, all);

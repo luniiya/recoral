@@ -38,19 +38,30 @@
 	}
 
 	onMount(async () => {
+		// Bounded: otherwise an unreachable server leaves this dot showing
+		// stale cached state for however long the OS network stack takes to
+		// give up on its own (observed anywhere from milliseconds to minutes),
+		// defeating the point of an at-a-glance status indicator.
 		try {
-			const res = await api.fetch('/api/health');
+			const res = await api.fetch('/api/health', { signal: AbortSignal.timeout(8000) });
 			serverOnline = res.ok;
 			if (res.ok) version = (await res.json()).version;
 		} catch {
 			serverOnline = false;
 		}
 
-		const storageRes = await api.fetch('/api/storage', { credentials: 'include' });
-		if (storageRes.ok) {
-			const usage = await storageRes.json();
-			usedBytes = usage.usedBytes;
-			limitMb = usage.limitMb;
+		try {
+			const storageRes = await api.fetch('/api/storage', {
+				credentials: 'include',
+				signal: AbortSignal.timeout(8000)
+			});
+			if (storageRes.ok) {
+				const usage = await storageRes.json();
+				usedBytes = usage.usedBytes;
+				limitMb = usage.limitMb;
+			}
+		} catch {
+			// Keep whatever storage numbers were last cached.
 		}
 
 		persist();

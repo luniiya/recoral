@@ -4,6 +4,8 @@
 	import { page } from '$app/state';
 	import { applyAccentHue, cacheAccentHue } from '$lib/accent';
 	import { auth } from '$lib/auth.svelte';
+	import { bootLog } from '$lib/bootLog';
+	import LogoWordmark from '$lib/components/LogoWordmark.svelte';
 	import { mobileBack } from '$lib/mobileBack.svelte';
 	import { onboarding } from '$lib/onboarding.svelte';
 	import { outboxStore } from '$lib/outbox.svelte';
@@ -17,14 +19,18 @@
 
 	let { children } = $props();
 
+	bootLog('root layout: module evaluated, native =', isNativePlatform(), 'onboarding.mode =', onboarding.mode);
+
 	// Mobile only: before anything else loads, make sure a server is picked
 	// (or "go offline" was chosen) at least once. Desktop webUI always talks
 	// to its own origin, so there's nothing to pick, this never fires there.
 	$effect(() => {
 		if (!isNativePlatform()) return;
 		if (onboarding.mode === null && page.url.pathname !== '/setup') {
+			bootLog('root layout: no onboarding mode yet, redirecting to /setup');
 			goto('/setup');
 		} else if (onboarding.mode === 'offline' && page.url.pathname !== '/setup/offline') {
+			bootLog('root layout: offline mode, redirecting to /setup/offline');
 			goto('/setup/offline');
 		}
 	});
@@ -34,10 +40,19 @@
 	// just hit a URL that doesn't exist and throw parsing the response.
 	$effect(() => {
 		if (isNativePlatform() && onboarding.mode === null) {
+			bootLog('root layout: skipping auth refresh, no server picked yet');
 			auth.skipRefresh();
 			return;
 		}
+		bootLog('root layout: calling auth.refresh()');
 		auth.refresh();
+	});
+
+	// Diagnostic only, see bootLog.ts: marks exactly when the top-level
+	// "Loading…" screen below actually clears, so its duration is visible
+	// alongside the auth.refresh()/tags/recordings timings logged elsewhere.
+	$effect(() => {
+		bootLog('root layout: auth.loading =', auth.loading);
 	});
 
 	// Once logged in, try to push anything left over in the local outbox
@@ -71,6 +86,7 @@
 	});
 
 	onMount(() => {
+		bootLog('root layout: onMount fired');
 		themeStore.init();
 		wavySeekStore.init();
 
@@ -137,7 +153,14 @@
 </svelte:head>
 
 {#if auth.loading}
-	<div class="flex min-h-dvh items-center justify-center text-sm text-gray-400">Loading&hellip;</div>
+	<!-- Only reached on a genuine first-ever login on this device/browser
+	     (no cached user to show meanwhile), and bounded to ~8s by
+	     auth.refresh()'s own request timeout, not an indefinite spinner. -->
+	<div class="flex min-h-dvh items-center justify-center bg-white dark:bg-black">
+		<div class="animate-pulse">
+			<LogoWordmark size="size-10" textSize="text-xl" colored />
+		</div>
+	</div>
 {:else}
 	{@render children()}
 {/if}
