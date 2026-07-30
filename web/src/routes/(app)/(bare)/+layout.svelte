@@ -2,7 +2,6 @@
 	import AvatarMenu from '$lib/components/AvatarMenu.svelte';
 	import BottomNav from '$lib/components/BottomNav.svelte';
 	import HeaderBrand from '$lib/components/HeaderBrand.svelte';
-	import SettingsNav from '$lib/components/SettingsNav.svelte';
 	import StatusBarSpacer from '$lib/components/StatusBarSpacer.svelte';
 	import ThemeToggle from '$lib/components/ThemeToggle.svelte';
 
@@ -20,13 +19,8 @@
 		</div>
 	</header>
 
-	<div class="flex min-h-0 flex-1 flex-col md:flex-row">
-		<SettingsNav />
-		<main class="min-h-0 flex-1 overflow-y-auto">
-			<div class="mx-auto w-full max-w-xl px-6 pt-6 pb-24 md:pt-10 md:pb-10">
-				{@render children()}
-			</div>
-		</main>
+	<div class="flex min-h-0 flex-1 flex-col overflow-hidden">
+		{@render children()}
 	</div>
 </div>
 

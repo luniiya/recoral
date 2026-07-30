@@ -3,11 +3,13 @@
 	import { validatePassword } from '@recoral/shared';
 	import { auth } from '$lib/auth.svelte';
 	import Avatar from '$lib/components/Avatar.svelte';
+	import OverflowMenu from '$lib/components/OverflowMenu.svelte';
 	import PasswordInput from '$lib/components/PasswordInput.svelte';
 	import PasswordMatchHint from '$lib/components/PasswordMatchHint.svelte';
 	import Toggle from '$lib/components/Toggle.svelte';
 	import { api } from '$lib/api.svelte';
 	import { onMount } from 'svelte';
+	import { slide } from 'svelte/transition';
 
 	let users = $state<User[]>([]);
 	let settings = $state<Settings | null>(null);
@@ -173,7 +175,7 @@
 		</div>
 
 		{#if showCreateUser}
-			<div class="mb-5 flex flex-col gap-3 rounded-xl bg-gray-50 p-4 dark:bg-white/5">
+			<div class="mb-5 flex flex-col gap-3 rounded-xl bg-gray-50 p-4 dark:bg-white/5" transition:slide={{ duration: 200 }}>
 				<div class="flex flex-wrap gap-2">
 					<input
 						type="text"
@@ -269,40 +271,48 @@
 							/>
 						</label>
 
-						<button
-							class="flex size-8 shrink-0 items-center justify-center rounded-full text-gray-400 transition hover:bg-gray-100 hover:text-accent-600 dark:hover:bg-white/5"
-							aria-label={`Reset password for ${user.username}`}
-							title="Reset password"
-							onclick={() => openResetPassword(user.id)}
-						>
-							<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="size-4">
-								<path
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94Z"
-								/>
-							</svg>
-						</button>
-
-						{#if user.id !== auth.user?.id}
-							<button
-								class="flex size-8 shrink-0 items-center justify-center rounded-full text-gray-400 transition hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-500/10 dark:hover:text-red-400"
-								aria-label={`Delete ${user.username}`}
-								onclick={() => (deleteTarget = user)}
-							>
-								<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="size-4">
-									<path
-										stroke-linecap="round"
-										stroke-linejoin="round"
-										d="M6 6.5h12M9.5 6.5V5a1 1 0 0 1 1-1h3a1 1 0 0 1 1 1v1.5M7.5 6.5 8 19a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1l.5-12.5"
-									/>
-								</svg>
-							</button>
-						{/if}
+						<OverflowMenu label={`More options for ${user.username}`}>
+							{#snippet menu(close)}
+								<button
+									class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-gray-700 transition hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-white/5"
+									onclick={() => {
+										close();
+										openResetPassword(user.id);
+									}}
+								>
+									<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="size-4 shrink-0">
+										<path
+											stroke-linecap="round"
+											stroke-linejoin="round"
+											d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94Z"
+										/>
+									</svg>
+									Change password
+								</button>
+								{#if user.id !== auth.user?.id}
+									<button
+										class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-red-600 transition hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-500/10"
+										onclick={() => {
+											close();
+											deleteTarget = user;
+										}}
+									>
+										<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="size-4 shrink-0">
+											<path
+												stroke-linecap="round"
+												stroke-linejoin="round"
+												d="M6 6.5h12M9.5 6.5V5a1 1 0 0 1 1-1h3a1 1 0 0 1 1 1v1.5M7.5 6.5 8 19a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1l.5-12.5"
+											/>
+										</svg>
+										Delete account
+									</button>
+								{/if}
+							{/snippet}
+						</OverflowMenu>
 					</div>
 
 					{#if resetPasswordTarget === user.id}
-						<div class="flex flex-col gap-2 rounded-xl bg-gray-50 p-4 dark:bg-white/5">
+						<div class="flex flex-col gap-2 rounded-xl bg-gray-50 p-4 dark:bg-white/5" transition:slide={{ duration: 200 }}>
 							<div class="flex flex-wrap gap-2">
 								<PasswordInput
 									placeholder="New password"

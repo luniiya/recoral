@@ -1,18 +1,13 @@
 <script lang="ts">
 	import type { Settings } from '@recoral/shared';
-	import ColorPicker from '$lib/components/ColorPicker.svelte';
 	import Toggle from '$lib/components/Toggle.svelte';
 	import { api } from '$lib/api.svelte';
-	import { readAsDataUrl } from '$lib/file';
 	import { onMount } from 'svelte';
 
 	let settings = $state<Settings | null>(null);
 	let serverOnline = $state<boolean | null>(null);
 	let serverVersion = $state('');
 	let loading = $state(true);
-	let lastPickedHue = $state(26);
-	let bgFileInput: HTMLInputElement | undefined = $state();
-	let bgUploading = $state(false);
 
 	onMount(async () => {
 		const [healthRes, settingsRes] = await Promise.all([
@@ -38,18 +33,6 @@
 			body: JSON.stringify(updates)
 		});
 		if (res.ok) settings = await res.json();
-	}
-
-	async function onBackgroundSelected(event: Event) {
-		const file = (event.target as HTMLInputElement).files?.[0];
-		if (!file) return;
-		bgUploading = true;
-		try {
-			const dataUrl = await readAsDataUrl(file);
-			await patchSettings({ backgroundImage: dataUrl });
-		} finally {
-			bgUploading = false;
-		}
 	}
 </script>
 
@@ -97,30 +80,6 @@
 						label="Require strong passwords"
 					/>
 				</div>
-			</div>
-
-			<div class="flex flex-col gap-3 border-t border-gray-100 pt-5 dark:border-white/10">
-				<div class="flex items-center justify-between gap-4">
-					<div>
-						<p class="text-sm text-gray-900 dark:text-gray-100">Random login page color</p>
-						<p class="text-xs text-gray-400">Off uses a fixed accent color instead of a random one each visit.</p>
-					</div>
-					<Toggle
-						checked={settings.defaultAccentHue === null}
-						onchange={(checked) => patchSettings({ defaultAccentHue: checked ? null : lastPickedHue })}
-						label="Random login page color"
-					/>
-				</div>
-
-				{#if settings.defaultAccentHue !== null}
-					<ColorPicker
-						value={settings.defaultAccentHue}
-						onselect={(hue) => {
-							lastPickedHue = hue;
-							patchSettings({ defaultAccentHue: hue });
-						}}
-					/>
-				{/if}
 			</div>
 
 			<div class="flex flex-col gap-3 border-t border-gray-100 pt-5 dark:border-white/10">
@@ -176,38 +135,6 @@
 					/>
 					GB
 				</label>
-			</div>
-
-			<div class="flex flex-col gap-3 border-t border-gray-100 pt-5 dark:border-white/10">
-				<div class="flex items-center justify-between gap-4">
-					<div>
-						<p class="text-sm text-gray-900 dark:text-gray-100">Login page background</p>
-						<p class="text-xs text-gray-400">Shown behind the login card instead of a plain background.</p>
-					</div>
-					{#if settings.backgroundImage}
-						<button
-							class="shrink-0 rounded-full border border-gray-200 px-3.5 py-1.5 text-xs text-gray-600 transition hover:bg-gray-100 dark:border-white/10 dark:text-gray-300 dark:hover:bg-white/5"
-							onclick={() => patchSettings({ backgroundImage: null })}
-						>
-							Remove
-						</button>
-					{/if}
-				</div>
-
-				{#if settings.backgroundImage}
-					<div class="h-28 w-full overflow-hidden rounded-lg">
-						<img src={settings.backgroundImage} alt="Login background" class="size-full object-cover" />
-					</div>
-				{:else}
-					<button
-						class="self-start rounded-full border border-gray-200 px-4 py-2 text-sm text-gray-600 transition hover:bg-gray-100 disabled:opacity-60 dark:border-white/10 dark:text-gray-300 dark:hover:bg-white/5"
-						onclick={() => bgFileInput?.click()}
-						disabled={bgUploading}
-					>
-						{bgUploading ? 'Uploading…' : 'Upload image'}
-					</button>
-				{/if}
-				<input bind:this={bgFileInput} type="file" accept="image/*" class="hidden" onchange={onBackgroundSelected} />
 			</div>
 		</div>
 	{/if}

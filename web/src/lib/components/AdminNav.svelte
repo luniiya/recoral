@@ -5,40 +5,47 @@
 
 	const items: { href: string; label: string; icon: IconPart[] }[] = [
 		{
-			href: '/settings',
-			label: 'Account',
+			href: '/admin',
+			label: 'General',
 			icon: [
-				{ type: 'circle', cx: 12, cy: 8, r: 3.2 },
-				{ type: 'path', d: 'M5 20c0-3.6 3.1-6 7-6s7 2.4 7 6' }
+				{ type: 'circle', cx: 12, cy: 12, r: 3 },
+				{
+					type: 'path',
+					d: 'M12 3v2.2M12 18.8V21M21 12h-2.2M5.2 12H3M18.1 5.9l-1.6 1.6M7.5 16.5l-1.6 1.6M18.1 18.1l-1.6-1.6M7.5 7.5 5.9 5.9'
+				}
 			]
 		},
 		{
-			href: '/settings/appearance',
-			label: 'Appearance',
+			href: '/admin/login',
+			label: 'Login page',
 			icon: [
-				{ type: 'circle', cx: 9, cy: 9, r: 3.2 },
-				{ type: 'circle', cx: 15, cy: 9, r: 3.2 },
-				{ type: 'circle', cx: 12, cy: 15, r: 3.2 }
+				{ type: 'path', d: 'M4 5h16a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Z' },
+				{ type: 'path', d: 'M9 21h6M12 18v3' }
 			]
 		},
 		{
-			href: '/settings/import',
-			label: 'Import',
+			href: '/admin/transcription',
+			label: 'Transcription',
 			icon: [
-				{ type: 'path', d: 'M12 4v10m0 0-3.5-3.5M12 14l3.5-3.5' },
-				{ type: 'path', d: 'M5 16v3a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-3' }
+				{ type: 'path', d: 'M6 3h9l3 3v15a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z' },
+				{ type: 'path', d: 'M8 9h4M8 12h8M8 15h8' }
 			]
 		},
 		{
-			href: '/settings/export',
-			label: 'Export',
+			href: '/admin/users',
+			label: 'Users',
 			icon: [
-				{ type: 'path', d: 'M12 14V4m0 0 3.5 3.5M12 4 8.5 7.5' },
-				{ type: 'path', d: 'M5 16v3a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-3' }
+				{ type: 'circle', cx: 9, cy: 8, r: 3 },
+				{ type: 'path', d: 'M3.5 19c0-3 2.5-5.5 5.5-5.5s5.5 2.5 5.5 5.5' },
+				{ type: 'circle', cx: 17, cy: 9, r: 2.3 },
+				{ type: 'path', d: 'M14.9 13.7c.55-.15 1.15-.2 1.6-.2 2.5 0 4.5 2 4.5 4.5' }
 			]
 		}
 	];
 
+	// The General item stays active at the bare /admin root only, distinct
+	// entries for Transcription/Users, exact match works for all three since
+	// there's no further nesting under any of them.
 	function isActive(href: string) {
 		return page.url.pathname === href;
 	}

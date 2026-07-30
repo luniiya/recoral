@@ -8,6 +8,7 @@
 	import { api } from '$lib/api.svelte';
 	import { readAsDataUrl } from '$lib/file';
 	import { onMount } from 'svelte';
+	import { slide } from 'svelte/transition';
 
 	let saving = $state(false);
 	let error = $state('');
@@ -41,6 +42,19 @@
 	let detailsError = $state('');
 	let detailsSuccess = $state('');
 	let requireStrongPasswords = $state(true);
+	// Password fields stay unmounted until explicitly opened. Browsers will
+	// happily autofill a bare "new password" input with the account's existing
+	// saved password on page load, silently flipping hasChanges true and
+	// tripping the strength check on a change the user never asked for, locking
+	// them out of saving an unrelated username/email edit. Gating behind a
+	// click means nothing autofills until the user actually means to type here.
+	let changingPassword = $state(false);
+
+	function cancelChangePassword() {
+		changingPassword = false;
+		newPassword = '';
+		newConfirmPassword = '';
+	}
 
 	onMount(async () => {
 		const res = await api.fetch('/api/settings');
@@ -160,17 +174,35 @@
 			</label>
 
 			<div class="flex flex-col gap-4 border-t border-gray-100 pt-4 dark:border-white/10">
-				<label class="flex flex-col gap-1.5">
-					<span class="form-label">New password <span class="text-gray-400">(leave blank to keep it)</span></span>
-					<PasswordInput bind:value={newPassword} minlength={8} autocomplete="new-password" />
-				</label>
+				{#if !changingPassword}
+					<button
+						type="button"
+						class="self-start text-sm font-medium text-accent-600 hover:underline dark:text-accent-400"
+						onclick={() => (changingPassword = true)}
+					>
+						Change password
+					</button>
+				{:else}
+					<div class="flex flex-col gap-4" transition:slide={{ duration: 200 }}>
+						<label class="flex flex-col gap-1.5">
+							<span class="form-label">New password</span>
+							<PasswordInput bind:value={newPassword} minlength={8} autocomplete="new-password" />
+						</label>
 
-				{#if newPassword}
-					<label class="flex flex-col gap-1.5">
-						<span class="form-label">Confirm new password</span>
-						<PasswordInput bind:value={newConfirmPassword} minlength={8} autocomplete="new-password" />
-						<PasswordMatchHint password={newPassword} confirm={newConfirmPassword} />
-					</label>
+						<label class="flex flex-col gap-1.5">
+							<span class="form-label">Confirm new password</span>
+							<PasswordInput bind:value={newConfirmPassword} minlength={8} autocomplete="new-password" />
+							<PasswordMatchHint password={newPassword} confirm={newConfirmPassword} />
+						</label>
+
+						<button
+							type="button"
+							class="self-start text-sm text-gray-400 hover:underline"
+							onclick={cancelChangePassword}
+						>
+							Cancel password change
+						</button>
+					</div>
 				{/if}
 			</div>
 

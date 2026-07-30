@@ -43,7 +43,7 @@ import { enqueueAllUntranscribed, enqueueTranscription, requeueStuckTranscriptio
 
 const webDir = new URL("../../web/build/", import.meta.url);
 const MAX_AVATAR_LENGTH = 2_000_000; // ~1.5MB decoded, generous for a small profile picture
-const MAX_BACKGROUND_LENGTH = 8_000_000; // ~6MB decoded, a full-bleed page background needs more room
+const MAX_BACKGROUND_LENGTH = 22_369_622; // 16MiB decoded (base64 inflates by 4/3), a full-bleed page background needs more room
 
 const TRANSCRIPTION_MODELS: TranscriptionModel[] = ["tiny", "base", "small", "medium", "large"];
 
