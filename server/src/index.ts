@@ -6,12 +6,16 @@ import {
 	adminCreateUser,
 	adminUpdateUser,
 	clearSessionCookie,
+	deleteOwnAccount,
 	deleteUser,
 	endSession,
+	listSessions,
 	listUsers,
 	login,
 	register,
+	revokeSession,
 	sessionCookie,
+	tokenFromRequest,
 	updateAccount,
 	userCount,
 	userFromRequest
@@ -183,7 +187,13 @@ const server = Bun.serve({
 						return Response.json({ error: "Sign ups are currently disabled" }, { status: 403 });
 					}
 					const { username, email, password, accentHue } = await readRegisterBody(req);
-					const { user, token } = await register(username, password, email, accentHue);
+					const { user, token } = await register(
+						username,
+						password,
+						email,
+						accentHue,
+						req.headers.get("user-agent")
+					);
 					return Response.json({ ...user, token }, { headers: { "Set-Cookie": sessionCookie(token) } });
 				} catch (err) {
 					return Response.json({ error: (err as Error).message }, { status: 400 });
@@ -195,7 +205,7 @@ const server = Bun.serve({
 			POST: async (req) => {
 				try {
 					const { identifier, password } = await readLoginBody(req);
-					const { user, token } = await login(identifier, password);
+					const { user, token } = await login(identifier, password, req.headers.get("user-agent"));
 					return Response.json({ ...user, token }, { headers: { "Set-Cookie": sessionCookie(token) } });
 				} catch (err) {
 					return Response.json({ error: (err as Error).message }, { status: 401 });
@@ -249,6 +259,41 @@ const server = Bun.serve({
 				} catch (err) {
 					if (err instanceof UnauthorizedError) return new Response(null, { status: 401 });
 					return Response.json({ error: (err as Error).message }, { status: 400 });
+				}
+			},
+			DELETE: async (req) => {
+				try {
+					const user = requireUser(req);
+					const body = await req.json().catch(() => ({}));
+					const currentPassword = typeof body.currentPassword === "string" ? body.currentPassword : "";
+					await deleteOwnAccount(user.id, currentPassword);
+					return new Response(null, { status: 204, headers: { "Set-Cookie": clearSessionCookie() } });
+				} catch (err) {
+					if (err instanceof UnauthorizedError) return new Response(null, { status: 401 });
+					return Response.json({ error: (err as Error).message }, { status: 400 });
+				}
+			}
+		},
+
+		"/api/account/sessions": {
+			GET: (req) => {
+				try {
+					const user = requireUser(req);
+					return Response.json(listSessions(user.id, tokenFromRequest(req)));
+				} catch (err) {
+					return authErrorResponse(err) ?? new Response(null, { status: 401 });
+				}
+			}
+		},
+
+		"/api/account/sessions/:id": {
+			DELETE: (req) => {
+				try {
+					const user = requireUser(req);
+					revokeSession(user.id, req.params.id);
+					return new Response(null, { status: 204 });
+				} catch (err) {
+					return authErrorResponse(err) ?? new Response(null, { status: 401 });
 				}
 			}
 		},

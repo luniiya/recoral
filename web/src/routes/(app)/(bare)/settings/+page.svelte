@@ -1,8 +1,10 @@
 <script lang="ts">
 	import { USERNAME_CHANGE_COOLDOWN_DAYS, validatePassword } from '@recoral/shared';
+	import { goto } from '$app/navigation';
 	import { auth } from '$lib/auth.svelte';
 	import Avatar from '$lib/components/Avatar.svelte';
 	import BackButton from '$lib/components/BackButton.svelte';
+	import Dialog from '$lib/components/Dialog.svelte';
 	import PasswordInput from '$lib/components/PasswordInput.svelte';
 	import PasswordMatchHint from '$lib/components/PasswordMatchHint.svelte';
 	import { api } from '$lib/api.svelte';
@@ -68,6 +70,30 @@
 		);
 		return next > new Date() ? next : null;
 	});
+
+	let deleteDialogOpen = $state(false);
+	let deletePassword = $state('');
+	let deleteError = $state('');
+	let deleting = $state(false);
+
+	function openDeleteDialog() {
+		deleteDialogOpen = true;
+		deletePassword = '';
+		deleteError = '';
+	}
+
+	async function confirmDeleteAccount() {
+		deleteError = '';
+		deleting = true;
+		try {
+			await auth.deleteAccount(deletePassword);
+			goto('/login');
+		} catch (err) {
+			deleteError = (err as Error).message;
+		} finally {
+			deleting = false;
+		}
+	}
 
 	onMount(async () => {
 		const res = await api.fetch('/api/settings');
@@ -264,7 +290,52 @@
 		</div>
 	</div>
 
+	<div class="card mt-6 border-red-200 p-6 dark:border-red-500/20">
+		<h2 class="mb-1 text-sm font-semibold text-red-600 dark:text-red-400">Danger zone</h2>
+		<p class="mb-4 text-sm text-gray-500 dark:text-gray-400">
+			Permanently deletes your account, every recording, and every tag. There's no undoing this.
+		</p>
+		<button
+			class="rounded-full border border-red-200 px-4 py-2 text-sm font-semibold text-red-600 transition hover:bg-red-50 dark:border-red-500/30 dark:text-red-400 dark:hover:bg-red-500/10"
+			onclick={openDeleteDialog}
+		>
+			Delete account
+		</button>
+	</div>
+
 	{#if error}
 		<p class="mt-4 text-sm text-red-600 dark:text-red-400">{error}</p>
 	{/if}
+{/if}
+
+{#if deleteDialogOpen}
+	<Dialog onclose={() => (deleteDialogOpen = false)} centered maxWidth="max-w-sm">
+		<div class="flex flex-col gap-4 text-left">
+			<h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100">Delete your account?</h3>
+			<p class="text-sm text-gray-500 dark:text-gray-400">
+				This permanently deletes your account, every recording, and every tag. There's no undoing this. Enter
+				your password to confirm.
+			</p>
+			<PasswordInput placeholder="Current password" bind:value={deletePassword} autocomplete="current-password" />
+			{#if deleteError}
+				<p class="text-sm text-red-600 dark:text-red-400">{deleteError}</p>
+			{/if}
+			<div class="flex justify-end gap-2">
+				<button
+					class="rounded-full px-4 py-2 text-sm font-medium text-gray-600 ring-1 ring-gray-200 transition hover:bg-gray-100 dark:text-gray-300 dark:ring-white/10 dark:hover:bg-white/5"
+					onclick={() => (deleteDialogOpen = false)}
+					disabled={deleting}
+				>
+					Cancel
+				</button>
+				<button
+					class="rounded-full bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700 disabled:opacity-60"
+					onclick={confirmDeleteAccount}
+					disabled={deleting || !deletePassword}
+				>
+					{deleting ? 'Deleting…' : 'Delete account'}
+				</button>
+			</div>
+		</div>
+	</Dialog>
 {/if}

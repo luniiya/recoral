@@ -3,6 +3,7 @@ import {
 	validatePassword,
 	USERNAME_CHANGE_COOLDOWN_DAYS,
 	type AdminUserSummary,
+	type SessionSummary,
 	type User
 } from "@recoral/shared";
 import { unlinkSync } from "node:fs";
@@ -11,6 +12,13 @@ import { getSettings } from "./settings";
 
 const SESSION_COOKIE = "recoral_session";
 const DEFAULT_ACCENT_HUE = 26;
+
+// Only bumped once every this long per session, not on every single request,
+// so an active session doesn't turn into a write on every API call.
+const LAST_SEEN_THROTTLE_MS = 5 * 60 * 1000;
+
+const MAX_LOGIN_ATTEMPTS = 5;
+const LOGIN_LOCKOUT_MS = 15 * 60 * 1000;
 
 interface UserRow {
 	id: string;
@@ -37,6 +45,41 @@ function toUser(row: UserRow): User {
 		storageLimitMb: row.storage_limit_mb,
 		usernameChangedAt: row.username_changed_at
 	};
+}
+
+interface SessionRow {
+	id: string;
+	token: string;
+	user_id: string;
+	created_at: string;
+	user_agent: string | null;
+	last_seen_at: string | null;
+}
+
+// Server-side sniff rather than the client self-reporting its own platform:
+// simpler (no client changes needed) and good enough for a phone-vs-desktop
+// icon and a rough "Browser on OS" label, this isn't trying to be a precise
+// analytics-grade UA parser.
+function parseUserAgent(userAgent: string | null): { device: "mobile" | "desktop"; label: string } {
+	if (!userAgent) return { device: "desktop", label: "Unknown device" };
+
+	const isMobile = /Android|iPhone|iPad|Mobile/i.test(userAgent);
+
+	let os = "Unknown OS";
+	if (/Android/i.test(userAgent)) os = "Android";
+	else if (/iPhone|iPad|iPod|iOS/i.test(userAgent)) os = "iOS";
+	else if (/Windows/i.test(userAgent)) os = "Windows";
+	else if (/Mac OS X|Macintosh/i.test(userAgent)) os = "macOS";
+	else if (/Linux/i.test(userAgent)) os = "Linux";
+
+	let browser = "Browser";
+	if (/Edg\//i.test(userAgent)) browser = "Edge";
+	else if (/OPR\//i.test(userAgent)) browser = "Opera";
+	else if (/Firefox/i.test(userAgent)) browser = "Firefox";
+	else if (/CriOS|Chrome/i.test(userAgent)) browser = "Chrome";
+	else if (/Safari/i.test(userAgent)) browser = "Safari";
+
+	return { device: isMobile ? "mobile" : "desktop", label: `${browser} on ${os}` };
 }
 
 export function parseCookies(header: string | null): Record<string, string> {
@@ -80,21 +123,28 @@ export function userFromRequest(req: Request): User | null {
 	if (!token) return null;
 
 	const row = db
-		.query<UserRow, [string]>(
-			`SELECT users.* FROM sessions
+		.query<UserRow & { last_seen_at: string | null }, [string]>(
+			`SELECT users.*, sessions.last_seen_at FROM sessions
 			 JOIN users ON users.id = sessions.user_id
 			 WHERE sessions.token = ?`
 		)
 		.get(token);
+	if (!row) return null;
 
-	return row ? toUser(row) : null;
+	const lastSeenMs = row.last_seen_at ? new Date(row.last_seen_at).getTime() : 0;
+	if (Date.now() - lastSeenMs > LAST_SEEN_THROTTLE_MS) {
+		db.run("UPDATE sessions SET last_seen_at = ? WHERE token = ?", [new Date().toISOString(), token]);
+	}
+
+	return toUser(row);
 }
 
 export async function register(
 	username: string,
 	password: string,
 	email: string | null,
-	accentHue = DEFAULT_ACCENT_HUE
+	accentHue = DEFAULT_ACCENT_HUE,
+	userAgent: string | null = null
 ): Promise<{ user: User; token: string }> {
 	if (!username) throw new Error("Username is required");
 	if (!isValidUsername(username)) {
@@ -129,29 +179,72 @@ export async function register(
 		[id, username, email, passwordHash, createdAt, hue, isFirstUser ? 1 : 0]
 	);
 
-	return startSession({
-		id,
-		username,
-		email,
-		createdAt,
-		accentHue: hue,
-		avatar: null,
-		isAdmin: isFirstUser,
-		storageLimitMb: null,
-		usernameChangedAt: null
-	} satisfies User);
+	return startSession(
+		{
+			id,
+			username,
+			email,
+			createdAt,
+			accentHue: hue,
+			avatar: null,
+			isAdmin: isFirstUser,
+			storageLimitMb: null,
+			usernameChangedAt: null
+		} satisfies User,
+		userAgent
+	);
 }
 
-export async function login(identifier: string, password: string): Promise<{ user: User; token: string }> {
+interface LoginAttemptState {
+	failCount: number;
+	lockedUntil: number | null;
+}
+
+// In-memory only (resets on server restart) and keyed by the attempted
+// identifier, not by IP: this server has no reverse-proxy-aware real-IP
+// plumbing, and locking the *account* rather than the connection is what
+// actually stops repeated guesses against one stolen/guessed username, which
+// is the case that matters for a small self-hosted server like this.
+const loginAttempts = new Map<string, LoginAttemptState>();
+
+function checkLoginLockout(identifier: string) {
+	const state = loginAttempts.get(identifier);
+	if (state?.lockedUntil && Date.now() < state.lockedUntil) {
+		const minutesLeft = Math.ceil((state.lockedUntil - Date.now()) / 60_000);
+		throw new Error(`Too many failed attempts. Try again in ${minutesLeft} minute${minutesLeft === 1 ? "" : "s"}.`);
+	}
+}
+
+function recordLoginFailure(identifier: string) {
+	const state = loginAttempts.get(identifier) ?? { failCount: 0, lockedUntil: null };
+	state.failCount += 1;
+	if (state.failCount >= MAX_LOGIN_ATTEMPTS) state.lockedUntil = Date.now() + LOGIN_LOCKOUT_MS;
+	loginAttempts.set(identifier, state);
+}
+
+export async function login(
+	identifier: string,
+	password: string,
+	userAgent: string | null = null
+): Promise<{ user: User; token: string }> {
+	checkLoginLockout(identifier);
+
 	const row = db
 		.query<UserRow, [string, string]>("SELECT * FROM users WHERE username = ? OR email = ?")
 		.get(identifier, identifier);
-	if (!row) throw new Error("Invalid username/email or password");
+	if (!row) {
+		recordLoginFailure(identifier);
+		throw new Error("Invalid username/email or password");
+	}
 
 	const valid = await Bun.password.verify(password, row.password_hash);
-	if (!valid) throw new Error("Invalid username/email or password");
+	if (!valid) {
+		recordLoginFailure(identifier);
+		throw new Error("Invalid username/email or password");
+	}
 
-	return startSession(toUser(row));
+	loginAttempts.delete(identifier);
+	return startSession(toUser(row), userAgent);
 }
 
 // username/email/password are "sensitive": changing any of them requires
@@ -355,17 +448,66 @@ export function deleteUser(userId: string): void {
 	db.run("DELETE FROM users WHERE id = ?", [userId]);
 }
 
-function startSession(user: User) {
+// A user deleting their own account, distinct from an admin deleting someone
+// else's (deleteUser above, gated by requireAdmin server-side): requires
+// re-entering currentPassword like every other sensitive self-service
+// change, and refuses if this is the server's only remaining admin, since
+// that would leave the whole server with no one able to administer it.
+export async function deleteOwnAccount(userId: string, currentPassword: string): Promise<void> {
+	const row = db.query<UserRow, [string]>("SELECT * FROM users WHERE id = ?").get(userId);
+	if (!row) throw new Error("User not found");
+
+	const valid = await Bun.password.verify(currentPassword, row.password_hash);
+	if (!valid) throw new Error("Current password is incorrect");
+
+	if (row.is_admin === 1) {
+		const { count } = db
+			.query<{ count: number }, []>("SELECT COUNT(*) as count FROM users WHERE is_admin = 1")
+			.get()!;
+		if (count <= 1) throw new Error("You're the only admin, promote another user first");
+	}
+
+	deleteUser(userId);
+}
+
+function startSession(user: User, userAgent: string | null = null) {
+	const id = crypto.randomUUID();
 	const token = crypto.randomUUID();
-	db.run("INSERT INTO sessions (token, user_id, created_at) VALUES (?, ?, ?)", [
-		token,
-		user.id,
-		new Date().toISOString()
-	]);
+	const now = new Date().toISOString();
+	db.run(
+		"INSERT INTO sessions (id, token, user_id, created_at, user_agent, last_seen_at) VALUES (?, ?, ?, ?, ?, ?)",
+		[id, token, user.id, now, userAgent, now]
+	);
 	return { user, token };
 }
 
 export function endSession(req: Request) {
 	const token = tokenFromRequest(req);
 	if (token) db.run("DELETE FROM sessions WHERE token = ?", [token]);
+}
+
+// Never returns the real `token`, only the client-safe `id`: this list is
+// rendered straight back to the user's own browser, and a live reusable
+// bearer token has no business round-tripping through a JSON response.
+export function listSessions(userId: string, currentToken: string | null): SessionSummary[] {
+	const rows = db
+		.query<SessionRow, [string]>(
+			"SELECT * FROM sessions WHERE user_id = ? ORDER BY COALESCE(last_seen_at, created_at) DESC"
+		)
+		.all(userId);
+	return rows.map((row) => {
+		const { device, label } = parseUserAgent(row.user_agent);
+		return {
+			id: row.id,
+			createdAt: row.created_at,
+			lastSeenAt: row.last_seen_at,
+			device,
+			label,
+			current: row.token === currentToken
+		};
+	});
+}
+
+export function revokeSession(userId: string, sessionId: string): void {
+	db.run("DELETE FROM sessions WHERE id = ? AND user_id = ?", [sessionId, userId]);
 }

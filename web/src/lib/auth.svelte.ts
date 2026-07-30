@@ -136,6 +136,21 @@ async function updateAccount(updates: {
 	setUser(data as User);
 }
 
+async function deleteAccount(currentPassword: string) {
+	const res = await api.fetch('/api/account', {
+		method: 'DELETE',
+		headers: { 'Content-Type': 'application/json' },
+		credentials: 'include',
+		body: JSON.stringify({ currentPassword })
+	});
+	if (!res.ok) {
+		const data = await res.json().catch(() => ({}));
+		throw new Error(data.error ?? 'Something went wrong');
+	}
+	api.setToken(null);
+	setUser(null);
+}
+
 function logout() {
 	// Telling the server is best-effort and must never block clearing the
 	// local session, which has to work instantly even fully offline (this was
@@ -166,5 +181,6 @@ export const auth = {
 	login,
 	register,
 	updateAccount,
+	deleteAccount,
 	logout
 };

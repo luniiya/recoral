@@ -13,6 +13,14 @@
 			]
 		},
 		{
+			href: '/settings/sessions',
+			label: 'Sessions',
+			icon: [
+				{ type: 'path', d: 'M5 4.5h11a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1Z' },
+				{ type: 'path', d: 'M3 16.5h15' }
+			]
+		},
+		{
 			href: '/settings/appearance',
 			label: 'Appearance',
 			icon: [

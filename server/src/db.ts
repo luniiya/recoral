@@ -40,6 +40,22 @@ db.run(`
 		created_at TEXT NOT NULL
 	)
 `);
+// The session list shown to a user must never re-serialize a live, reusable
+// bearer token back into a response body, so listing/revoking needs a
+// separate client-facing id distinct from `token`. Existing rows have no safe
+// way to backfill that id without briefly reusing their real token value as
+// the id, so this invalidates all pre-existing sessions once instead (a
+// one-time forced re-login) rather than risk exposing a real token.
+{
+	const sessionColumns = db.query<{ name: string }, []>(`PRAGMA table_info(sessions)`).all();
+	if (!sessionColumns.some((c) => c.name === "id")) {
+		db.run("DELETE FROM sessions");
+		db.run("ALTER TABLE sessions ADD COLUMN id TEXT");
+	}
+}
+ensureColumn("sessions", "user_agent", "user_agent TEXT");
+ensureColumn("sessions", "last_seen_at", "last_seen_at TEXT");
+db.run("CREATE UNIQUE INDEX IF NOT EXISTS idx_sessions_id ON sessions(id)");
 
 db.run(`
 	CREATE TABLE IF NOT EXISTS tags (

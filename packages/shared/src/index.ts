@@ -76,6 +76,18 @@ export interface User {
 // repeatedly swapping usernames to confuse other users.
 export const USERNAME_CHANGE_COOLDOWN_DAYS = 30;
 
+// A logged-in device/browser, shown on the Sessions settings tab. `id` is a
+// client-safe identifier, never the actual bearer token (see listSessions()
+// in server/src/auth.ts).
+export interface SessionSummary {
+	id: string;
+	createdAt: string;
+	lastSeenAt: string | null;
+	device: "mobile" | "desktop";
+	label: string;
+	current: boolean;
+}
+
 // Admin's user list needs storage/recording usage per user, on top of the
 // plain User shape everyone else uses, so this is admin-route-only rather
 // than added to User itself.

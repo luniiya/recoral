@@ -20,6 +20,15 @@
 	let selectedUserId = $state<string | null>(null);
 	let selectedUser = $derived(users.find((u) => u.id === selectedUserId) ?? null);
 
+	let userSearch = $state('');
+	let visibleUsers = $derived.by(() => {
+		const query = userSearch.trim().toLowerCase();
+		if (!query) return users;
+		return users.filter(
+			(u) => u.username.toLowerCase().includes(query) || (u.email ?? '').toLowerCase().includes(query)
+		);
+	});
+
 	let showCreateUser = $state(false);
 	let newUsername = $state('');
 	let newEmail = $state('');
@@ -209,8 +218,21 @@
 			<p class="mb-3 text-sm text-red-600 dark:text-red-400">{usersError}</p>
 		{/if}
 
+		{#if users.length > 5}
+			<input
+				type="search"
+				placeholder="Search users"
+				bind:value={userSearch}
+				class="mb-3 w-full rounded-lg bg-gray-100 px-3 py-2 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-accent-500 dark:bg-white/5 dark:text-gray-100"
+			/>
+		{/if}
+
+		{#if userSearch.trim() && visibleUsers.length === 0}
+			<p class="py-4 text-center text-sm text-gray-400">No users match "{userSearch.trim()}".</p>
+		{/if}
+
 		<ul class="flex flex-col gap-1">
-			{#each users as user (user.id)}
+			{#each visibleUsers as user (user.id)}
 				<li>
 					<button
 						class="flex w-full items-center gap-3 rounded-lg p-2 text-left transition hover:bg-gray-100 dark:hover:bg-white/5"
