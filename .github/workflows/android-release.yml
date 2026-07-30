@@ -1,12 +1,16 @@
 name: Build Android APK
 
-# Attaches an installable APK to each GitHub Release. Currently a debug
-# build (see RELEASE.md): no signing keystore exists yet, so this is not a
-# properly release-signed build. Fine for now since that's exactly how
-# every APK this project has shipped so far has been tested, but worth
-# fixing before relying on this for real installs across app updates,
-# since a debug-signed APK can't be verified by Android as "the same app"
-# update to update the way a consistently-signed one can.
+# Attaches an installable, release-signed APK to each GitHub Release. Needs
+# three repository secrets (Settings -> Secrets and variables -> Actions):
+# RELEASE_KEYSTORE_BASE64 (the keystore file, base64-encoded), plus
+# RELEASE_KEYSTORE_PASSWORD and RELEASE_KEY_PASSWORD. See RELEASE.md for how
+# the keystore itself was generated (a one-time, local, never-committed
+# step). If those secrets aren't set, this still builds and attaches a debug
+# APK as a fallback rather than failing outright, but that's meant as a
+# stopgap, not the steady state: a debug build is debuggable (WebView
+# debugging enabled), which among other things makes Capacitor log every
+# native bridge call's full result to logcat, confirmed to cause real
+# multi-second main-thread stalls on a large audio file read.
 on:
   release:
     types: [published]
@@ -37,17 +41,48 @@ jobs:
       - run: bunx cap sync android
         working-directory: mobile
 
-      - run: chmod +x ./gradlew && ./gradlew assembleDebug
+      - name: Check release signing secrets
+        id: signing
+        run: |
+          if [ -n "${{ secrets.RELEASE_KEYSTORE_BASE64 }}" ]; then
+            echo "has_keystore=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_keystore=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Decode release keystore
+        if: steps.signing.outputs.has_keystore == 'true'
+        run: echo "${{ secrets.RELEASE_KEYSTORE_BASE64 }}" | base64 -d > "$RUNNER_TEMP/recoral-release.keystore"
+
+      - name: Build signed release APK
+        if: steps.signing.outputs.has_keystore == 'true'
+        env:
+          RELEASE_KEYSTORE_PATH: ${{ runner.temp }}/recoral-release.keystore
+          RELEASE_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+        run: chmod +x ./gradlew && ./gradlew assembleRelease
+        working-directory: mobile/android
+
+      - name: Build debug APK (fallback, no signing secrets configured)
+        if: steps.signing.outputs.has_keystore == 'false'
+        run: chmod +x ./gradlew && ./gradlew assembleDebug
         working-directory: mobile/android
 
       - name: Rename APK
-        run: cp mobile/android/app/build/outputs/apk/debug/app-debug.apk recoral-debug.apk
+        run: |
+          if [ "${{ steps.signing.outputs.has_keystore }}" = "true" ]; then
+            cp mobile/android/app/build/outputs/apk/release/app-release.apk recoral.apk
+          else
+            cp mobile/android/app/build/outputs/apk/debug/app-debug.apk recoral-debug.apk
+          fi
 
       - name: Attach APK to release
         if: github.event_name == 'release'
         uses: softprops/action-gh-release@v2
         with:
-          files: recoral-debug.apk
+          files: |
+            recoral.apk
+            recoral-debug.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -55,5 +90,7 @@ jobs:
         if: github.event_name != 'release'
         uses: actions/upload-artifact@v4
         with:
-          name: recoral-debug-apk
-          path: recoral-debug.apk
+          name: recoral-apk
+          path: |
+            recoral.apk
+            recoral-debug.apk

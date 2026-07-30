@@ -1,6 +1,7 @@
 <script lang="ts">
 	import DateSeparator from '$lib/components/DateSeparator.svelte';
 	import EmptyState from '$lib/components/EmptyState.svelte';
+	import FloatingVolumeControl from '$lib/components/FloatingVolumeControl.svelte';
 	import LiveRecordingPanel from '$lib/components/LiveRecordingPanel.svelte';
 	import PullToRefresh from '$lib/components/PullToRefresh.svelte';
 	import RecordingCard from '$lib/components/RecordingCard.svelte';
@@ -160,3 +161,7 @@
 		</div>
 	{/if}
 </div>
+
+{#if !liveRecordingStore.isRecording && !liveRecordingStore.savingRecording && !selectedRecording && recordingsStore.active.length > 0}
+	<FloatingVolumeControl raised />
+{/if}

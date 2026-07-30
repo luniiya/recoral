@@ -329,6 +329,23 @@ function trashMany(ids: string[]) {
 	}
 }
 
+// Bulk archive/favourite from multi-select: always sets the target state
+// rather than toggling, same reasoning as addTagToMany below, some selected
+// recordings may already be archived/favourited and a toggle would
+// incorrectly flip those back off. Local-only (never-uploaded) recordings
+// have no server row to patch yet, same as trashMany above.
+function archiveMany(ids: string[]) {
+	for (const id of ids) {
+		if (!isLocalId(id)) archive(id);
+	}
+}
+
+function favoriteMany(ids: string[]) {
+	for (const id of ids) {
+		if (!isLocalId(id)) patch(id, { favorite: true });
+	}
+}
+
 // Adding a tag also adds all of its ancestor tags as real membership (not
 // just something the filter panel cascades at query time), so a recording
 // tagged only with "voiceacting/certainvoice" genuinely belongs to
@@ -564,6 +581,8 @@ export const recordingsStore = {
 	unarchive,
 	trash,
 	trashMany,
+	archiveMany,
+	favoriteMany,
 	restore,
 	deleteForever,
 	addTagToMany,

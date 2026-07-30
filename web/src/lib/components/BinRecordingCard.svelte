@@ -92,6 +92,7 @@
 			src={recordingsStore.audioUrl(recording.id)}
 			title={recordingDisplayTitle(recording)}
 			showTotalTime
+			hideVolumeControl
 		/>
 	</div>
 

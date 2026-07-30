@@ -10,6 +10,7 @@
 	import TagChips from '$lib/components/TagChips.svelte';
 	import ThemeToggle from '$lib/components/ThemeToggle.svelte';
 	import { liveRecordingStore } from '$lib/liveRecording.svelte';
+	import { navIcons } from '$lib/navIcons';
 	import { pageSelectStore } from '$lib/pageSelect.svelte';
 	import { recordingsStore } from '$lib/recordings.svelte';
 	import { selectionStore } from '$lib/selection.svelte';
@@ -37,6 +38,16 @@
 	function bulkAddTag(tagId: string) {
 		recordingsStore.addTagToMany(selectionStore.selectedIds, tagId);
 		selectionTagPickerOpen = false;
+		selectionStore.clear();
+	}
+
+	function bulkFavorite() {
+		recordingsStore.favoriteMany(selectionStore.selectedIds);
+		selectionStore.clear();
+	}
+
+	function bulkArchive() {
+		recordingsStore.archiveMany(selectionStore.selectedIds);
 		selectionStore.clear();
 	}
 
@@ -127,10 +138,13 @@
 
 <div class="flex h-dvh flex-col overflow-hidden bg-white dark:bg-black">
 	<StatusBarSpacer />
-	<header class="relative flex h-16 shrink-0 items-center gap-3 border-b border-gray-200 px-6 dark:border-white/10">
+	<header
+		class="relative flex h-16 shrink-0 items-center gap-1 border-b border-gray-200 px-6 transition-colors dark:border-white/10
+			{selectionStore.active ? 'bg-accent-50/70 dark:bg-accent-500/10' : ''}"
+	>
 		{#if selectionStore.active}
 			<button
-				class="flex size-8 shrink-0 items-center justify-center rounded-full text-gray-500 transition hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-white/5"
+				class="flex size-8 shrink-0 items-center justify-center rounded-full text-gray-500 transition hover:bg-black/5 dark:text-gray-400 dark:hover:bg-white/10"
 				aria-label="Cancel selection"
 				onclick={() => selectionStore.clear()}
 			>
@@ -138,17 +152,43 @@
 					<path stroke-linecap="round" stroke-linejoin="round" d="M18 6 6 18M6 6l12 12" />
 				</svg>
 			</button>
-			<span class="flex-1 text-sm font-medium text-gray-900 dark:text-gray-100">
+			<span class="flex-1 pl-1 text-sm font-medium text-gray-900 dark:text-gray-100">
 				{selectionStore.count} selected
 			</span>
+
+			<button
+				class="flex size-8 shrink-0 items-center justify-center rounded-full text-gray-500 transition hover:bg-black/5 dark:text-gray-400 dark:hover:bg-white/10"
+				aria-label="Favourite selected"
+				title="Favourite selected"
+				onclick={bulkFavorite}
+			>
+				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="size-4">
+					<path stroke-linecap="round" stroke-linejoin="round" d={navIcons.favourites.path} />
+				</svg>
+			</button>
+
+			<button
+				class="flex size-8 shrink-0 items-center justify-center rounded-full text-gray-500 transition hover:bg-black/5 dark:text-gray-400 dark:hover:bg-white/10"
+				aria-label="Archive selected"
+				title="Archive selected"
+				onclick={bulkArchive}
+			>
+				<svg viewBox="0 0 24 24" fill="currentColor" class="size-4">
+					<path d={navIcons.archive.path} />
+				</svg>
+			</button>
 
 			{#if tagsStore.list.length > 0}
 				<div class="relative">
 					<button
-						class="rounded-full px-3.5 py-1.5 text-sm text-gray-600 ring-1 ring-gray-200 transition hover:bg-gray-100 dark:text-gray-300 dark:ring-white/10 dark:hover:bg-white/5"
+						class="flex size-8 shrink-0 items-center justify-center rounded-full text-gray-500 transition hover:bg-black/5 dark:text-gray-400 dark:hover:bg-white/10"
+						aria-label="Add tag to selected"
+						title="Add tag to selected"
 						onclick={() => (selectionTagPickerOpen = !selectionTagPickerOpen)}
 					>
-						+ Tag
+						<svg viewBox="0 0 24 24" fill="currentColor" class="size-4">
+							<path d={navIcons.tags.path} />
+						</svg>
 					</button>
 					{#if selectionTagPickerOpen}
 						<button
@@ -164,10 +204,14 @@
 			{/if}
 
 			<button
-				class="rounded-full px-3.5 py-1.5 text-sm font-medium text-red-600 ring-1 ring-red-200 transition hover:bg-red-50 dark:text-red-400 dark:ring-red-500/30 dark:hover:bg-red-500/10"
+				class="flex size-8 shrink-0 items-center justify-center rounded-full text-red-600 transition hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-500/10"
+				aria-label="Delete selected"
+				title="Delete selected"
 				onclick={() => (confirmingBulkDelete = true)}
 			>
-				Delete
+				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="size-4">
+					<path stroke-linecap="round" stroke-linejoin="round" d={navIcons.bin.path} />
+				</svg>
 			</button>
 		{:else}
 			<HeaderBrand />

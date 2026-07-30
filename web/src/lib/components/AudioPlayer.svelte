@@ -40,8 +40,12 @@
 	} from '$lib/mediaSession';
 	import { isSupported as nativePlaybackSupported, Playback } from '$lib/nativePlayback';
 	import { isNativePlatform } from '$lib/platform';
+	import { sharedVolume } from '$lib/sharedVolume.svelte';
+	import { sliderToGain } from '$lib/volume';
 	import { wavySeekStore } from '$lib/wavySeek.svelte';
 	import { onDestroy, untrack } from 'svelte';
+	import GainSlider from './GainSlider.svelte';
+	import VolumeIcon from './VolumeIcon.svelte';
 
 	interface Props {
 		src: string;
@@ -58,6 +62,12 @@
 		// have hardware volume, leaving that side otherwise empty felt wasted.
 		favorite?: boolean;
 		onToggleFavorite?: () => void;
+		// Pages showing many simultaneous inline players at once (Bin) hide the
+		// per-card slider in favor of one shared floating control instead, see
+		// FloatingVolumeControl.svelte; the volume level itself is always the
+		// same shared value either way (sharedVolume.svelte.ts), this only
+		// hides the redundant inline UI.
+		hideVolumeControl?: boolean;
 	}
 
 	let {
@@ -68,7 +78,8 @@
 		audioEl = $bindable(undefined),
 		showTotalTime = false,
 		favorite,
-		onToggleFavorite
+		onToggleFavorite,
+		hideVolumeControl = false
 	}: Props = $props();
 
 	let waveActive = $derived(playing && wavySeekStore.enabled);
@@ -241,22 +252,12 @@
 		buffered = audioEl.buffered.end(audioEl.buffered.length - 1);
 	}
 
-	// Volume slider: linear audio.volume feels dead for most of the slider's
-	// travel then jumps hard near the top, because loudness perception is
-	// roughly logarithmic, not linear (the classic "YouTube slider" mistake).
-	// Map the 0-1 slider position through an exponential curve so each step
-	// of the slider is an equal dB step instead, which is what actually
-	// sounds "even" to the ear.
-	const VOLUME_RANGE_DB = 50;
-	let volumePosition = $state(1);
-	let muted = $state(false);
-
-	function sliderToGain(t: number) {
-		if (t <= 0) return 0;
-		return Math.pow(10, ((t - 1) * VOLUME_RANGE_DB) / 20);
-	}
-
-	let gain = $derived(muted ? 0 : sliderToGain(volumePosition));
+	// Volume is a single shared value across every player instance, not a
+	// separate memory per recording, see sharedVolume.svelte.ts. The
+	// logarithmic taper (sliderToGain) is what makes equal slider steps feel
+	// like equal loudness steps, instead of the classic "YouTube slider"
+	// mistake of raw linear gain.
+	let gain = $derived(sharedVolume.muted ? 0 : sliderToGain(sharedVolume.position));
 
 	$effect(() => {
 		if (audioEl) audioEl.volume = gain;
@@ -340,12 +341,7 @@
 	}
 
 	function onVolumeInput(event: Event) {
-		volumePosition = Number((event.currentTarget as HTMLInputElement).value) / 100;
-		if (volumePosition > 0) muted = false;
-	}
-
-	function toggleMute() {
-		muted = !muted;
+		sharedVolume.setPosition(Number((event.currentTarget as HTMLInputElement).value) / 100);
 	}
 </script>
 
@@ -487,7 +483,10 @@
 		<!-- Android/iOS manage system volume directly (hardware buttons,
 			 the OS volume UI), an in-app slider would just be a second,
 			 conflicting volume control, so that side shows the favorite
-			 toggle instead on native rather than sitting empty. -->
+			 toggle instead on native rather than sitting empty. Pages with many
+			 simultaneous inline players (Bin) pass hideVolumeControl instead,
+			 relying on FloatingVolumeControl for that page; the reserved width
+			 on this wrapper keeps the transport controls centered either way. -->
 		<div class="flex w-16 shrink-0 items-center justify-end gap-1.5 md:w-28">
 			{#if isNativePlatform()}
 				{#if onToggleFavorite}
@@ -506,37 +505,18 @@
 						</svg>
 					</button>
 				{/if}
-			{:else}
-				<input
-					type="range"
-					min="0"
-					max="100"
-					value={muted ? 0 : volumePosition * 100}
+			{:else if !hideVolumeControl}
+				<GainSlider
+					value={sharedVolume.muted ? 0 : sharedVolume.position * 100}
 					oninput={onVolumeInput}
-					class="seek-bar min-w-0 flex-1"
-					aria-label="Volume"
+					class="min-w-0 flex-1"
 				/>
 				<button
 					class="flex size-7 shrink-0 items-center justify-center rounded-full text-gray-500 transition hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-white/5"
-					aria-label={muted || gain === 0 ? 'Unmute' : 'Mute'}
-					onclick={toggleMute}
+					aria-label={sharedVolume.muted || gain === 0 ? 'Unmute' : 'Mute'}
+					onclick={sharedVolume.toggleMute}
 				>
-					{#if muted || gain === 0}
-						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="size-4.5">
-							<path stroke-linecap="round" stroke-linejoin="round" d="M11 5 6 9H3v6h3l5 4V5Z" />
-							<path stroke-linecap="round" d="m16 9 5 6m0-6-5 6" />
-						</svg>
-					{:else if volumePosition < 0.5}
-						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="size-4.5">
-							<path stroke-linecap="round" stroke-linejoin="round" d="M11 5 6 9H3v6h3l5 4V5Z" />
-							<path stroke-linecap="round" d="M16.5 9.5a5 5 0 0 1 0 5" />
-						</svg>
-					{:else}
-						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="size-4.5">
-							<path stroke-linecap="round" stroke-linejoin="round" d="M11 5 6 9H3v6h3l5 4V5Z" />
-							<path stroke-linecap="round" d="M16.5 9.5a5 5 0 0 1 0 5M19 7a9 9 0 0 1 0 10" />
-						</svg>
-					{/if}
+					<VolumeIcon muted={sharedVolume.muted} {gain} position={sharedVolume.position} />
 				</button>
 			{/if}
 		</div>
@@ -544,31 +524,6 @@
 </div>
 
 <style>
-	.seek-bar {
-		appearance: none;
-		height: 0.35rem;
-		border-radius: 999px;
-		background: var(--accent-500);
-	}
-
-	.seek-bar::-webkit-slider-thumb {
-		appearance: none;
-		width: 0.85rem;
-		height: 0.85rem;
-		border-radius: 999px;
-		background: var(--accent-500);
-		cursor: pointer;
-	}
-
-	.seek-bar::-moz-range-thumb {
-		width: 0.85rem;
-		height: 0.85rem;
-		border: none;
-		border-radius: 999px;
-		background: var(--accent-500);
-		cursor: pointer;
-	}
-
 	/* Shifting by exactly one wavelength (14px, matching WAVE_LENGTH) loops
 	   seamlessly since the wave is periodic. Paused via animation-play-state
 	   rather than removed, so it resumes mid-phase instead of resetting. */

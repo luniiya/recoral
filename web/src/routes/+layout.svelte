@@ -96,13 +96,23 @@
 		// blocking that stops desktop browser zoom the same way touch-action
 		// stops it on mobile. Safari also fires legacy gesture events for
 		// actual pinch, not wheel, so that's blocked separately below.
+		//
+		// Only applies to the native app and an installed PWA (both feel like
+		// "an app", zooming is jarring, matches native mobile's touch-action
+		// zoom block), not a plain desktop browser tab: there, zooming is
+		// completely normal browser behavior a user might genuinely want, and
+		// blocking it there was the actual bug, this whole block used to fire
+		// unconditionally everywhere with no exception for that case.
+		const shouldBlockZoom = isNativePlatform() || window.matchMedia('(display-mode: standalone)').matches;
 		const onWheel = (event: WheelEvent) => {
-			if (event.ctrlKey) event.preventDefault();
+			if (event.ctrlKey && shouldBlockZoom) event.preventDefault();
 		};
 		window.addEventListener('wheel', onWheel, { passive: false });
-		const onGesture = (event: Event) => event.preventDefault();
-		window.addEventListener('gesturestart', onGesture);
-		window.addEventListener('gesturechange', onGesture);
+		if (shouldBlockZoom) {
+			const onGesture = (event: Event) => event.preventDefault();
+			window.addEventListener('gesturestart', onGesture);
+			window.addEventListener('gesturechange', onGesture);
+		}
 
 		// -webkit-touch-callout:none (app.css) only stops iOS Safari's own
 		// long-press callout. On Android/Chrome (which is what the plain mobile

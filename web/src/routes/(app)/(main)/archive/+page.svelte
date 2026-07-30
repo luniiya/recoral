@@ -1,6 +1,7 @@
 <script lang="ts">
 	import DateSeparator from '$lib/components/DateSeparator.svelte';
 	import EmptyState from '$lib/components/EmptyState.svelte';
+	import FloatingVolumeControl from '$lib/components/FloatingVolumeControl.svelte';
 	import PullToRefresh from '$lib/components/PullToRefresh.svelte';
 	import RecordingCard from '$lib/components/RecordingCard.svelte';
 	import RecordingDetail from '$lib/components/RecordingDetail.svelte';
@@ -100,3 +101,7 @@
 		</div>
 	{/if}
 </div>
+
+{#if !selectedRecording && recordingsStore.archived.length > 0}
+	<FloatingVolumeControl raised />
+{/if}

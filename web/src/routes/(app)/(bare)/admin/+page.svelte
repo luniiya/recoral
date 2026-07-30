@@ -348,6 +348,9 @@
 						type="text"
 						placeholder="Username"
 						bind:value={newUsername}
+						minlength="3"
+						maxlength="32"
+						pattern="[a-zA-Z0-9_.-]+"
 						class="min-w-0 flex-1 rounded-lg bg-white px-3 py-2 text-sm text-gray-900 outline-none ring-1 ring-gray-200 focus:ring-2 focus:ring-accent-500 dark:bg-neutral-800 dark:text-gray-100 dark:ring-white/10"
 					/>
 					<input

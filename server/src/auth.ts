@@ -1,4 +1,4 @@
-import type { User } from "@recoral/shared";
+import { isValidUsername, type User } from "@recoral/shared";
 import { unlinkSync } from "node:fs";
 import { db } from "./db";
 
@@ -88,6 +88,9 @@ export async function register(
 	accentHue = DEFAULT_ACCENT_HUE
 ): Promise<{ user: User; token: string }> {
 	if (!username) throw new Error("Username is required");
+	if (!isValidUsername(username)) {
+		throw new Error("Username must be 3-32 characters: letters, numbers, ., - and _ only");
+	}
 
 	const existingUsername = db
 		.query<{ id: string }, [string]>("SELECT id FROM users WHERE username = ?")
@@ -184,6 +187,9 @@ export async function adminCreateUser(
 	isAdmin: boolean
 ): Promise<User> {
 	if (!username) throw new Error("Username is required");
+	if (!isValidUsername(username)) {
+		throw new Error("Username must be 3-32 characters: letters, numbers, ., - and _ only");
+	}
 	if (!password) throw new Error("Password is required");
 
 	const existingUsername = db

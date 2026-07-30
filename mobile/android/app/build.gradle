@@ -1,5 +1,22 @@
 apply plugin: 'com.android.application'
 
+// Release signing: local builds read app/keystore.properties (gitignored,
+// never committed, see RELEASE.md); CI (android-release.yml) instead sets
+// RELEASE_KEYSTORE_PATH/RELEASE_KEYSTORE_PASSWORD/RELEASE_KEY_PASSWORD env
+// vars after decoding the base64 keystore secret to a file. Without either,
+// the release build type is left unsigned (falls through to whatever
+// default the build tool applies, i.e. no working release APK) rather than
+// silently reusing the debug key, so a missing keystore fails loudly instead
+// of producing something that looks release-built but isn't.
+def keystorePropertiesFile = file('keystore.properties')
+def hasKeystoreProperties = keystorePropertiesFile.exists()
+def keystoreProperties = new Properties()
+if (hasKeystoreProperties) {
+    keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
+}
+def hasEnvKeystore = System.getenv('RELEASE_KEYSTORE_PATH') != null
+def hasReleaseSigning = hasKeystoreProperties || hasEnvKeystore
+
 android {
     namespace = "com.recoral.app"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -16,10 +33,28 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    signingConfigs {
+        release {
+            if (hasKeystoreProperties) {
+                storeFile file(keystoreProperties['storeFile'])
+                storePassword keystoreProperties['storePassword']
+                keyAlias keystoreProperties['keyAlias']
+                keyPassword keystoreProperties['keyPassword']
+            } else if (hasEnvKeystore) {
+                storeFile file(System.getenv('RELEASE_KEYSTORE_PATH'))
+                storePassword System.getenv('RELEASE_KEYSTORE_PASSWORD')
+                keyAlias System.getenv('RELEASE_KEY_ALIAS') ?: 'recoral'
+                keyPassword System.getenv('RELEASE_KEY_PASSWORD')
+            }
+        }
+    }
     buildTypes {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            if (hasReleaseSigning) {
+                signingConfig signingConfigs.release
+            }
         }
     }
 }
