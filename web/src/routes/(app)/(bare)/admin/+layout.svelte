@@ -17,12 +17,12 @@
 {:else if !auth.loading}
 	<div class="flex min-h-0 flex-1 flex-col md:flex-row">
 		<AdminNav />
-		<main class="min-h-0 flex-1 overflow-y-auto">
-			<div class="mx-auto w-full max-w-xl px-6 pt-6 pb-24 md:pt-10 md:pb-10">
-				<div class="mb-6 flex items-center gap-3">
-					<BackButton mobileHref="/account" desktopHref="/" label="Back" />
-					<h1 class="text-lg font-semibold text-gray-900 dark:text-gray-100">Administration</h1>
-				</div>
+		<main class="flex min-h-0 flex-1 flex-col overflow-hidden">
+			<div class="flex items-center gap-3 px-6 pt-6 pb-6 md:pt-10">
+				<BackButton mobileHref="/account" desktopHref="/" label="Back" />
+				<h1 class="text-lg font-semibold text-gray-900 dark:text-gray-100">Administration</h1>
+			</div>
+			<div class="min-h-0 flex-1">
 				{@render children()}
 			</div>
 		</main>

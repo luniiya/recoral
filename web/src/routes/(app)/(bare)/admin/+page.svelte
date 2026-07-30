@@ -40,6 +40,7 @@
 	<title>recoral - Administration</title>
 </svelte:head>
 
+<div class="mx-auto h-full w-full max-w-xl overflow-y-auto px-6 pb-24 md:pb-10">
 {#if !loading}
 	<div class="card mb-6 flex items-center justify-between p-5">
 		<span class="text-sm font-medium text-gray-900 dark:text-gray-100">Server</span>
@@ -78,6 +79,22 @@
 						checked={settings.requireStrongPasswords}
 						onchange={(checked) => patchSettings({ requireStrongPasswords: checked })}
 						label="Require strong passwords"
+					/>
+				</div>
+			</div>
+
+			<div class="flex flex-col gap-3 border-t border-gray-100 pt-5 dark:border-white/10">
+				<div class="flex items-center justify-between gap-4">
+					<div>
+						<p class="text-sm text-gray-900 dark:text-gray-100">Require email</p>
+						<p class="text-xs text-gray-400">
+							Off makes email optional (complementary) on signup and account forms. On makes it mandatory.
+						</p>
+					</div>
+					<Toggle
+						checked={settings.requireEmail}
+						onchange={(checked) => patchSettings({ requireEmail: checked })}
+						label="Require email"
 					/>
 				</div>
 			</div>
@@ -139,3 +156,4 @@
 		</div>
 	{/if}
 {/if}
+</div>

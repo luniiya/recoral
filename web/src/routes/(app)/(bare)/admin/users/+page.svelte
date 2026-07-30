@@ -1,20 +1,24 @@
 <script lang="ts">
-	import type { Settings, User } from '@recoral/shared';
+	import type { AdminUserSummary, Settings } from '@recoral/shared';
 	import { validatePassword } from '@recoral/shared';
 	import { auth } from '$lib/auth.svelte';
 	import Avatar from '$lib/components/Avatar.svelte';
-	import OverflowMenu from '$lib/components/OverflowMenu.svelte';
+	import Dialog from '$lib/components/Dialog.svelte';
 	import PasswordInput from '$lib/components/PasswordInput.svelte';
 	import PasswordMatchHint from '$lib/components/PasswordMatchHint.svelte';
 	import Toggle from '$lib/components/Toggle.svelte';
+	import UserDetail from '$lib/components/UserDetail.svelte';
 	import { api } from '$lib/api.svelte';
 	import { onMount } from 'svelte';
 	import { slide } from 'svelte/transition';
 
-	let users = $state<User[]>([]);
+	let users = $state<AdminUserSummary[]>([]);
 	let settings = $state<Settings | null>(null);
 	let loading = $state(true);
 	let usersError = $state('');
+
+	let selectedUserId = $state<string | null>(null);
+	let selectedUser = $derived(users.find((u) => u.id === selectedUserId) ?? null);
 
 	let showCreateUser = $state(false);
 	let newUsername = $state('');
@@ -25,16 +29,8 @@
 	let creatingUser = $state(false);
 	let createUserError = $state('');
 
-	let deleteTarget = $state<User | null>(null);
+	let deleteTarget = $state<AdminUserSummary | null>(null);
 	let deleting = $state(false);
-
-	// Which user row has its password-reset form expanded, if any (inline
-	// expand/collapse, matching the showCreateUser pattern above, not a modal).
-	let resetPasswordTarget = $state<string | null>(null);
-	let resetPassword = $state('');
-	let resetConfirmPassword = $state('');
-	let resetPasswordError = $state('');
-	let resettingPassword = $state(false);
 
 	onMount(async () => {
 		const [usersRes, settingsRes] = await Promise.all([
@@ -62,40 +58,16 @@
 			usersError = body.error ?? 'Something went wrong';
 			return false;
 		}
-		users = users.map((u) => (u.id === id ? body : u));
+		users = users.map((u) => (u.id === id ? { ...u, ...body } : u));
 		return true;
-	}
-
-	function openResetPassword(id: string) {
-		resetPasswordTarget = resetPasswordTarget === id ? null : id;
-		resetPassword = '';
-		resetConfirmPassword = '';
-		resetPasswordError = '';
-	}
-
-	async function submitResetPassword(id: string) {
-		resetPasswordError = '';
-		if (resetPassword !== resetConfirmPassword) {
-			resetPasswordError = "Passwords don't match";
-			return;
-		}
-		const check = validatePassword(resetPassword, settings?.requireStrongPasswords ?? true);
-		if (!check.valid) {
-			resetPasswordError = check.reason ?? 'Invalid password';
-			return;
-		}
-		resettingPassword = true;
-		try {
-			const ok = await patchUser(id, { password: resetPassword });
-			if (ok) resetPasswordTarget = null;
-			else resetPasswordError = usersError;
-		} finally {
-			resettingPassword = false;
-		}
 	}
 
 	async function createUser() {
 		createUserError = '';
+		if ((settings?.requireEmail ?? false) && !newEmail) {
+			createUserError = 'Email is required';
+			return;
+		}
 		if (newPassword !== newConfirmPassword) {
 			createUserError = "Passwords don't match";
 			return;
@@ -123,7 +95,7 @@
 				createUserError = body.error ?? 'Something went wrong';
 				return;
 			}
-			users = [...users, body];
+			users = [...users, { ...body, recordingCount: 0, storageUsedBytes: 0 }];
 			showCreateUser = false;
 			newUsername = '';
 			newEmail = '';
@@ -145,6 +117,7 @@
 			});
 			if (res.ok || res.status === 204) {
 				users = users.filter((u) => u.id !== deleteTarget?.id);
+				if (selectedUserId === deleteTarget.id) selectedUserId = null;
 				deleteTarget = null;
 			} else {
 				const body = await res.json().catch(() => ({}));
@@ -160,8 +133,8 @@
 	<title>recoral - Users</title>
 </svelte:head>
 
-{#if !loading}
-	<div class="card p-5">
+<div class="mx-auto h-full w-full max-w-xl overflow-y-auto px-6 py-6 pb-24 md:py-10 md:pb-10">
+	{#if !loading}
 		<div class="mb-4 flex items-center justify-between">
 			<h2 class="text-sm font-semibold text-gray-900 dark:text-gray-100">
 				Users <span class="text-gray-400">({users.length})</span>
@@ -175,7 +148,10 @@
 		</div>
 
 		{#if showCreateUser}
-			<div class="mb-5 flex flex-col gap-3 rounded-xl bg-gray-50 p-4 dark:bg-white/5" transition:slide={{ duration: 200 }}>
+			<div
+				class="mb-5 flex flex-col gap-3 rounded-xl bg-gray-50 p-4 dark:bg-white/5"
+				transition:slide={{ duration: 200 }}
+			>
 				<div class="flex flex-wrap gap-2">
 					<input
 						type="text"
@@ -188,8 +164,9 @@
 					/>
 					<input
 						type="email"
-						placeholder="Email (optional)"
+						placeholder={settings?.requireEmail ?? false ? 'Email' : 'Email (optional)'}
 						bind:value={newEmail}
+						required={settings?.requireEmail ?? false}
 						class="min-w-0 flex-1 rounded-lg bg-white px-3 py-2 text-sm text-gray-900 outline-none ring-1 ring-gray-200 focus:ring-2 focus:ring-accent-500 dark:bg-neutral-800 dark:text-gray-100 dark:ring-white/10"
 					/>
 					<PasswordInput
@@ -217,7 +194,10 @@
 				{/if}
 				<button
 					class="self-start rounded-full bg-accent-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-accent-600 disabled:opacity-60"
-					disabled={creatingUser || !newUsername || !newPassword}
+					disabled={creatingUser ||
+					!newUsername ||
+					!newPassword ||
+					((settings?.requireEmail ?? false) && !newEmail)}
 					onclick={createUser}
 				>
 					{creatingUser ? 'Creating…' : 'Create account'}
@@ -225,127 +205,56 @@
 			</div>
 		{/if}
 
-		{#if usersError && resetPasswordTarget === null}
+		{#if usersError && !selectedUser}
 			<p class="mb-3 text-sm text-red-600 dark:text-red-400">{usersError}</p>
 		{/if}
 
-		<ul class="flex flex-col gap-4">
+		<ul class="flex flex-col gap-1">
 			{#each users as user (user.id)}
-				<li class="flex flex-col gap-3">
-					<div class="flex flex-wrap items-center gap-3">
+				<li>
+					<button
+						class="flex w-full items-center gap-3 rounded-lg p-2 text-left transition hover:bg-gray-100 dark:hover:bg-white/5"
+						onclick={() => (selectedUserId = user.id)}
+					>
 						<Avatar name={user.username} avatar={user.avatar} />
-						<div class="min-w-0 flex-1">
-							<p class="truncate text-sm text-gray-900 dark:text-gray-100">
-								{user.username}
-								{#if user.id === auth.user?.id}<span class="text-gray-400">(you)</span>{/if}
-								{#if user.email}<span class="text-gray-400">{user.email}</span>{/if}
-							</p>
-							<p class="text-xs text-gray-400">
-								Joined {new Date(user.createdAt).toLocaleDateString()}
-							</p>
-						</div>
-
-						<label class="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
-							Storage limit
-							<input
-								type="number"
-								min="0"
-								placeholder="Unlimited"
-								value={user.storageLimitMb ?? ''}
-								class="w-24 rounded-lg bg-gray-100 px-2 py-1 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-accent-500 dark:bg-white/5 dark:text-gray-100"
-								onchange={(e) => {
-									const raw = e.currentTarget.value.trim();
-									patchUser(user.id, { storageLimitMb: raw === '' ? null : Number(raw) });
-								}}
-							/>
-							MB
-						</label>
-
-						<label class="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
-							Admin
-							<Toggle
-								checked={user.isAdmin}
-								disabled={user.id === auth.user?.id}
-								onchange={(checked) => patchUser(user.id, { isAdmin: checked })}
-								label={`Admin access for ${user.username}`}
-							/>
-						</label>
-
-						<OverflowMenu label={`More options for ${user.username}`}>
-							{#snippet menu(close)}
-								<button
-									class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-gray-700 transition hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-white/5"
-									onclick={() => {
-										close();
-										openResetPassword(user.id);
-									}}
+						<p class="flex min-w-0 flex-1 items-center gap-1.5 truncate text-sm text-gray-900 dark:text-gray-100">
+							{user.username}
+							{#if user.id === auth.user?.id}<span class="text-gray-400">(you)</span>{/if}
+							{#if user.isAdmin}
+								<span
+									class="rounded-full bg-accent-50 px-1.5 py-0.5 text-[10px] font-medium text-accent-700 dark:bg-accent-500/15 dark:text-accent-400"
 								>
-									<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="size-4 shrink-0">
-										<path
-											stroke-linecap="round"
-											stroke-linejoin="round"
-											d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94Z"
-										/>
-									</svg>
-									Change password
-								</button>
-								{#if user.id !== auth.user?.id}
-									<button
-										class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-red-600 transition hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-500/10"
-										onclick={() => {
-											close();
-											deleteTarget = user;
-										}}
-									>
-										<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="size-4 shrink-0">
-											<path
-												stroke-linecap="round"
-												stroke-linejoin="round"
-												d="M6 6.5h12M9.5 6.5V5a1 1 0 0 1 1-1h3a1 1 0 0 1 1 1v1.5M7.5 6.5 8 19a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1l.5-12.5"
-											/>
-										</svg>
-										Delete account
-									</button>
-								{/if}
-							{/snippet}
-						</OverflowMenu>
-					</div>
-
-					{#if resetPasswordTarget === user.id}
-						<div class="flex flex-col gap-2 rounded-xl bg-gray-50 p-4 dark:bg-white/5" transition:slide={{ duration: 200 }}>
-							<div class="flex flex-wrap gap-2">
-								<PasswordInput
-									placeholder="New password"
-									bind:value={resetPassword}
-									minlength={8}
-									class="min-w-0 flex-1"
-									inputClass="w-full rounded-lg bg-white px-3 py-2 text-sm text-gray-900 outline-none ring-1 ring-gray-200 focus:ring-2 focus:ring-accent-500 dark:bg-neutral-800 dark:text-gray-100 dark:ring-white/10"
-								/>
-								<PasswordInput
-									placeholder="Confirm new password"
-									bind:value={resetConfirmPassword}
-									minlength={8}
-									class="min-w-0 flex-1"
-									inputClass="w-full rounded-lg bg-white px-3 py-2 text-sm text-gray-900 outline-none ring-1 ring-gray-200 focus:ring-2 focus:ring-accent-500 dark:bg-neutral-800 dark:text-gray-100 dark:ring-white/10"
-								/>
-							</div>
-							<PasswordMatchHint password={resetPassword} confirm={resetConfirmPassword} />
-							{#if resetPasswordError}
-								<p class="text-sm text-red-600 dark:text-red-400">{resetPasswordError}</p>
+									Admin
+								</span>
 							{/if}
-							<button
-								class="self-start rounded-full bg-accent-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-accent-600 disabled:opacity-60"
-								disabled={resettingPassword || !resetPassword}
-								onclick={() => submitResetPassword(user.id)}
-							>
-								{resettingPassword ? 'Setting…' : 'Set password'}
-							</button>
-						</div>
-					{/if}
+						</p>
+						<p class="hidden min-w-0 flex-1 truncate text-xs text-gray-400 sm:block">
+							{user.email ?? '—'}
+						</p>
+						<p class="shrink-0 text-xs text-gray-400 tabular-nums">
+							{(user.storageUsedBytes / 1024 ** 3).toFixed(1)} GB
+						</p>
+					</button>
 				</li>
 			{/each}
 		</ul>
-	</div>
+	{/if}
+</div>
+
+{#if selectedUser && settings}
+	<Dialog onclose={() => (selectedUserId = null)} centered maxWidth="max-w-md">
+		<UserDetail
+			user={selectedUser}
+			{settings}
+			isSelf={selectedUser.id === auth.user?.id}
+			error={usersError}
+			onPatch={(updates) => patchUser(selectedUser.id, updates)}
+			onDeleteRequest={() => {
+				selectedUserId = null;
+				deleteTarget = selectedUser;
+			}}
+		/>
+	</Dialog>
 {/if}
 
 {#if deleteTarget}

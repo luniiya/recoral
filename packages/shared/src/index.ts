@@ -68,6 +68,20 @@ export interface User {
 	avatar: string | null;
 	isAdmin: boolean;
 	storageLimitMb: number | null;
+	usernameChangedAt: string | null;
+}
+
+// Self-service username changes are rate-limited to once per this many days
+// (see updateAccount() in server/src/auth.ts), to stop someone from
+// repeatedly swapping usernames to confuse other users.
+export const USERNAME_CHANGE_COOLDOWN_DAYS = 30;
+
+// Admin's user list needs storage/recording usage per user, on top of the
+// plain User shape everyone else uses, so this is admin-route-only rather
+// than added to User itself.
+export interface AdminUserSummary extends User {
+	recordingCount: number;
+	storageUsedBytes: number;
 }
 
 export interface Tag {
@@ -87,6 +101,7 @@ export interface Settings {
 	transcriptionEnabled: boolean;
 	transcriptionModel: TranscriptionModel;
 	requireStrongPasswords: boolean;
+	requireEmail: boolean;
 }
 
 export interface StorageUsage {

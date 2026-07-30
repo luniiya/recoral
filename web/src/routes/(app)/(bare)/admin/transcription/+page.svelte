@@ -28,6 +28,7 @@
 	<title>recoral - Transcription</title>
 </svelte:head>
 
+<div class="mx-auto h-full w-full max-w-xl overflow-y-auto px-6 pb-24 md:pb-10">
 {#if !loading && settings}
 	<div class="card flex flex-col gap-5 p-5">
 		<h2 class="text-sm font-semibold text-gray-900 dark:text-gray-100">Transcription</h2>
@@ -65,3 +66,4 @@
 		{/if}
 	</div>
 {/if}
+</div>

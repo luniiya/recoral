@@ -34,6 +34,7 @@
 	let randomAccent = $state(readCachedAccentHue() === null);
 	let signupEnabled = $state(true);
 	let requireStrongPasswords = $state(true);
+	let requireEmail = $state(false);
 	let backgroundImage = $state<string | null>(null);
 	let error = $state('');
 	let submitting = $state(false);
@@ -86,6 +87,7 @@
 		const settings: Settings = await settingsRes.json();
 		signupEnabled = settings.signupEnabled;
 		requireStrongPasswords = settings.requireStrongPasswords;
+		requireEmail = settings.requireEmail;
 		if (settings.defaultAccentHue !== null) {
 			accentHue = settings.defaultAccentHue;
 			cacheAccentHue(settings.defaultAccentHue);
@@ -106,6 +108,10 @@
 		if (needsSetup || mode === 'register') {
 			// Client-side checks for instant feedback; register() still
 			// re-validates server-side regardless (defense in depth).
+			if (requireEmail && !email) {
+				error = 'Email is required';
+				return;
+			}
 			if (password !== confirmPassword) {
 				error = "Passwords don't match";
 				return;
@@ -193,8 +199,16 @@
 				</label>
 
 				<label class="flex flex-col gap-1.5">
-					<span class="form-label">Email <span class="text-gray-400">(optional)</span></span>
-					<input class="form-input" type="email" bind:value={email} autocomplete="email" />
+					<span class="form-label">
+						Email {#if !requireEmail}<span class="text-gray-400">(optional)</span>{/if}
+					</span>
+					<input
+						class="form-input"
+						type="email"
+						bind:value={email}
+						required={requireEmail}
+						autocomplete="email"
+					/>
 				</label>
 			{/if}
 

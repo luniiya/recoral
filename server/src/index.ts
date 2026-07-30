@@ -396,6 +396,7 @@ const server = Bun.serve({
 						transcriptionEnabled?: boolean;
 						transcriptionModel?: TranscriptionModel;
 						requireStrongPasswords?: boolean;
+						requireEmail?: boolean;
 					} = {};
 
 					if (body.defaultAccentHue === null || typeof body.defaultAccentHue === "number") {
@@ -423,6 +424,9 @@ const server = Bun.serve({
 					}
 					if (typeof body.requireStrongPasswords === "boolean") {
 						updates.requireStrongPasswords = body.requireStrongPasswords;
+					}
+					if (typeof body.requireEmail === "boolean") {
+						updates.requireEmail = body.requireEmail;
 					}
 
 					const newSettings = updateSettings(updates);

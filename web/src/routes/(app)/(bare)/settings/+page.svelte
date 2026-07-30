@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { validatePassword } from '@recoral/shared';
+	import { USERNAME_CHANGE_COOLDOWN_DAYS, validatePassword } from '@recoral/shared';
 	import { auth } from '$lib/auth.svelte';
 	import Avatar from '$lib/components/Avatar.svelte';
 	import BackButton from '$lib/components/BackButton.svelte';
@@ -42,6 +42,7 @@
 	let detailsError = $state('');
 	let detailsSuccess = $state('');
 	let requireStrongPasswords = $state(true);
+	let requireEmail = $state(false);
 	// Password fields stay unmounted until explicitly opened. Browsers will
 	// happily autofill a bare "new password" input with the account's existing
 	// saved password on page load, silently flipping hasChanges true and
@@ -56,9 +57,25 @@
 		newConfirmPassword = '';
 	}
 
+	// Username changes are rate-limited server-side (once per
+	// USERNAME_CHANGE_COOLDOWN_DAYS, signup doesn't count as a change); this
+	// mirrors that client-side so the field is disabled with an explanation
+	// instead of letting someone fill it in only to get a 400 on save.
+	let usernameLockedUntil = $derived.by(() => {
+		if (!auth.user?.usernameChangedAt) return null;
+		const next = new Date(
+			new Date(auth.user.usernameChangedAt).getTime() + USERNAME_CHANGE_COOLDOWN_DAYS * 24 * 60 * 60 * 1000
+		);
+		return next > new Date() ? next : null;
+	});
+
 	onMount(async () => {
 		const res = await api.fetch('/api/settings');
-		if (res.ok) requireStrongPasswords = (await res.json()).requireStrongPasswords;
+		if (res.ok) {
+			const settings = await res.json();
+			requireStrongPasswords = settings.requireStrongPasswords;
+			requireEmail = settings.requireEmail;
+		}
 	});
 
 	let hasChanges = $derived(
@@ -71,6 +88,11 @@
 		detailsError = '';
 		detailsSuccess = '';
 		if (!hasChanges) return;
+
+		if (requireEmail && !detailsEmail) {
+			detailsError = 'Email is required';
+			return;
+		}
 
 		if (newPassword !== newConfirmPassword) {
 			detailsError = "Passwords don't match";
@@ -165,12 +187,26 @@
 					maxlength="32"
 					pattern="[a-zA-Z0-9_.-]+"
 					autocomplete="username"
+					disabled={!!usernameLockedUntil}
 				/>
+				{#if usernameLockedUntil}
+					<p class="text-xs text-gray-400">
+						You can change your username again on {usernameLockedUntil.toLocaleDateString()}.
+					</p>
+				{/if}
 			</label>
 
 			<label class="flex flex-col gap-1.5">
-				<span class="form-label">Email</span>
-				<input class="form-input" type="email" bind:value={detailsEmail} autocomplete="email" />
+				<span class="form-label">
+					Email {#if !requireEmail}<span class="text-gray-400">(optional)</span>{/if}
+				</span>
+				<input
+					class="form-input"
+					type="email"
+					bind:value={detailsEmail}
+					required={requireEmail}
+					autocomplete="email"
+				/>
 			</label>
 
 			<div class="flex flex-col gap-4 border-t border-gray-100 pt-4 dark:border-white/10">

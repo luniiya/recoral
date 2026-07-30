@@ -1,4 +1,10 @@
-import { isValidUsername, validatePassword, type User } from "@recoral/shared";
+import {
+	isValidUsername,
+	validatePassword,
+	USERNAME_CHANGE_COOLDOWN_DAYS,
+	type AdminUserSummary,
+	type User
+} from "@recoral/shared";
 import { unlinkSync } from "node:fs";
 import { db } from "./db";
 import { getSettings } from "./settings";
@@ -16,6 +22,7 @@ interface UserRow {
 	avatar: string | null;
 	is_admin: number;
 	storage_limit_mb: number | null;
+	username_changed_at: string | null;
 }
 
 function toUser(row: UserRow): User {
@@ -27,7 +34,8 @@ function toUser(row: UserRow): User {
 		accentHue: row.accent_hue,
 		avatar: row.avatar,
 		isAdmin: row.is_admin === 1,
-		storageLimitMb: row.storage_limit_mb
+		storageLimitMb: row.storage_limit_mb,
+		usernameChangedAt: row.username_changed_at
 	};
 }
 
@@ -96,6 +104,8 @@ export async function register(
 	const passwordCheck = validatePassword(password, getSettings().requireStrongPasswords);
 	if (!passwordCheck.valid) throw new Error(passwordCheck.reason);
 
+	if (!email && getSettings().requireEmail) throw new Error("Email is required");
+
 	const existingUsername = db
 		.query<{ id: string }, [string]>("SELECT id FROM users WHERE username = ?")
 		.get(username);
@@ -127,7 +137,8 @@ export async function register(
 		accentHue: hue,
 		avatar: null,
 		isAdmin: isFirstUser,
-		storageLimitMb: null
+		storageLimitMb: null,
+		usernameChangedAt: null
 	} satisfies User);
 }
 
@@ -171,15 +182,32 @@ export async function updateAccount(
 		if (!valid) throw new Error("Current password is incorrect");
 	}
 
-	if (updates.username !== undefined) {
+	if (updates.username !== undefined && updates.username !== row.username) {
 		if (!isValidUsername(updates.username)) {
 			throw new Error("Username must be 3-32 characters: letters, numbers, ., - and _ only");
+		}
+		// Signup doesn't set username_changed_at, so the first self-service
+		// change is always allowed immediately; only a prior change starts the
+		// cooldown clock.
+		if (row.username_changed_at) {
+			const cooldownMs = USERNAME_CHANGE_COOLDOWN_DAYS * 24 * 60 * 60 * 1000;
+			const nextEligible = new Date(row.username_changed_at).getTime() + cooldownMs;
+			if (Date.now() < nextEligible) {
+				const dateStr = new Date(nextEligible).toISOString().slice(0, 10);
+				throw new Error(
+					`You can only change your username once every ${USERNAME_CHANGE_COOLDOWN_DAYS} days. Try again on ${dateStr}.`
+				);
+			}
 		}
 		const existingUsername = db
 			.query<{ id: string }, [string, string]>("SELECT id FROM users WHERE username = ? AND id != ?")
 			.get(updates.username, userId);
 		if (existingUsername) throw new Error("That username is already taken");
-		db.run("UPDATE users SET username = ? WHERE id = ?", [updates.username, userId]);
+		db.run("UPDATE users SET username = ?, username_changed_at = ? WHERE id = ?", [
+			updates.username,
+			new Date().toISOString(),
+			userId
+		]);
 	}
 
 	if (updates.email !== undefined) {
@@ -188,6 +216,8 @@ export async function updateAccount(
 				.query<{ id: string }, [string, string]>("SELECT id FROM users WHERE email = ? AND id != ?")
 				.get(updates.email, userId);
 			if (existingEmail) throw new Error("An account with that email already exists");
+		} else if (getSettings().requireEmail) {
+			throw new Error("Email is required");
 		}
 		db.run("UPDATE users SET email = ? WHERE id = ?", [updates.email, userId]);
 	}
@@ -237,9 +267,26 @@ export async function adminUpdateUser(
 	return toUser(row);
 }
 
-export function listUsers(): User[] {
+// Batched aggregates (one query each, not one per user) for the admin user
+// list's storage/recording usage, same N+1 avoidance as recordings.ts's
+// tagsByRecordingForUser.
+export function listUsers(): AdminUserSummary[] {
 	const rows = db.query<UserRow, []>("SELECT * FROM users ORDER BY created_at").all();
-	return rows.map(toUser);
+	const counts = db
+		.query<{ user_id: string; count: number }, []>("SELECT user_id, COUNT(*) as count FROM recordings GROUP BY user_id")
+		.all();
+	const sums = db
+		.query<{ user_id: string; total: number | null }, []>(
+			"SELECT user_id, SUM(file_size_bytes) as total FROM recordings GROUP BY user_id"
+		)
+		.all();
+	const countByUser = new Map(counts.map((c) => [c.user_id, c.count]));
+	const bytesByUser = new Map(sums.map((s) => [s.user_id, s.total ?? 0]));
+	return rows.map((row) => ({
+		...toUser(row),
+		recordingCount: countByUser.get(row.id) ?? 0,
+		storageUsedBytes: bytesByUser.get(row.id) ?? 0
+	}));
 }
 
 export function userCount(): number {
@@ -261,6 +308,8 @@ export async function adminCreateUser(
 
 	const passwordCheck = validatePassword(password, getSettings().requireStrongPasswords);
 	if (!passwordCheck.valid) throw new Error(passwordCheck.reason);
+
+	if (!email && getSettings().requireEmail) throw new Error("Email is required");
 
 	const existingUsername = db
 		.query<{ id: string }, [string]>("SELECT id FROM users WHERE username = ?")

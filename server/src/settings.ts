@@ -13,6 +13,7 @@ interface SettingsRow {
 	transcription_enabled: number;
 	transcription_model: string;
 	require_strong_passwords: number;
+	require_email: number;
 }
 
 function toSettings(row: SettingsRow): Settings {
@@ -26,7 +27,8 @@ function toSettings(row: SettingsRow): Settings {
 		transcriptionModel: (TRANSCRIPTION_MODELS as string[]).includes(row.transcription_model)
 			? (row.transcription_model as TranscriptionModel)
 			: "tiny",
-		requireStrongPasswords: row.require_strong_passwords === 1
+		requireStrongPasswords: row.require_strong_passwords === 1,
+		requireEmail: row.require_email === 1
 	};
 }
 
@@ -42,7 +44,8 @@ export function getSettings(): Settings {
 				maxImportSizeMb: 1024,
 				transcriptionEnabled: true,
 				transcriptionModel: "tiny",
-				requireStrongPasswords: true
+				requireStrongPasswords: true,
+				requireEmail: false
 			};
 }
 
@@ -55,6 +58,7 @@ export function updateSettings(updates: {
 	transcriptionEnabled?: boolean;
 	transcriptionModel?: TranscriptionModel;
 	requireStrongPasswords?: boolean;
+	requireEmail?: boolean;
 }): Settings {
 	if (updates.defaultAccentHue !== undefined) {
 		const hue =
@@ -85,6 +89,9 @@ export function updateSettings(updates: {
 		db.run("UPDATE settings SET require_strong_passwords = ? WHERE id = 1", [
 			updates.requireStrongPasswords ? 1 : 0
 		]);
+	}
+	if (updates.requireEmail !== undefined) {
+		db.run("UPDATE settings SET require_email = ? WHERE id = 1", [updates.requireEmail ? 1 : 0]);
 	}
 	return getSettings();
 }

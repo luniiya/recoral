@@ -64,6 +64,7 @@
 	<title>recoral - Login page</title>
 </svelte:head>
 
+<div class="mx-auto h-full w-full max-w-xl overflow-y-auto px-6 pb-24 md:pb-10">
 {#if !loading && settings}
 	<div class="card mb-6 overflow-hidden">
 		<button
@@ -170,3 +171,4 @@
 		</div>
 	</div>
 {/if}
+</div>

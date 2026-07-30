@@ -29,6 +29,9 @@ ensureColumn("users", "accent_hue", "accent_hue INTEGER NOT NULL DEFAULT 26");
 ensureColumn("users", "avatar", "avatar TEXT");
 ensureColumn("users", "is_admin", "is_admin INTEGER NOT NULL DEFAULT 0");
 ensureColumn("users", "storage_limit_mb", "storage_limit_mb INTEGER");
+// Null until the user's first self-service username change (signup doesn't
+// count), then reset on every subsequent change; see USERNAME_CHANGE_COOLDOWN_DAYS.
+ensureColumn("users", "username_changed_at", "username_changed_at TEXT");
 
 db.run(`
 	CREATE TABLE IF NOT EXISTS sessions (
@@ -84,7 +87,8 @@ db.run(`
 		max_import_size_mb INTEGER NOT NULL DEFAULT 1024,
 		transcription_enabled INTEGER NOT NULL DEFAULT 1,
 		transcription_model TEXT NOT NULL DEFAULT 'tiny',
-		require_strong_passwords INTEGER NOT NULL DEFAULT 1
+		require_strong_passwords INTEGER NOT NULL DEFAULT 1,
+		require_email INTEGER NOT NULL DEFAULT 0
 	)
 `);
 db.run("INSERT OR IGNORE INTO settings (id, default_accent_hue, signup_enabled) VALUES (1, NULL, 1)");
@@ -102,6 +106,9 @@ ensureColumn("settings", "transcription_model", "transcription_model TEXT NOT NU
 // Applies globally to every password-setting path (register, admin-create,
 // self-service change, admin reset), not just new accounts.
 ensureColumn("settings", "require_strong_passwords", "require_strong_passwords INTEGER NOT NULL DEFAULT 1");
+// Off by default (email stays optional/"complementary"); an admin can turn
+// this on in /admin to make email mandatory on every signup/account form.
+ensureColumn("settings", "require_email", "require_email INTEGER NOT NULL DEFAULT 0");
 
 db.run(`
 	CREATE TABLE IF NOT EXISTS recordings (
