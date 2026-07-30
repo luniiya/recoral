@@ -1,11 +1,14 @@
 <script lang="ts">
 	import type { Settings } from '@recoral/shared';
+	import { validatePassword } from '@recoral/shared';
 	import { goto } from '$app/navigation';
 	import { applyAccentHue, cacheAccentHue, readCachedAccentHue } from '$lib/accent';
 	import { api } from '$lib/api.svelte';
 	import { auth } from '$lib/auth.svelte';
 	import ColorPicker from '$lib/components/ColorPicker.svelte';
 	import LogoWordmark from '$lib/components/LogoWordmark.svelte';
+	import PasswordInput from '$lib/components/PasswordInput.svelte';
+	import PasswordMatchHint from '$lib/components/PasswordMatchHint.svelte';
 	import ThemeToggle from '$lib/components/ThemeToggle.svelte';
 	import { onboarding } from '$lib/onboarding.svelte';
 	import { isNativePlatform } from '$lib/platform';
@@ -17,6 +20,7 @@
 	let username = $state('');
 	let email = $state('');
 	let password = $state('');
+	let confirmPassword = $state('');
 	// Mobile only: shown editable right here so there's always a way to see
 	// or change which server you're talking to, not just once during setup.
 	let serverUrl = $state(api.baseUrl);
@@ -29,6 +33,7 @@
 	// confirmed/corrected once they do. See Logo.svelte for why this matters.
 	let randomAccent = $state(readCachedAccentHue() === null);
 	let signupEnabled = $state(true);
+	let requireStrongPasswords = $state(true);
 	let backgroundImage = $state<string | null>(null);
 	let error = $state('');
 	let submitting = $state(false);
@@ -80,6 +85,7 @@
 		if (!settingsRes.ok) return;
 		const settings: Settings = await settingsRes.json();
 		signupEnabled = settings.signupEnabled;
+		requireStrongPasswords = settings.requireStrongPasswords;
 		if (settings.defaultAccentHue !== null) {
 			accentHue = settings.defaultAccentHue;
 			cacheAccentHue(settings.defaultAccentHue);
@@ -96,6 +102,21 @@
 	async function submit(event: SubmitEvent) {
 		event.preventDefault();
 		error = '';
+
+		if (needsSetup || mode === 'register') {
+			// Client-side checks for instant feedback; register() still
+			// re-validates server-side regardless (defense in depth).
+			if (password !== confirmPassword) {
+				error = "Passwords don't match";
+				return;
+			}
+			const check = validatePassword(password, requireStrongPasswords);
+			if (!check.valid) {
+				error = check.reason ?? 'Invalid password';
+				return;
+			}
+		}
+
 		submitting = true;
 		try {
 			if (needsSetup || mode === 'register') await auth.register(username, password, email, accentHue);
@@ -179,14 +200,21 @@
 
 			<label class="flex flex-col gap-1.5">
 				<span class="form-label">Password</span>
-				<input
-					class="form-input"
-					type="password"
+				<PasswordInput
 					bind:value={password}
 					required
+					minlength={needsSetup || mode === 'register' ? 8 : undefined}
 					autocomplete={needsSetup || mode === 'register' ? 'new-password' : 'current-password'}
 				/>
 			</label>
+
+			{#if needsSetup || mode === 'register'}
+				<label class="flex flex-col gap-1.5">
+					<span class="form-label">Confirm password</span>
+					<PasswordInput bind:value={confirmPassword} required minlength={8} autocomplete="new-password" />
+					<PasswordMatchHint {password} confirm={confirmPassword} />
+				</label>
+			{/if}
 
 			{#if needsSetup || mode === 'register'}
 				<div class="flex flex-col gap-1.5">

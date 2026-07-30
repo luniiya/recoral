@@ -117,7 +117,14 @@ async function register(username: string, password: string, email: string, accen
 	await submit('/api/auth/register', { username, password, email: email || null, accentHue });
 }
 
-async function updateAccount(updates: { accentHue?: number; avatar?: string | null }) {
+async function updateAccount(updates: {
+	accentHue?: number;
+	avatar?: string | null;
+	username?: string;
+	email?: string | null;
+	password?: string;
+	currentPassword?: string;
+}) {
 	const res = await api.fetch('/api/account', {
 		method: 'PATCH',
 		headers: { 'Content-Type': 'application/json' },

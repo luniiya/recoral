@@ -83,7 +83,8 @@ db.run(`
 		server_storage_limit_mb INTEGER DEFAULT 204800,
 		max_import_size_mb INTEGER NOT NULL DEFAULT 1024,
 		transcription_enabled INTEGER NOT NULL DEFAULT 1,
-		transcription_model TEXT NOT NULL DEFAULT 'tiny'
+		transcription_model TEXT NOT NULL DEFAULT 'tiny',
+		require_strong_passwords INTEGER NOT NULL DEFAULT 1
 	)
 `);
 db.run("INSERT OR IGNORE INTO settings (id, default_accent_hue, signup_enabled) VALUES (1, NULL, 1)");
@@ -97,6 +98,10 @@ ensureColumn("settings", "max_import_size_mb", "max_import_size_mb INTEGER NOT N
 // breaking anything else.
 ensureColumn("settings", "transcription_enabled", "transcription_enabled INTEGER NOT NULL DEFAULT 1");
 ensureColumn("settings", "transcription_model", "transcription_model TEXT NOT NULL DEFAULT 'tiny'");
+// On by default; an admin can allow weaker passwords server-wide in /admin.
+// Applies globally to every password-setting path (register, admin-create,
+// self-service change, admin reset), not just new accounts.
+ensureColumn("settings", "require_strong_passwords", "require_strong_passwords INTEGER NOT NULL DEFAULT 1");
 
 db.run(`
 	CREATE TABLE IF NOT EXISTS recordings (

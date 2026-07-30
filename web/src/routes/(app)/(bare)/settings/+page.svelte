@@ -1,19 +1,13 @@
 <script lang="ts">
+	import { validatePassword } from '@recoral/shared';
 	import { auth } from '$lib/auth.svelte';
 	import Avatar from '$lib/components/Avatar.svelte';
 	import BackButton from '$lib/components/BackButton.svelte';
-	import ColorPicker from '$lib/components/ColorPicker.svelte';
-	import Toggle from '$lib/components/Toggle.svelte';
+	import PasswordInput from '$lib/components/PasswordInput.svelte';
+	import PasswordMatchHint from '$lib/components/PasswordMatchHint.svelte';
+	import { api } from '$lib/api.svelte';
 	import { readAsDataUrl } from '$lib/file';
-	import { systemAccentStore } from '$lib/systemAccent.svelte';
-	import { themeStore, type ThemePreference } from '$lib/theme.svelte';
-	import { wavySeekStore } from '$lib/wavySeek.svelte';
-
-	const themeOptions: { value: ThemePreference; label: string }[] = [
-		{ value: 'system', label: 'Auto' },
-		{ value: 'light', label: 'Light' },
-		{ value: 'dark', label: 'Dark' }
-	];
+	import { onMount } from 'svelte';
 
 	let saving = $state(false);
 	let error = $state('');
@@ -34,15 +28,69 @@
 		}
 	}
 
-	async function onHueSelected(hue: number) {
-		error = '';
-		saving = true;
+	// Account details: username/email/password. Initialized once from
+	// auth.user (this component only ever renders once auth.user exists, see
+	// the {#if auth.user} gate below), then kept in sync manually after a
+	// successful save rather than re-deriving reactively.
+	let detailsUsername = $state(auth.user?.username ?? '');
+	let detailsEmail = $state(auth.user?.email ?? '');
+	let newPassword = $state('');
+	let newConfirmPassword = $state('');
+	let currentPassword = $state('');
+	let detailsSaving = $state(false);
+	let detailsError = $state('');
+	let detailsSuccess = $state('');
+	let requireStrongPasswords = $state(true);
+
+	onMount(async () => {
+		const res = await api.fetch('/api/settings');
+		if (res.ok) requireStrongPasswords = (await res.json()).requireStrongPasswords;
+	});
+
+	let hasChanges = $derived(
+		detailsUsername !== auth.user?.username ||
+			detailsEmail !== (auth.user?.email ?? '') ||
+			newPassword !== ''
+	);
+
+	async function saveAccountDetails() {
+		detailsError = '';
+		detailsSuccess = '';
+		if (!hasChanges) return;
+
+		if (newPassword !== newConfirmPassword) {
+			detailsError = "Passwords don't match";
+			return;
+		}
+		if (newPassword) {
+			const check = validatePassword(newPassword, requireStrongPasswords);
+			if (!check.valid) {
+				detailsError = check.reason ?? 'Invalid password';
+				return;
+			}
+		}
+
+		const updates: {
+			username?: string;
+			email?: string | null;
+			password?: string;
+			currentPassword?: string;
+		} = { currentPassword };
+		if (detailsUsername !== auth.user?.username) updates.username = detailsUsername;
+		if (detailsEmail !== (auth.user?.email ?? '')) updates.email = detailsEmail || null;
+		if (newPassword) updates.password = newPassword;
+
+		detailsSaving = true;
 		try {
-			await auth.updateAccount({ accentHue: hue });
+			await auth.updateAccount(updates);
+			newPassword = '';
+			newConfirmPassword = '';
+			currentPassword = '';
+			detailsSuccess = 'Saved';
 		} catch (err) {
-			error = (err as Error).message;
+			detailsError = (err as Error).message;
 		} finally {
-			saving = false;
+			detailsSaving = false;
 		}
 	}
 </script>
@@ -87,77 +135,64 @@
 		{/if}
 	</div>
 
-	<div class="card mb-6 p-6">
-		<h2 class="mb-1 text-sm font-semibold text-gray-900 dark:text-gray-100">Accent color</h2>
-		<p class="mb-4 text-sm text-gray-500 dark:text-gray-400">Applies across the whole app, on every device.</p>
-
-		{#if systemAccentStore.available}
-			<div class="mb-5 flex items-center justify-between gap-4 border-b border-gray-100 pb-5 dark:border-white/10">
-				<div>
-					<p class="text-sm text-gray-900 dark:text-gray-100">Use device color</p>
-					<p class="text-sm text-gray-500 dark:text-gray-400">
-						Match this phone's own system accent color, on this device only.
-					</p>
-				</div>
-				<Toggle checked={systemAccentStore.enabled} onchange={(checked) => systemAccentStore.set(checked)} />
-			</div>
-			{#if systemAccentStore.enabled}
-				<p class="mb-4 text-sm text-gray-500 dark:text-gray-400">
-					Your own color below applies once "Use device color" is off.
-				</p>
-			{/if}
-		{/if}
-
-		<ColorPicker value={auth.user.accentHue} onselect={onHueSelected} />
-	</div>
-
-	<div class="card mb-6 p-6">
-		<h2 class="mb-4 text-sm font-semibold text-gray-900 dark:text-gray-100">Appearance</h2>
-
-		<div class="mb-5 flex items-center justify-between gap-4">
-			<p class="text-sm text-gray-900 dark:text-gray-100">Theme</p>
-			<div class="flex gap-1 rounded-full bg-gray-100 p-1 dark:bg-white/5">
-				{#each themeOptions as option (option.value)}
-					<button
-						class="rounded-full px-3.5 py-1.5 text-sm font-medium transition
-							{themeStore.preference === option.value
-							? 'bg-accent-500 text-white'
-							: 'text-gray-600 hover:bg-gray-200 dark:text-gray-300 dark:hover:bg-white/10'}"
-						onclick={() => themeStore.set(option.value)}
-					>
-						{option.label}
-					</button>
-				{/each}
-			</div>
-		</div>
-
-		<div class="flex items-center justify-between gap-4 border-t border-gray-100 pt-5 dark:border-white/10">
-			<div>
-				<p class="text-sm text-gray-900 dark:text-gray-100">Wavy playback indicator</p>
-				<p class="text-sm text-gray-500 dark:text-gray-400">
-					Wobble the seek bar's played portion while audio is playing.
-				</p>
-			</div>
-			<Toggle checked={wavySeekStore.enabled} onchange={(checked) => wavySeekStore.set(checked)} />
-		</div>
-	</div>
-
 	<div class="card p-6">
-		<h2 class="mb-1 text-sm font-semibold text-gray-900 dark:text-gray-100">Import / Export</h2>
-		<p class="mb-4 text-sm text-gray-500 dark:text-gray-400">Move recordings in or out of recoral.</p>
-		<div class="flex gap-2">
-			<a
-				href="/settings/import"
-				class="rounded-full bg-accent-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-accent-600"
+		<h2 class="mb-1 text-sm font-semibold text-gray-900 dark:text-gray-100">Account details</h2>
+		<p class="mb-5 text-sm text-gray-500 dark:text-gray-400">
+			Changing your username, email, or password requires your current password.
+		</p>
+
+		<div class="flex flex-col gap-4">
+			<label class="flex flex-col gap-1.5">
+				<span class="form-label">Username</span>
+				<input
+					class="form-input"
+					bind:value={detailsUsername}
+					minlength="3"
+					maxlength="32"
+					pattern="[a-zA-Z0-9_.-]+"
+					autocomplete="username"
+				/>
+			</label>
+
+			<label class="flex flex-col gap-1.5">
+				<span class="form-label">Email</span>
+				<input class="form-input" type="email" bind:value={detailsEmail} autocomplete="email" />
+			</label>
+
+			<div class="flex flex-col gap-4 border-t border-gray-100 pt-4 dark:border-white/10">
+				<label class="flex flex-col gap-1.5">
+					<span class="form-label">New password <span class="text-gray-400">(leave blank to keep it)</span></span>
+					<PasswordInput bind:value={newPassword} minlength={8} autocomplete="new-password" />
+				</label>
+
+				{#if newPassword}
+					<label class="flex flex-col gap-1.5">
+						<span class="form-label">Confirm new password</span>
+						<PasswordInput bind:value={newConfirmPassword} minlength={8} autocomplete="new-password" />
+						<PasswordMatchHint password={newPassword} confirm={newConfirmPassword} />
+					</label>
+				{/if}
+			</div>
+
+			<label class="flex flex-col gap-1.5 border-t border-gray-100 pt-4 dark:border-white/10">
+				<span class="form-label">Current password</span>
+				<PasswordInput bind:value={currentPassword} autocomplete="current-password" />
+			</label>
+
+			{#if detailsError}
+				<p class="text-sm text-red-600 dark:text-red-400">{detailsError}</p>
+			{/if}
+			{#if detailsSuccess}
+				<p class="text-sm text-green-600 dark:text-green-400">{detailsSuccess}</p>
+			{/if}
+
+			<button
+				class="self-start rounded-full bg-accent-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-accent-600 disabled:opacity-60"
+				disabled={detailsSaving || !hasChanges || !currentPassword}
+				onclick={saveAccountDetails}
 			>
-				Import
-			</a>
-			<a
-				href="/settings/export"
-				class="rounded-full px-4 py-2 text-sm font-semibold text-gray-600 ring-1 ring-gray-200 transition hover:bg-gray-100 dark:text-gray-300 dark:ring-white/10 dark:hover:bg-white/5"
-			>
-				Export
-			</a>
+				{detailsSaving ? 'Saving…' : 'Save changes'}
+			</button>
 		</div>
 	</div>
 

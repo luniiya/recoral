@@ -13,6 +13,34 @@ export function isValidUsername(username: string): boolean {
 	return USERNAME_PATTERN.test(username);
 }
 
+export const MIN_PASSWORD_LENGTH = 8;
+
+export interface PasswordCheckResult {
+	valid: boolean;
+	reason?: string;
+}
+
+function passwordClassCount(password: string): number {
+	return [/[A-Z]/, /[a-z]/, /[0-9]/, /[^A-Za-z0-9]/].filter((re) => re.test(password)).length;
+}
+
+// Single source of truth for both the server (real enforcement) and every
+// client form (instant feedback, identical wording), same precedent as
+// isValidUsername above. requireStrong=false only enforces non-empty,
+// matching the previous zero-validation behavior for servers that opted out
+// via Settings.requireStrongPasswords.
+export function validatePassword(password: string, requireStrong: boolean): PasswordCheckResult {
+	if (!password) return { valid: false, reason: "Password is required" };
+	if (!requireStrong) return { valid: true };
+	if (password.length < MIN_PASSWORD_LENGTH || passwordClassCount(password) < 2) {
+		return {
+			valid: false,
+			reason: "Password must be at least 8 characters and include at least 2 of: uppercase, lowercase, numbers, symbols"
+		};
+	}
+	return { valid: true };
+}
+
 export type TranscriptStatus = "none" | "pending" | "processing" | "done" | "failed";
 
 export type TranscriptionModel = "tiny" | "base" | "small" | "medium" | "large";
@@ -58,6 +86,7 @@ export interface Settings {
 	maxImportSizeMb: number;
 	transcriptionEnabled: boolean;
 	transcriptionModel: TranscriptionModel;
+	requireStrongPasswords: boolean;
 }
 
 export interface StorageUsage {

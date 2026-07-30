@@ -1,6 +1,7 @@
-import { isValidUsername, type User } from "@recoral/shared";
+import { isValidUsername, validatePassword, type User } from "@recoral/shared";
 import { unlinkSync } from "node:fs";
 import { db } from "./db";
+import { getSettings } from "./settings";
 
 const SESSION_COOKIE = "recoral_session";
 const DEFAULT_ACCENT_HUE = 26;
@@ -92,6 +93,9 @@ export async function register(
 		throw new Error("Username must be 3-32 characters: letters, numbers, ., - and _ only");
 	}
 
+	const passwordCheck = validatePassword(password, getSettings().requireStrongPasswords);
+	if (!passwordCheck.valid) throw new Error(passwordCheck.reason);
+
 	const existingUsername = db
 		.query<{ id: string }, [string]>("SELECT id FROM users WHERE username = ?")
 		.get(username);
@@ -139,7 +143,62 @@ export async function login(identifier: string, password: string): Promise<{ use
 	return startSession(toUser(row));
 }
 
-export function updateAccount(userId: string, updates: { accentHue?: number; avatar?: string | null }): User {
+// username/email/password are "sensitive": changing any of them requires
+// re-entering currentPassword first, proving it's really the account owner
+// and not a hijacked/left-open session silently taking over the account
+// (e.g. a changed password would otherwise lock the real owner out with no
+// warning). accentHue/avatar stay frictionless, no currentPassword needed.
+export async function updateAccount(
+	userId: string,
+	updates: {
+		accentHue?: number;
+		avatar?: string | null;
+		username?: string;
+		email?: string | null;
+		password?: string;
+		currentPassword?: string;
+	}
+): Promise<User> {
+	const sensitiveChange =
+		updates.username !== undefined || updates.email !== undefined || updates.password !== undefined;
+
+	const row = db.query<UserRow, [string]>("SELECT * FROM users WHERE id = ?").get(userId);
+	if (!row) throw new Error("User not found");
+
+	if (sensitiveChange) {
+		if (!updates.currentPassword) throw new Error("Current password is required");
+		const valid = await Bun.password.verify(updates.currentPassword, row.password_hash);
+		if (!valid) throw new Error("Current password is incorrect");
+	}
+
+	if (updates.username !== undefined) {
+		if (!isValidUsername(updates.username)) {
+			throw new Error("Username must be 3-32 characters: letters, numbers, ., - and _ only");
+		}
+		const existingUsername = db
+			.query<{ id: string }, [string, string]>("SELECT id FROM users WHERE username = ? AND id != ?")
+			.get(updates.username, userId);
+		if (existingUsername) throw new Error("That username is already taken");
+		db.run("UPDATE users SET username = ? WHERE id = ?", [updates.username, userId]);
+	}
+
+	if (updates.email !== undefined) {
+		if (updates.email) {
+			const existingEmail = db
+				.query<{ id: string }, [string, string]>("SELECT id FROM users WHERE email = ? AND id != ?")
+				.get(updates.email, userId);
+			if (existingEmail) throw new Error("An account with that email already exists");
+		}
+		db.run("UPDATE users SET email = ? WHERE id = ?", [updates.email, userId]);
+	}
+
+	if (updates.password !== undefined) {
+		const passwordCheck = validatePassword(updates.password, getSettings().requireStrongPasswords);
+		if (!passwordCheck.valid) throw new Error(passwordCheck.reason);
+		const passwordHash = await Bun.password.hash(updates.password);
+		db.run("UPDATE users SET password_hash = ? WHERE id = ?", [passwordHash, userId]);
+	}
+
 	if (updates.accentHue !== undefined) {
 		const hue = Math.round(((updates.accentHue % 360) + 360) % 360);
 		db.run("UPDATE users SET accent_hue = ? WHERE id = ?", [hue, userId]);
@@ -148,20 +207,29 @@ export function updateAccount(userId: string, updates: { accentHue?: number; ava
 		db.run("UPDATE users SET avatar = ? WHERE id = ?", [updates.avatar, userId]);
 	}
 
-	const row = db.query<UserRow, [string]>("SELECT * FROM users WHERE id = ?").get(userId);
-	if (!row) throw new Error("User not found");
-	return toUser(row);
+	const updatedRow = db.query<UserRow, [string]>("SELECT * FROM users WHERE id = ?").get(userId);
+	if (!updatedRow) throw new Error("User not found");
+	return toUser(updatedRow);
 }
 
-export function adminUpdateUser(
+// No currentPassword needed here, unlike updateAccount above: this is an
+// admin acting on a *different* user's account, already gated by
+// requireAdmin server-side, not a self-service change needing re-auth.
+export async function adminUpdateUser(
 	userId: string,
-	updates: { isAdmin?: boolean; storageLimitMb?: number | null }
-): User {
+	updates: { isAdmin?: boolean; storageLimitMb?: number | null; password?: string }
+): Promise<User> {
 	if (updates.isAdmin !== undefined) {
 		db.run("UPDATE users SET is_admin = ? WHERE id = ?", [updates.isAdmin ? 1 : 0, userId]);
 	}
 	if (updates.storageLimitMb !== undefined) {
 		db.run("UPDATE users SET storage_limit_mb = ? WHERE id = ?", [updates.storageLimitMb, userId]);
+	}
+	if (updates.password !== undefined) {
+		const passwordCheck = validatePassword(updates.password, getSettings().requireStrongPasswords);
+		if (!passwordCheck.valid) throw new Error(passwordCheck.reason);
+		const passwordHash = await Bun.password.hash(updates.password);
+		db.run("UPDATE users SET password_hash = ? WHERE id = ?", [passwordHash, userId]);
 	}
 
 	const row = db.query<UserRow, [string]>("SELECT * FROM users WHERE id = ?").get(userId);
@@ -190,7 +258,9 @@ export async function adminCreateUser(
 	if (!isValidUsername(username)) {
 		throw new Error("Username must be 3-32 characters: letters, numbers, ., - and _ only");
 	}
-	if (!password) throw new Error("Password is required");
+
+	const passwordCheck = validatePassword(password, getSettings().requireStrongPasswords);
+	if (!passwordCheck.valid) throw new Error(passwordCheck.reason);
 
 	const existingUsername = db
 		.query<{ id: string }, [string]>("SELECT id FROM users WHERE username = ?")

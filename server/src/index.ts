@@ -1,4 +1,4 @@
-import { APP_VERSION, type TranscriptionModel } from "@recoral/shared";
+import { APP_VERSION, isValidUsername, type TranscriptionModel } from "@recoral/shared";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Readable } from "node:stream";
@@ -45,7 +45,6 @@ const webDir = new URL("../../web/build/", import.meta.url);
 const MAX_AVATAR_LENGTH = 2_000_000; // ~1.5MB decoded, generous for a small profile picture
 const MAX_BACKGROUND_LENGTH = 8_000_000; // ~6MB decoded, a full-bleed page background needs more room
 
-const USERNAME_PATTERN = /^[a-zA-Z0-9_.-]{3,32}$/;
 const TRANSCRIPTION_MODELS: TranscriptionModel[] = ["tiny", "base", "small", "medium", "large"];
 
 async function readRegisterBody(req: Request) {
@@ -55,10 +54,12 @@ async function readRegisterBody(req: Request) {
 	const password = typeof body.password === "string" ? body.password : "";
 	const accentHue = typeof body.accentHue === "number" ? body.accentHue : undefined;
 
-	if (!USERNAME_PATTERN.test(username)) {
+	if (!isValidUsername(username)) {
 		throw new Error("Username must be 3-32 characters, letters, numbers, dots, underscores or hyphens only");
 	}
-	if (!password) throw new Error("Password is required");
+	// Password strength (empty vs. weak vs. the requireStrongPasswords toggle)
+	// is all enforced inside register() itself, the single source of truth,
+	// no need to duplicate any of that check here.
 
 	return { username, email, password, accentHue };
 }
@@ -219,7 +220,14 @@ const server = Bun.serve({
 				try {
 					const user = requireUser(req);
 					const body = await req.json();
-					const updates: { accentHue?: number; avatar?: string | null } = {};
+					const updates: {
+						accentHue?: number;
+						avatar?: string | null;
+						username?: string;
+						email?: string | null;
+						password?: string;
+						currentPassword?: string;
+					} = {};
 
 					if (typeof body.accentHue === "number") updates.accentHue = body.accentHue;
 					if (body.avatar === null) updates.avatar = null;
@@ -229,8 +237,15 @@ const server = Bun.serve({
 						}
 						updates.avatar = body.avatar;
 					}
+					if (typeof body.username === "string") updates.username = body.username.trim().toLowerCase();
+					if (body.email === null) updates.email = null;
+					else if (typeof body.email === "string" && body.email.trim()) {
+						updates.email = body.email.trim().toLowerCase();
+					}
+					if (typeof body.password === "string" && body.password) updates.password = body.password;
+					if (typeof body.currentPassword === "string") updates.currentPassword = body.currentPassword;
 
-					return Response.json(updateAccount(user.id, updates));
+					return Response.json(await updateAccount(user.id, updates));
 				} catch (err) {
 					if (err instanceof UnauthorizedError) return new Response(null, { status: 401 });
 					return Response.json({ error: (err as Error).message }, { status: 400 });
@@ -307,7 +322,7 @@ const server = Bun.serve({
 					const password = typeof body.password === "string" ? body.password : "";
 					const isAdmin = body.isAdmin === true;
 
-					if (!USERNAME_PATTERN.test(username)) {
+					if (!isValidUsername(username)) {
 						return Response.json(
 							{ error: "Username must be 3-32 characters, letters, numbers, dots, underscores or hyphens only" },
 							{ status: 400 }
@@ -327,7 +342,7 @@ const server = Bun.serve({
 				try {
 					const admin = requireAdmin(req);
 					const body = await req.json();
-					const updates: { isAdmin?: boolean; storageLimitMb?: number | null } = {};
+					const updates: { isAdmin?: boolean; storageLimitMb?: number | null; password?: string } = {};
 
 					if (typeof body.isAdmin === "boolean") {
 						if (req.params.id === admin.id && body.isAdmin === false) {
@@ -338,10 +353,15 @@ const server = Bun.serve({
 					if (body.storageLimitMb === null || typeof body.storageLimitMb === "number") {
 						updates.storageLimitMb = body.storageLimitMb;
 					}
+					if (typeof body.password === "string" && body.password) updates.password = body.password;
 
-					return Response.json(adminUpdateUser(req.params.id, updates));
+					return Response.json(await adminUpdateUser(req.params.id, updates));
 				} catch (err) {
-					return authErrorResponse(err) ?? new Response(null, { status: 401 });
+					// A plain thrown Error here (weak password, "User not found") is a
+					// real validation message the client should see, not an auth
+					// failure, so this now matches the same fallback shape /api/account
+					// and other mutating routes already use instead of a blank 401.
+					return authErrorResponse(err) ?? Response.json({ error: (err as Error).message }, { status: 400 });
 				}
 			},
 			DELETE: (req) => {
@@ -375,6 +395,7 @@ const server = Bun.serve({
 						maxImportSizeMb?: number;
 						transcriptionEnabled?: boolean;
 						transcriptionModel?: TranscriptionModel;
+						requireStrongPasswords?: boolean;
 					} = {};
 
 					if (body.defaultAccentHue === null || typeof body.defaultAccentHue === "number") {
@@ -399,6 +420,9 @@ const server = Bun.serve({
 					}
 					if (TRANSCRIPTION_MODELS.includes(body.transcriptionModel)) {
 						updates.transcriptionModel = body.transcriptionModel;
+					}
+					if (typeof body.requireStrongPasswords === "boolean") {
+						updates.requireStrongPasswords = body.requireStrongPasswords;
 					}
 
 					const newSettings = updateSettings(updates);
