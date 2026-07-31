@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { ScrubberSegment } from '$lib/dateGroups';
+	import { scrubbingStore } from '$lib/scrubbing.svelte';
 
 	let { scrollEl, segments }: { scrollEl: HTMLElement | undefined; segments: ScrubberSegment[] } = $props();
 
@@ -152,6 +153,20 @@
 		trackHeight = el.clientHeight;
 		return () => resizeObserver.disconnect();
 	});
+
+	// FloatingVolumeControl gets out of the way while this is actively in use
+	// (drag, hover, or mid-scroll), on mobile touch or desktop mouse alike:
+	// instant to show, but a brief no-touch grace period before it's allowed
+	// back so a flicker-quick pause between drags/scrolls doesn't flash it back in.
+	$effect(() => {
+		if (dragging || hovering || scrolling) {
+			scrubbingStore.set(true);
+			return;
+		}
+		const timeout = setTimeout(() => scrubbingStore.set(false), 100);
+		return () => clearTimeout(timeout);
+	});
+	$effect(() => () => scrubbingStore.set(false));
 </script>
 
 {#if canScroll}

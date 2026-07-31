@@ -9,6 +9,7 @@
 	import StatusBarSpacer from '$lib/components/StatusBarSpacer.svelte';
 	import TagChips from '$lib/components/TagChips.svelte';
 	import ThemeToggle from '$lib/components/ThemeToggle.svelte';
+	import { detailPanelStore } from '$lib/detailPanel.svelte';
 	import { liveRecordingStore } from '$lib/liveRecording.svelte';
 	import { navIcons } from '$lib/navIcons';
 	import { pageSelectStore } from '$lib/pageSelect.svelte';
@@ -24,6 +25,16 @@
 	let selectionTagPickerOpen = $state(false);
 	let confirmingBulkDelete = $state(false);
 	let refreshing = $state(false);
+
+	// Sidebar (224px) + the list rail a detail panel shrinks to (416px) leaves
+	// a cramped detail view below this width, so it auto-collapses to
+	// icon-only there instead, but only while a detail panel is actually
+	// open (no reason to shrink it just because the window happens to be
+	// this width otherwise). Desktop-only concern: on mobile the Sidebar
+	// isn't shown at all (see Sidebar.svelte's own `hidden md:flex`).
+	let windowWidth = $state(0);
+	const SIDEBAR_COLLAPSE_WIDTH = 1100;
+	let sidebarCollapsed = $derived(detailPanelStore.open && windowWidth > 0 && windowWidth < SIDEBAR_COLLAPSE_WIDTH);
 
 	async function refresh() {
 		if (refreshing) return;
@@ -307,13 +318,15 @@
 	</header>
 
 	<div class="flex min-h-0 flex-1">
-		<Sidebar />
+		<Sidebar collapsed={sidebarCollapsed} />
 
 		<main class="min-h-0 flex-1 overflow-hidden">
 			{@render children()}
 		</main>
 	</div>
 </div>
+
+<svelte:window bind:innerWidth={windowWidth} />
 
 {#if confirmingBulkDelete}
 	<Dialog onclose={() => (confirmingBulkDelete = false)}>

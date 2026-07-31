@@ -8,6 +8,7 @@
 	import Scrubber from '$lib/components/Scrubber.svelte';
 	import VirtualTimeline from '$lib/components/VirtualTimeline.svelte';
 	import { buildScrubberSegments, buildTimeline } from '$lib/dateGroups';
+	import { detailPanelStore } from '$lib/detailPanel.svelte';
 	import { recordingDisplayTitle } from '$lib/format';
 	import { useListBackHandler } from '$lib/listBack.svelte';
 	import { isNativePlatform } from '$lib/platform';
@@ -16,10 +17,14 @@
 
 	let scrollEl: HTMLDivElement | undefined = $state();
 	let selectedId = $state<string | null>(null);
+	let detailRef: RecordingDetail | undefined = $state();
 
+	// Fades playback out first if it's actively playing (same as the on-screen
+	// close button, see RecordingDetail's exported handleClose), instead of
+	// yanking selectedId straight to null and reproducing the same pop.
 	useListBackHandler(
 		() => selectedId,
-		() => (selectedId = null)
+		() => (detailRef ? void detailRef.handleClose() : (selectedId = null))
 	);
 
 	// The header filter panel is visible on this page too (same as
@@ -43,6 +48,11 @@
 	let timeline = $derived(buildTimeline(visibleRecordings));
 	let scrubberSegments = $derived(buildScrubberSegments(visibleRecordings));
 	let orderedIds = $derived(visibleRecordings.map((r) => r.id));
+
+	// See detailPanel.svelte.ts: lets the layout auto-collapse the Sidebar on
+	// narrow desktop widths while a detail panel is open here.
+	$effect(() => detailPanelStore.set(!!selectedRecording));
+	$effect(() => () => detailPanelStore.set(false));
 </script>
 
 <svelte:head>
@@ -97,7 +107,7 @@
 
 	{#if selectedRecording}
 		<div class="fixed inset-0 z-40 bg-white dark:bg-black md:static md:inset-auto md:z-auto md:min-w-0 md:flex-1 md:border-l md:border-gray-200 md:dark:border-white/10">
-			<RecordingDetail recording={selectedRecording} onclose={() => (selectedId = null)} />
+			<RecordingDetail bind:this={detailRef} recording={selectedRecording} onclose={() => (selectedId = null)} />
 		</div>
 	{/if}
 </div>

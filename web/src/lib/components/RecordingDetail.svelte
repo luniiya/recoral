@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { Tag } from '@recoral/shared';
+	import { fadeOutAndPause } from '$lib/audioFade';
 	import AudioPlayer from './AudioPlayer.svelte';
 	import Dialog from './Dialog.svelte';
 	import TagChip from './TagChip.svelte';
@@ -45,17 +46,34 @@
 	// trash, tag remove).
 	let pendingDeleteLocal = $state(false);
 
-	function searchByTag(tag: Tag) {
-		recordingsStore.setTagFilter(tag.id);
-		onclose();
-	}
 	let playbackTime = $state(0);
 	let playbackPlaying = $state(false);
 	let playbackEl = $state<HTMLAudioElement | undefined>(undefined);
+
+	// Quickly closing/navigating away while a recording is actively playing
+	// was producing an audible pop, since the <audio> element just got torn
+	// down mid-waveform with no chance to stop cleanly first. Fading it out
+	// (a few dozen ms, imperceptible as a delay) before the real onclose()
+	// actually unmounts everything avoids that, see audioFade.ts.
+	// Exported (not just internal) so the parent page's hardware/gesture
+	// back-button handler can trigger the same fade-before-close as the
+	// on-screen close button, instead of yanking selectedId to null directly
+	// and reproducing the same speaker pop this was built to avoid.
+	export async function handleClose() {
+		if (playbackPlaying && playbackEl) await fadeOutAndPause(playbackEl);
+		onclose();
+	}
+
+	function searchByTag(tag: Tag) {
+		recordingsStore.setTagFilter(tag.id);
+		handleClose();
+	}
 	let transcribeError = $state('');
 	let retrying = $state(false);
 	let downloading = $state(false);
 	let sharing = $state(false);
+	let copied = $state(false);
+	let copyTimeout: ReturnType<typeof setTimeout> | null = null;
 
 	function retryTranscription() {
 		transcribeError = '';
@@ -66,6 +84,14 @@
 				if (result.error) transcribeError = result.error;
 			})
 			.finally(() => (retrying = false));
+	}
+
+	async function copyTranscript() {
+		if (!recording.transcript) return;
+		await navigator.clipboard.writeText(recording.transcript);
+		copied = true;
+		if (copyTimeout) clearTimeout(copyTimeout);
+		copyTimeout = setTimeout(() => (copied = false), 1500);
 	}
 
 	// While a transcript is in flight, poll this one recording so the tab
@@ -141,7 +167,7 @@
 		<button
 			class="flex size-8 items-center justify-center rounded-full text-gray-500 transition hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-white/5"
 			aria-label="Close"
-			onclick={onclose}
+			onclick={handleClose}
 		>
 			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="size-4 md:hidden">
 				<path stroke-linecap="round" stroke-linejoin="round" d="M15 18l-6-6 6-6" />
@@ -220,7 +246,7 @@
 					onclick={() => {
 						if (recording.archivedAt) recordingsStore.unarchive(recording.id);
 						else recordingsStore.archive(recording.id);
-						onclose();
+						handleClose();
 					}}
 				>
 					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="size-4">
@@ -241,7 +267,7 @@
 						pendingDeleteLocal = true;
 					} else {
 						recordingsStore.trash(recording.id);
-						onclose();
+						handleClose();
 					}
 				}}
 			>
@@ -343,7 +369,7 @@
 						onclick={() => {
 							pendingDeleteLocal = false;
 							recordingsStore.deleteForever(recording.id);
-							onclose();
+							handleClose();
 						}}
 					>
 						Delete
@@ -366,19 +392,36 @@
 				</div>
 			{:else if recording.transcript}
 				<div class="flex h-full flex-col gap-3">
-					<p class="flex-1 text-sm whitespace-pre-wrap text-gray-700 dark:text-gray-300">{recording.transcript}</p>
-					{#if !isLocal}
-						<div class="flex items-center justify-end gap-2 text-xs">
-							{#if recording.transcriptStatus === 'pending' || recording.transcriptStatus === 'processing'}
-								<span class="flex items-center gap-1.5 text-gray-400">
-									<svg viewBox="0 0 24 24" fill="none" class="size-3.5 animate-spin text-accent-500">
-										<circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="3" stroke-opacity="0.25" />
-										<path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" stroke-width="3" stroke-linecap="round" />
+					<div class="flex items-center justify-end gap-2 text-xs">
+						{#if !isLocal && (recording.transcriptStatus === 'pending' || recording.transcriptStatus === 'processing')}
+							<span class="flex items-center gap-1.5 text-gray-400">
+								<svg viewBox="0 0 24 24" fill="none" class="size-3.5 animate-spin text-accent-500">
+									<circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="3" stroke-opacity="0.25" />
+									<path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" stroke-width="3" stroke-linecap="round" />
+								</svg>
+								Retranscribing…
+							</span>
+						{:else}
+							{#if !isLocal && transcribeError}<span class="text-red-500 dark:text-red-400">{transcribeError}</span>{/if}
+							<button
+								class="flex items-center gap-1 rounded-full px-2.5 py-1 font-semibold text-accent-600 ring-1 ring-accent-200 transition hover:bg-accent-50 dark:text-accent-400 dark:ring-accent-500/30 dark:hover:bg-accent-500/10"
+								onclick={copyTranscript}
+								aria-label="Copy transcript"
+							>
+								{#if copied}
+									<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="size-3.5">
+										<path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4.5 4.5L19 7.5" />
 									</svg>
-									Retranscribing…
-								</span>
-							{:else}
-								{#if transcribeError}<span class="text-red-500 dark:text-red-400">{transcribeError}</span>{/if}
+									Copied
+								{:else}
+									<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="size-3.5">
+										<rect x="8" y="8" width="11" height="11" rx="1.5" />
+										<path d="M5 15V6a1 1 0 0 1 1-1h9" stroke-linecap="round" />
+									</svg>
+									Copy
+								{/if}
+							</button>
+							{#if !isLocal}
 								<button
 									class="rounded-full px-3 py-1 font-semibold text-accent-600 ring-1 ring-accent-200 transition hover:bg-accent-50 disabled:opacity-60 dark:text-accent-400 dark:ring-accent-500/30 dark:hover:bg-accent-500/10"
 									onclick={retryTranscription}
@@ -387,8 +430,14 @@
 									{retrying ? 'Starting…' : 'Retranscribe'}
 								</button>
 							{/if}
-						</div>
-					{/if}
+						{/if}
+					</div>
+					<p
+						class="select-text flex-1 overflow-y-auto text-sm whitespace-pre-wrap text-gray-700 dark:text-gray-300"
+						style="-webkit-touch-callout: default;"
+					>
+						{recording.transcript}
+					</p>
 				</div>
 			{:else if recording.transcriptStatus === 'pending' || recording.transcriptStatus === 'processing'}
 				<div class="flex h-full flex-col items-center justify-center gap-2 text-sm text-gray-400">

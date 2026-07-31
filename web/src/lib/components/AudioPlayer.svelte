@@ -31,6 +31,7 @@
 
 <script lang="ts">
 	import { getAccentColorHex } from '$lib/accent';
+	import { AUDIO_FADE_MS, fadeInAndPlay, fadeOutAndPause } from '$lib/audioFade';
 	import {
 		clearMediaSession,
 		setMediaSessionHandlers,
@@ -112,8 +113,8 @@
 	// themselves reactive; only the OS-level media widget/notification needs
 	// these at all (desktop media keys/widget, Android's media notification).
 	setMediaSessionHandlers({
-		play: () => audioEl?.play(),
-		pause: () => audioEl?.pause(),
+		play: () => audioEl && fadeInAndPlay(audioEl),
+		pause: () => audioEl && fadeOutAndPause(audioEl),
 		seekBackward: () => skip(-10),
 		seekForward: () => skip(10)
 	});
@@ -164,8 +165,8 @@
 			color: getAccentColorHex()
 		});
 		void Playback.addListener('playbackAction', (data) => {
-			if (data.action === 'play') audioEl?.play();
-			else if (data.action === 'pause') audioEl?.pause();
+			if (data.action === 'play') audioEl && fadeInAndPlay(audioEl);
+			else if (data.action === 'pause') audioEl && fadeOutAndPause(audioEl);
 			else if (data.action === 'seekBackward') skip(-10);
 			else if (data.action === 'seekForward') skip(10);
 			else if (data.action === 'seekTo' && data.position !== undefined) seekTo(data.position);
@@ -228,8 +229,19 @@
 		}
 		if (!audioEl) return;
 
+		const endFadeSec = AUDIO_FADE_MS / 1000;
+
 		let frame = requestAnimationFrame(function tick() {
 			smoothTime = audioEl!.currentTime;
+			// Same declick reasoning as fadeOutAndPause/fadeInAndPlay (see
+			// audioFade.ts), but for the one stop this component doesn't
+			// initiate itself: the browser's own natural end-of-track. Ramping
+			// down over the last ~30ms as playback approaches the real end
+			// keeps that abrupt hardware-stream stop from producing a click.
+			if (duration > 0) {
+				const remaining = duration - smoothTime;
+				audioEl!.volume = remaining < endFadeSec ? gain * Math.max(0, remaining / endFadeSec) : gain;
+			}
 			frame = requestAnimationFrame(tick);
 		});
 		return () => cancelAnimationFrame(frame);
@@ -274,8 +286,8 @@
 
 	function togglePlay() {
 		if (!audioEl) return;
-		if (playing) audioEl.pause();
-		else audioEl.play();
+		if (playing) fadeOutAndPause(audioEl);
+		else fadeInAndPlay(audioEl);
 	}
 
 	function skip(delta: number) {
@@ -506,18 +518,32 @@
 					</button>
 				{/if}
 			{:else if !hideVolumeControl}
-				<GainSlider
-					value={sharedVolume.muted ? 0 : sharedVolume.position * 100}
-					oninput={onVolumeInput}
-					class="min-w-0 flex-1"
-				/>
-				<button
-					class="flex size-7 shrink-0 items-center justify-center rounded-full text-gray-500 transition hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-white/5"
-					aria-label={sharedVolume.muted || gain === 0 ? 'Unmute' : 'Mute'}
-					onclick={sharedVolume.toggleMute}
-				>
-					<VolumeIcon muted={sharedVolume.muted} {gain} position={sharedVolume.position} />
-				</button>
+				<!-- An always-inline slider here has no room to shrink once the
+					 detail panel itself gets narrow (list+detail split on a smaller
+					 desktop window), and was overflowing off the edge of the panel
+					 entirely rather than wrapping. A fixed-size button that reveals
+					 the slider in a small hover popover instead can never overflow,
+					 since the popover is positioned absolutely and doesn't take up
+					 row space. -->
+				<div class="group relative">
+					<button
+						class="flex size-7 shrink-0 items-center justify-center rounded-full text-gray-500 transition hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-white/5"
+						aria-label={sharedVolume.muted || gain === 0 ? 'Unmute' : 'Mute'}
+						onclick={sharedVolume.toggleMute}
+					>
+						<VolumeIcon muted={sharedVolume.muted} {gain} position={sharedVolume.position} />
+					</button>
+
+					<div
+						class="pointer-events-none absolute right-0 bottom-full z-20 mb-2 flex h-28 w-9 items-center justify-center rounded-full border border-gray-200/70 bg-white/90 p-2 opacity-0 shadow-lg backdrop-blur-lg transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100 dark:border-white/10 dark:bg-black/70"
+					>
+						<GainSlider
+							value={sharedVolume.muted ? 0 : sharedVolume.position * 100}
+							oninput={onVolumeInput}
+							orientation="vertical"
+						/>
+					</div>
+				</div>
 			{/if}
 		</div>
 	</div>

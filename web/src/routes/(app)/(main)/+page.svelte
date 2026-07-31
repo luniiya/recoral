@@ -9,6 +9,7 @@
 	import Scrubber from '$lib/components/Scrubber.svelte';
 	import VirtualTimeline from '$lib/components/VirtualTimeline.svelte';
 	import { buildScrubberSegments, buildTimeline } from '$lib/dateGroups';
+	import { detailPanelStore } from '$lib/detailPanel.svelte';
 	import { formatDuration, recordingDisplayTitle } from '$lib/format';
 	import { liveRecordingStore } from '$lib/liveRecording.svelte';
 	import { useListBackHandler } from '$lib/listBack.svelte';
@@ -20,6 +21,7 @@
 
 	let scrollEl: HTMLDivElement | undefined = $state();
 	let selectedId = $state<string | null>(null);
+	let detailRef: RecordingDetail | undefined = $state();
 
 	$effect(() => {
 		if (!liveRecordingStore.lastRecordingId) return;
@@ -61,12 +63,22 @@
 		if (liveRecordingStore.isRecording) selectedId = null;
 	});
 
+	// See detailPanel.svelte.ts: lets the layout auto-collapse the Sidebar on
+	// narrow desktop widths while a detail/live-recording panel is open here.
+	$effect(() => {
+		detailPanelStore.set(!!selectedRecording || liveRecordingStore.isRecording || liveRecordingStore.savingRecording);
+	});
+	$effect(() => () => detailPanelStore.set(false));
+
 	// Hardware back button on Android should close the detail panel, then
 	// clear an active search, before ever falling through to Capacitor's
 	// default (leave the page / exit the app).
+	// Fades playback out first if it's actively playing (same as the on-screen
+	// close button, see RecordingDetail's exported handleClose), instead of
+	// yanking selectedId straight to null and reproducing the same pop.
 	useListBackHandler(
 		() => selectedId,
-		() => (selectedId = null)
+		() => (detailRef ? void detailRef.handleClose() : (selectedId = null))
 	);
 
 	useTabTapScrollTop('/', () => scrollEl);
@@ -157,7 +169,7 @@
 		</div>
 	{:else if selectedRecording}
 		<div class="fixed inset-0 z-40 bg-white dark:bg-black md:static md:inset-auto md:z-auto md:min-w-0 md:flex-1 md:border-l md:border-gray-200 md:dark:border-white/10">
-			<RecordingDetail recording={selectedRecording} onclose={() => (selectedId = null)} />
+			<RecordingDetail bind:this={detailRef} recording={selectedRecording} onclose={() => (selectedId = null)} />
 		</div>
 	{/if}
 </div>
