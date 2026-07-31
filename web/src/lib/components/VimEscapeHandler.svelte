@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { vimMode } from '$lib/vimMode.svelte';
 	import { vimZone } from '$lib/vimZone.svelte';
 	import { onMount } from 'svelte';
 
@@ -14,7 +13,7 @@
 	// the feature does.
 	onMount(() => {
 		function onKeydown(event: KeyboardEvent) {
-			if (event.key !== 'Escape' || vimMode.isTyping) return;
+			if (event.key !== 'Escape' || vimZone.isTyping) return;
 			vimZone.disable();
 		}
 		window.addEventListener('keydown', onKeydown);

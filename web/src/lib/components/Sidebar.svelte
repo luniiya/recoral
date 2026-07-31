@@ -2,7 +2,7 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { navIcons } from '$lib/navIcons';
-	import { vimMode } from '$lib/vimMode.svelte';
+	import { dispatchVimKey, shouldHandleSidebarKey, type VimKeyBindings } from '$lib/vimKeyGate';
 	import { vimZone } from '$lib/vimZone.svelte';
 	import { onMount } from 'svelte';
 	import ServerStatus from './ServerStatus.svelte';
@@ -26,25 +26,35 @@
 
 	// The leftmost of vimNav.svelte.ts's navbar > list > detail panes: a
 	// list page's own h (nothing left to close) hands focus here instead,
-	// j/k move a highlight through these same nav items, l navigates to the
-	// highlighted one and hands focus back to that page's own list.
+	// j/k move a highlight through these same nav items, l (or Enter/Space,
+	// the more universal "select this" keys) navigates to the highlighted
+	// one and hands focus back to that page's own list.
+	const selectItem = () => {
+		const target = items[vimZone.sidebarCursorIndex];
+		vimZone.focusList();
+		if (target) goto(target.href);
+		return true;
+	};
+
+	// One entry per binding instead of an if/else-if chain, see vimNav.svelte.ts.
+	const bindings: VimKeyBindings = {
+		j: () => {
+			vimZone.setSidebarCursorIndex(Math.min(items.length - 1, vimZone.sidebarCursorIndex + 1));
+			return true;
+		},
+		k: () => {
+			vimZone.setSidebarCursorIndex(Math.max(0, vimZone.sidebarCursorIndex - 1));
+			return true;
+		},
+		l: selectItem,
+		Enter: selectItem,
+		' ': selectItem
+	};
+
 	onMount(() => {
 		function onKeydown(event: KeyboardEvent) {
-			if (!vimZone.enabled || !vimZone.sidebarFocused) return;
-			if (event.metaKey || event.ctrlKey || event.altKey || vimMode.isTyping) return;
-
-			if (event.key === 'j') {
-				event.preventDefault();
-				vimZone.setSidebarCursorIndex(Math.min(items.length - 1, vimZone.sidebarCursorIndex + 1));
-			} else if (event.key === 'k') {
-				event.preventDefault();
-				vimZone.setSidebarCursorIndex(Math.max(0, vimZone.sidebarCursorIndex - 1));
-			} else if (event.key === 'l') {
-				event.preventDefault();
-				const target = items[vimZone.sidebarCursorIndex];
-				vimZone.focusList();
-				if (target) goto(target.href);
-			}
+			if (!shouldHandleSidebarKey(event)) return;
+			dispatchVimKey(event, bindings);
 		}
 		window.addEventListener('keydown', onKeydown);
 		return () => window.removeEventListener('keydown', onKeydown);
@@ -70,13 +80,16 @@
 		<a
 			href={item.href}
 			title={collapsed ? item.label : undefined}
-			class="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition
+			class="relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition
 				{collapsed ? 'justify-center' : ''}
 				{active
 				? 'bg-accent-50 text-accent-700 dark:bg-accent-500/15 dark:text-accent-400'
-				: 'text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-white/5'}
-				{vimCursor ? 'ring-2 ring-accent-300 dark:ring-accent-500/40' : ''}"
+				: 'text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-white/5'}"
 		>
+			{#if vimCursor}
+				<!-- Same green gutter-marker cursor as RecordingCard, see there. -->
+				<span class="absolute top-1/2 left-1 h-5 w-1 -translate-y-1/2 rounded-full bg-green-500"></span>
+			{/if}
 			<svg
 				viewBox="0 0 24 24"
 				fill={item.stroke ? 'none' : 'currentColor'}

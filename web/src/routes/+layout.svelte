@@ -14,7 +14,7 @@
 	import { syncStore } from '$lib/sync.svelte';
 	import { systemAccentStore } from '$lib/systemAccent.svelte';
 	import { themeStore } from '$lib/theme.svelte';
-	import { vimMode } from '$lib/vimMode.svelte';
+	import { vimZone } from '$lib/vimZone.svelte';
 	import { vimPreference } from '$lib/vimPreference.svelte';
 	import { wavySeekStore } from '$lib/wavySeek.svelte';
 	import { onMount } from 'svelte';
@@ -147,14 +147,14 @@
 		};
 		window.addEventListener('contextmenu', onContextMenu);
 
-		// See vimMode.svelte.ts: gates the j/k/l/h list-navigation shortcuts
+		// See vimZone.svelte.ts: gates the j/k/l/h list-navigation shortcuts
 		// (and drives their little NORMAL/INSERT status indicator) so they
 		// never fire while actually typing into a title/description/search.
 		function onFocusIn(event: FocusEvent) {
-			vimMode.set(!!(event.target as HTMLElement | null)?.closest('input, textarea, [contenteditable]'));
+			vimZone.setTyping(!!(event.target as HTMLElement | null)?.closest('input, textarea, [contenteditable]'));
 		}
 		function onFocusOut() {
-			vimMode.set(false);
+			vimZone.setTyping(false);
 		}
 		window.addEventListener('focusin', onFocusIn);
 		window.addEventListener('focusout', onFocusOut);

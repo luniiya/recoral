@@ -313,7 +313,6 @@
 		: previewed
 			? 'border-accent-200 bg-accent-50/50 dark:border-accent-500/20 dark:bg-accent-500/5'
 			: 'hover:bg-gray-50 dark:hover:bg-white/5'}
-		{cursor && !selected && !multiSelected ? 'ring-2 ring-accent-300 dark:ring-accent-500/40' : ''}
 		{recording.syncStatus === 'uploading' ? 'syncing-ring' : ''}"
 	onclick={handleClick}
 	onpointerdown={onPointerDown}
@@ -325,6 +324,22 @@
 	}}
 	onpointercancel={cancelHold}
 >
+	{#if cursor && !selected}
+		<!-- The vim nav cursor (vimNav.svelte.ts): a short gutter-marker pill
+		     instead of a ring around the whole card, which fought with the
+		     card's own border and read as heavy-handed. A full-height bar with
+		     rounded corners doesn't work either, a corner radius this size
+		     can't render on something this narrow, so it comes out as a tight
+		     cap that pokes out past the card's own much wider corner curve;
+		     inset and vertically centered sidesteps that entirely. Green, not
+		     the app's accent color, since green is already "vim mode"
+		     everywhere else in this feature (the Sidebar's NORMAL badge),
+		     keeping it visually distinct from the accent-colored "this one's
+		     actually open" fill above. Shows through multi-select mode too
+		     (checkbox-selected or not), the cursor is a separate concept from
+		     what's bulk-selected. -->
+		<span class="absolute top-1/2 left-1.5 h-8 w-1 -translate-y-1/2 rounded-full bg-green-500"></span>
+	{/if}
 	{#if selectionStore.active}
 		<span
 			class="absolute top-4 left-4 flex size-5 items-center justify-center rounded-full border-2 transition-colors

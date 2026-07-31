@@ -13,8 +13,7 @@
 	import { recordingsStore } from '$lib/recordings.svelte';
 	import { tagsStore } from '$lib/tags.svelte';
 	import { parentTag, tagBreadcrumb, visibleTagIds } from '$lib/tagPath';
-	import { vimMode } from '$lib/vimMode.svelte';
-	import { vimZone } from '$lib/vimZone.svelte';
+	import { useEscapeToClose } from '$lib/vimEscapeToClose';
 	import StatusBarSpacer from './StatusBarSpacer.svelte';
 
 	interface Props {
@@ -172,19 +171,9 @@
 
 	// Plain Escape closes this panel when vim mode is off (works whether it's
 	// never been touched at all, same fade-aware handleClose() either way).
-	// While vim mode IS on, Escape is reserved exclusively for turning that
-	// off (VimEscapeHandler.svelte) and must not also close this in the same
-	// keystroke, that's what 'h' is for (vimNav.svelte.ts) — one keystroke,
-	// one effect.
-	$effect(() => {
-		function onKeydown(event: KeyboardEvent) {
-			if (event.key !== 'Escape' || vimMode.isTyping || vimZone.enabled) return;
-			event.preventDefault();
-			void handleClose();
-		}
-		window.addEventListener('keydown', onKeydown);
-		return () => window.removeEventListener('keydown', onKeydown);
-	});
+	// While vim mode IS on, that's 'h' instead (vimNav.svelte.ts), see
+	// vimEscapeToClose.ts for why Escape itself is reserved.
+	useEscapeToClose(() => void handleClose(), { skipWhileTyping: true });
 </script>
 
 <div class="flex h-full flex-col">
