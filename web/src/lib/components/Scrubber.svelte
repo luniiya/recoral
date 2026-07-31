@@ -137,17 +137,32 @@
 		scrollingTimeout = setTimeout(() => (scrolling = false), 500);
 	}
 
+	// VirtualTimeline sizes its spacer divs from *estimated* row heights, so
+	// the real scrollHeight drifts a few px as the windowed range shifts
+	// during scroll, this fires the ResizeObserver below rapidly and
+	// repeatedly while actively scrolling. Recomputing scrollFraction on
+	// every one of those (each a slightly different scrollHeight) is what
+	// made the thumb visibly vibrate. The 'scroll' listener above already
+	// keeps scrollTop live in real time, so this only needs to settle once
+	// things stop shifting, not track every intermediate value.
+	let resizeSyncTimeout: ReturnType<typeof setTimeout> | null = null;
+	function onResize() {
+		if (resizeSyncTimeout) clearTimeout(resizeSyncTimeout);
+		resizeSyncTimeout = setTimeout(syncFromScrollEl, 150);
+	}
+
 	$effect(() => {
 		if (!scrollEl) return;
 		syncFromScrollEl();
 		const el = scrollEl;
 		el.addEventListener('scroll', onScroll, { passive: true });
-		const resizeObserver = new ResizeObserver(syncFromScrollEl);
+		const resizeObserver = new ResizeObserver(onResize);
 		resizeObserver.observe(el);
 		return () => {
 			el.removeEventListener('scroll', onScroll);
 			resizeObserver.disconnect();
 			if (scrollingTimeout) clearTimeout(scrollingTimeout);
+			if (resizeSyncTimeout) clearTimeout(resizeSyncTimeout);
 		};
 	});
 

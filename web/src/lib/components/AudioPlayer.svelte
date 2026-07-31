@@ -218,6 +218,39 @@
 		if (nativeSessionStarted) void Playback.stop();
 	});
 
+	// PlaybackService is a real foreground Service (see nativePlayback.ts):
+	// once started it keeps running and showing its notification completely
+	// independently of the Activity/WebView, onDestroy above only covers this
+	// component actually unmounting (closing the detail panel), never the
+	// whole app closing/backgrounding, which doesn't unmount anything. Without
+	// this, closing the app left the notification behind forever, showing
+	// play/pause controls with nothing left alive to actually act on them.
+	// (clearMediaSession()/appStateChange in the root layout does NOT cover
+	// this despite looking like it should: the plain Web Media Session API
+	// never surfaces a notification on Android at all in a bare WebView, this
+	// native service is the only thing actually showing one, confirmed via
+	// dumpsys notification, see nativePlayback.ts.)
+	$effect(() => {
+		if (!nativePlaybackSupported()) return;
+		let removeAppStateListener: (() => void) | undefined;
+		let cancelled = false;
+		import('@capacitor/app').then(({ App }) => {
+			if (cancelled) return;
+			App.addListener('appStateChange', ({ isActive }) => {
+				if (isActive || !nativeSessionStarted) return;
+				nativeSessionStarted = false;
+				void Playback.stop();
+			}).then((handle) => {
+				if (cancelled) handle.remove();
+				else removeAppStateListener = () => handle.remove();
+			});
+		});
+		return () => {
+			cancelled = true;
+			removeAppStateListener?.();
+		};
+	});
+
 	$effect(() => {
 		if (!playing) {
 			// Prefer the live element value over the prop even while paused:
