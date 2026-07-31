@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { Tag } from '@recoral/shared';
-	import { fadeOutAndPause } from '$lib/audioFade';
+	import { fadeInAndPlay, fadeOutAndPause } from '$lib/audioFade';
 	import AudioPlayer from './AudioPlayer.svelte';
 	import Dialog from './Dialog.svelte';
 	import TagChip from './TagChip.svelte';
@@ -13,6 +13,7 @@
 	import { recordingsStore } from '$lib/recordings.svelte';
 	import { tagsStore } from '$lib/tags.svelte';
 	import { parentTag, tagBreadcrumb, visibleTagIds } from '$lib/tagPath';
+	import { vimMode } from '$lib/vimMode.svelte';
 	import StatusBarSpacer from './StatusBarSpacer.svelte';
 
 	interface Props {
@@ -63,6 +64,15 @@
 	export async function handleClose() {
 		if (playbackPlaying && playbackEl) await fadeOutAndPause(playbackEl);
 		onclose();
+	}
+
+	// vimNav.svelte.ts: Space toggles play/pause while this detail panel is
+	// open, same fade-aware play()/pause() AudioPlayer's own transport button
+	// uses, not a raw .play()/.pause() that'd reintroduce the speaker pop.
+	export function togglePlayback() {
+		if (!playbackEl) return;
+		if (playbackPlaying) void fadeOutAndPause(playbackEl);
+		else void fadeInAndPlay(playbackEl);
 	}
 
 	function searchByTag(tag: Tag) {
@@ -154,6 +164,21 @@
 			if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return;
 			event.preventDefault();
 			downloadRecording();
+		}
+		window.addEventListener('keydown', onKeydown);
+		return () => window.removeEventListener('keydown', onKeydown);
+	});
+
+	// Plain Escape closes this panel, independent of vim mode entirely (that's
+	// vimNav.svelte.ts's own 'h', a separate thing, see useVimNav): works
+	// whether vim mode is on, off, or never touched at all. Same fade-aware
+	// handleClose() either way, guarded by vimMode.isTyping so it doesn't
+	// fire while actually editing the title/description right here.
+	$effect(() => {
+		function onKeydown(event: KeyboardEvent) {
+			if (event.key !== 'Escape' || vimMode.isTyping) return;
+			event.preventDefault();
+			void handleClose();
 		}
 		window.addEventListener('keydown', onKeydown);
 		return () => window.removeEventListener('keydown', onKeydown);

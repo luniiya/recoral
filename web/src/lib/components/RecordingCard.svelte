@@ -15,12 +15,17 @@
 		// The current visible list's id order, for shift+click range-select and
 		// its hover preview. Only the page knows this (it owns the filtered/
 		// sorted list), so it's threaded down rather than computed in here.
-		orderedIds = []
+		orderedIds = [],
+		// vimNav.svelte.ts's j/k cursor: a distinct, lighter outline from
+		// `selected` (which means "this one's actually open in the detail
+		// panel"), since the cursor can sit on a card without opening it.
+		cursor = false
 	}: {
 		recording: DisplayRecording;
 		selected?: boolean;
 		onselect: () => void;
 		orderedIds?: string[];
+		cursor?: boolean;
 	} = $props();
 
 	// Read-only display: hides a tag if a more specific one already shown
@@ -308,6 +313,7 @@
 		: previewed
 			? 'border-accent-200 bg-accent-50/50 dark:border-accent-500/20 dark:bg-accent-500/5'
 			: 'hover:bg-gray-50 dark:hover:bg-white/5'}
+		{cursor && !selected && !multiSelected ? 'ring-2 ring-accent-300 dark:ring-accent-500/40' : ''}
 		{recording.syncStatus === 'uploading' ? 'syncing-ring' : ''}"
 	onclick={handleClick}
 	onpointerdown={onPointerDown}

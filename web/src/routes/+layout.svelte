@@ -14,6 +14,7 @@
 	import { syncStore } from '$lib/sync.svelte';
 	import { systemAccentStore } from '$lib/systemAccent.svelte';
 	import { themeStore } from '$lib/theme.svelte';
+	import { vimMode } from '$lib/vimMode.svelte';
 	import { wavySeekStore } from '$lib/wavySeek.svelte';
 	import { onMount } from 'svelte';
 
@@ -143,6 +144,18 @@
 			event.preventDefault();
 		};
 		window.addEventListener('contextmenu', onContextMenu);
+
+		// See vimMode.svelte.ts: gates the j/k/l/h list-navigation shortcuts
+		// (and drives their little NORMAL/INSERT status indicator) so they
+		// never fire while actually typing into a title/description/search.
+		function onFocusIn(event: FocusEvent) {
+			vimMode.set(!!(event.target as HTMLElement | null)?.closest('input, textarea, [contenteditable]'));
+		}
+		function onFocusOut() {
+			vimMode.set(false);
+		}
+		window.addEventListener('focusin', onFocusIn);
+		window.addEventListener('focusout', onFocusOut);
 
 		if (!isNativePlatform() && 'serviceWorker' in navigator) {
 			navigator.serviceWorker.register('/service-worker.js');

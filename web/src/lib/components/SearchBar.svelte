@@ -18,6 +18,14 @@
 		placeholder="Search your recordings"
 		value={recordingsStore.search}
 		oninput={(e) => recordingsStore.setSearch(e.currentTarget.value)}
+		onkeydown={(e) => {
+			if (e.key !== 'Escape') return;
+			// type="search" natively clears the value on Escape in some
+			// browsers; this should just stop focusing/typing, not also wipe
+			// out whatever was already typed.
+			e.preventDefault();
+			e.currentTarget.blur();
+		}}
 	/>
 	<FilterPanel />
 </div>

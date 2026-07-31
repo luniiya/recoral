@@ -18,10 +18,10 @@
 	import { hasActiveRecordingFilter, matchesRecordingFilter } from '$lib/recordingFilter';
 	import { recordingsStore } from '$lib/recordings.svelte';
 	import { useTabTapScrollTop } from '$lib/tabTap.svelte';
+	import { useVimNav } from '$lib/vimNav.svelte';
 
 	let scrollEl: HTMLDivElement | undefined = $state();
 	let selectedId = $state<string | null>(null);
-	let detailRef: RecordingDetail | undefined = $state();
 
 	$effect(() => {
 		if (!liveRecordingStore.lastRecordingId) return;
@@ -70,16 +70,19 @@
 	});
 	$effect(() => () => detailPanelStore.set(false));
 
+	// j/k/l/h/gg/G list navigation, plus this page's RecordingDetail/
+	// VirtualTimeline instance refs, see vimNav.svelte.ts.
+	const vim = useVimNav({
+		orderedIds: () => orderedIds,
+		getSelectedId: () => selectedId,
+		setSelectedId: (id) => (selectedId = id)
+	});
+
 	// Hardware back button on Android should close the detail panel, then
 	// clear an active search, before ever falling through to Capacitor's
-	// default (leave the page / exit the app).
-	// Fades playback out first if it's actively playing (same as the on-screen
-	// close button, see RecordingDetail's exported handleClose), instead of
-	// yanking selectedId straight to null and reproducing the same pop.
-	useListBackHandler(
-		() => selectedId,
-		() => (detailRef ? void detailRef.handleClose() : (selectedId = null))
-	);
+	// default (leave the page / exit the app). Same fade-before-close as the
+	// on-screen close button (vim.closeDetail wraps handleClose).
+	useListBackHandler(() => selectedId, vim.closeDetail);
 
 	useTabTapScrollTop('/', () => scrollEl);
 </script>
@@ -134,12 +137,13 @@
 					message={recordingsStore.active.length > 0 ? 'No recordings match your search' : 'No recordings yet'}
 				/>
 			{:else}
-				<VirtualTimeline {timeline} {scrollEl}>
+				<VirtualTimeline bind:this={vim.timelineRef} {timeline} {scrollEl}>
 					{#snippet recordingRow(row)}
 						<RecordingCard
 							recording={row.recording}
 							selected={selectedId === row.recording.id}
 							onselect={() => (selectedId = row.recording.id)}
+							cursor={vim.cursorId === row.recording.id}
 							{orderedIds}
 						/>
 					{/snippet}
@@ -169,7 +173,7 @@
 		</div>
 	{:else if selectedRecording}
 		<div class="fixed inset-0 z-40 bg-white dark:bg-black md:static md:inset-auto md:z-auto md:min-w-0 md:flex-1 md:border-l md:border-gray-200 md:dark:border-white/10">
-			<RecordingDetail bind:this={detailRef} recording={selectedRecording} onclose={() => (selectedId = null)} />
+			<RecordingDetail bind:this={vim.detailRef} recording={selectedRecording} onclose={() => (selectedId = null)} />
 		</div>
 	{/if}
 </div>

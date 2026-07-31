@@ -9,6 +9,7 @@
 	import StatusBarSpacer from '$lib/components/StatusBarSpacer.svelte';
 	import TagChips from '$lib/components/TagChips.svelte';
 	import ThemeToggle from '$lib/components/ThemeToggle.svelte';
+	import VimEscapeHandler from '$lib/components/VimEscapeHandler.svelte';
 	import { detailPanelStore } from '$lib/detailPanel.svelte';
 	import { liveRecordingStore } from '$lib/liveRecording.svelte';
 	import { navIcons } from '$lib/navIcons';
@@ -376,6 +377,8 @@
 {/if}
 
 <BottomNav />
+
+<VimEscapeHandler />
 
 {#if recordingsStore.importError}
 	<div class="fixed top-4 left-1/2 z-50 -translate-x-1/2">
