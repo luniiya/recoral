@@ -35,7 +35,8 @@
 	<title>recoral - Tags</title>
 </svelte:head>
 
-<div class="mx-auto h-full max-w-xl overflow-y-auto px-6 pt-10 pb-36 md:pb-10">
+<div class="h-full overflow-y-auto">
+<div class="mx-auto max-w-xl px-6 pt-10 pb-36 md:pb-10">
 	<div class="mb-6 flex items-center justify-between">
 		<h1 class="text-lg font-semibold text-gray-900 dark:text-gray-100">Tags</h1>
 
@@ -93,4 +94,5 @@
 			<EmptyState message="No tags yet" />
 		{/if}
 	{/if}
+</div>
 </div>
