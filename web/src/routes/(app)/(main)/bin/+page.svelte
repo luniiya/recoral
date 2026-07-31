@@ -9,7 +9,11 @@
 	import { rangeBetween } from '$lib/selection.svelte';
 	import { groupTrashedTags, type TrashedTagGroup } from '$lib/tagPath';
 	import { tagsStore } from '$lib/tags.svelte';
+	import { useVimScroll } from '$lib/vimScroll.svelte';
 	import { onMount } from 'svelte';
+
+	let scrollEl: HTMLDivElement | undefined = $state();
+	useVimScroll({ scrollEl: () => scrollEl });
 
 	type BinItem =
 		| { kind: 'recording'; trashedAt: string; recording: (typeof recordingsStore.trashed)[number] }
@@ -110,7 +114,7 @@
 	<title>recoral - Bin</title>
 </svelte:head>
 
-<div class="h-full overflow-y-auto">
+<div bind:this={scrollEl} class="h-full overflow-y-auto">
 	<div class="mx-auto max-w-xl px-6 pt-10 pb-36 md:pb-10">
 		{#if active}
 			<div class="mb-6 flex items-center gap-3">

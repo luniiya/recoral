@@ -1,6 +1,7 @@
 import type RecordingDetail from './components/RecordingDetail.svelte';
 import type VirtualTimeline from './components/VirtualTimeline.svelte';
 import { vimMode } from './vimMode.svelte';
+import { vimPreference } from './vimPreference.svelte';
 import { vimZone } from './vimZone.svelte';
 import { onMount } from 'svelte';
 
@@ -76,6 +77,9 @@ export function useVimNav(options: VimNavOptions) {
 		function onKeydown(event: KeyboardEvent) {
 			if (event.metaKey || event.ctrlKey || event.altKey) return;
 			if (vimMode.isTyping) return;
+			// Settings > Appearance: fully opted out, none of this should ever
+			// so much as look at a keypress.
+			if (!vimPreference.allowed) return;
 
 			// Starts off (recoral shouldn't open already "in vim mode"): the
 			// first actual nav key both turns it on and performs the action in

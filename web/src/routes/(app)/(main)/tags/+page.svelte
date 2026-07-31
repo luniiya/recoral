@@ -4,6 +4,10 @@
 	import TagCard from '$lib/components/TagCard.svelte';
 	import { buildTagTree } from '$lib/tagPath';
 	import { tagsStore } from '$lib/tags.svelte';
+	import { useVimScroll } from '$lib/vimScroll.svelte';
+
+	let scrollEl: HTMLDivElement | undefined = $state();
+	useVimScroll({ scrollEl: () => scrollEl });
 
 	let adding = $state(false);
 	let name = $state('');
@@ -35,7 +39,7 @@
 	<title>recoral - Tags</title>
 </svelte:head>
 
-<div class="h-full overflow-y-auto">
+<div bind:this={scrollEl} class="h-full overflow-y-auto">
 <div class="mx-auto max-w-xl px-6 pt-10 pb-36 md:pb-10">
 	<div class="mb-6 flex items-center justify-between">
 		<h1 class="text-lg font-semibold text-gray-900 dark:text-gray-100">Tags</h1>

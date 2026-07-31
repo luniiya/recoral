@@ -15,6 +15,7 @@
 	import { systemAccentStore } from '$lib/systemAccent.svelte';
 	import { themeStore } from '$lib/theme.svelte';
 	import { vimMode } from '$lib/vimMode.svelte';
+	import { vimPreference } from '$lib/vimPreference.svelte';
 	import { wavySeekStore } from '$lib/wavySeek.svelte';
 	import { onMount } from 'svelte';
 
@@ -90,6 +91,7 @@
 		bootLog('root layout: onMount fired');
 		themeStore.init();
 		wavySeekStore.init();
+		vimPreference.init();
 
 		// Trackpad pinch and ctrl+scroll both fire as a 'wheel' event with
 		// ctrlKey set (that's how Chrome/Firefox represent pinch-zoom on a

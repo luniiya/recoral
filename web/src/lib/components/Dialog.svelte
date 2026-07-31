@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
+	import { vimZone } from '$lib/vimZone.svelte';
 	import { onMount } from 'svelte';
 
 	interface Props {
@@ -19,9 +20,13 @@
 
 	let { onclose, children, maxWidth = 'max-w-xs', centered = false }: Props = $props();
 
+	// While vim mode is on, Escape is reserved exclusively for turning that
+	// off (VimEscapeHandler.svelte), it must not also close whatever dialog
+	// happens to be open in the same keystroke: one keystroke, one effect.
+	// Off (or never touched), Escape closes this like normal.
 	onMount(() => {
 		function onKeydown(event: KeyboardEvent) {
-			if (event.key === 'Escape') onclose();
+			if (event.key === 'Escape' && !vimZone.enabled) onclose();
 		}
 		window.addEventListener('keydown', onKeydown);
 		return () => window.removeEventListener('keydown', onKeydown);

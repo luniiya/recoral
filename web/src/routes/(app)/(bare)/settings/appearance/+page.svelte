@@ -4,6 +4,7 @@
 	import Toggle from '$lib/components/Toggle.svelte';
 	import { systemAccentStore } from '$lib/systemAccent.svelte';
 	import { themeStore, type ThemePreference } from '$lib/theme.svelte';
+	import { vimPreference } from '$lib/vimPreference.svelte';
 	import { wavySeekStore } from '$lib/wavySeek.svelte';
 
 	const themeOptions: { value: ThemePreference; label: string }[] = [
@@ -87,6 +88,18 @@
 				</p>
 			</div>
 			<Toggle checked={wavySeekStore.enabled} onchange={(checked) => wavySeekStore.set(checked)} />
+		</div>
+
+		<div class="flex items-center justify-between gap-4 border-t border-gray-100 pt-5 dark:border-white/10">
+			<div>
+				<p class="text-sm text-gray-900 dark:text-gray-100">Vim-style shortcuts</p>
+				<p class="text-sm text-gray-500 dark:text-gray-400">
+					Lets j/k/l/h and a few other vim-style keys browse recordings without the mouse. Nothing happens
+					until you actually press one, so this is safe to leave on either way, it's here for if you'd
+					rather those keys never do anything at all.
+				</p>
+			</div>
+			<Toggle checked={vimPreference.allowed} onchange={(checked) => vimPreference.set(checked)} />
 		</div>
 	</div>
 

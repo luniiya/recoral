@@ -97,10 +97,20 @@
 	// row is guaranteed actually in the DOM, then (2) once it's there,
 	// correcting against its real rendered position via scrollIntoView
 	// instead of trusting the estimate for the final placement.
+	//
+	// Holding j/k fires keydown (and this) many times a second, faster than
+	// one `await tick()` round-trip: without the requestId check below, an
+	// older call's correction could still land *after* a newer keypress had
+	// already jumped somewhere else, yanking the view back to a stale
+	// position mid-hold. Only the most recent call's correction is allowed
+	// to actually apply.
+	let scrollRequestId = 0;
 	export async function scrollToRecording(id: string) {
 		if (!scrollEl) return;
 		const index = timeline.findIndex((row) => row.kind === 'recording' && row.recording.id === id);
 		if (index === -1) return;
+
+		const requestId = ++scrollRequestId;
 
 		const rowTop = offsets[index];
 		const rowHeight = heightOf(timeline[index]);
@@ -109,6 +119,8 @@
 		scrollTop = estimatedTop;
 
 		await tick();
+		if (requestId !== scrollRequestId) return;
+
 		scrollEl.querySelector<HTMLElement>(`[data-recording-id="${CSS.escape(id)}"]`)?.scrollIntoView({
 			block: 'center',
 			behavior: 'auto'
