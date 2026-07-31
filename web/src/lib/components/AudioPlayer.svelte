@@ -303,6 +303,7 @@
 
 	let trackEl: HTMLDivElement | undefined = $state();
 	let dragging = $state(false);
+	let volumePopoverOpen = $state(false);
 
 	function seekTo(value: number) {
 		const clamped = Math.max(0, Math.min(duration, value));
@@ -522,27 +523,37 @@
 					 detail panel itself gets narrow (list+detail split on a smaller
 					 desktop window), and was overflowing off the edge of the panel
 					 entirely rather than wrapping. A fixed-size button that reveals
-					 the slider in a small hover popover instead can never overflow,
-					 since the popover is positioned absolutely and doesn't take up
-					 row space. -->
-				<div class="group relative">
+					 the slider in a small popover instead can never overflow, since
+					 the popover is positioned absolutely and doesn't take up row
+					 space. Click-to-toggle (not hover): a hover popover here had a
+					 gap between the button and the popup above it that broke hover
+					 continuity the instant the mouse moved from one to the other,
+					 making the slider disappear before it could ever be dragged. -->
+				<div class="relative">
 					<button
 						class="flex size-7 shrink-0 items-center justify-center rounded-full text-gray-500 transition hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-white/5"
-						aria-label={sharedVolume.muted || gain === 0 ? 'Unmute' : 'Mute'}
-						onclick={sharedVolume.toggleMute}
+						aria-label="Volume"
+						onclick={() => (volumePopoverOpen = !volumePopoverOpen)}
 					>
 						<VolumeIcon muted={sharedVolume.muted} {gain} position={sharedVolume.position} />
 					</button>
 
-					<div
-						class="pointer-events-none absolute right-0 bottom-full z-20 mb-2 flex h-28 w-9 items-center justify-center rounded-full border border-gray-200/70 bg-white/90 p-2 opacity-0 shadow-lg backdrop-blur-lg transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100 dark:border-white/10 dark:bg-black/70"
-					>
-						<GainSlider
-							value={sharedVolume.muted ? 0 : sharedVolume.position * 100}
-							oninput={onVolumeInput}
-							orientation="vertical"
-						/>
-					</div>
+					{#if volumePopoverOpen}
+						<button
+							class="fixed inset-0 z-10 cursor-default"
+							aria-label="Close volume"
+							onclick={() => (volumePopoverOpen = false)}
+						></button>
+						<div
+							class="absolute right-0 bottom-full z-20 mb-2 flex h-28 w-9 items-center justify-center rounded-full border border-gray-200/70 bg-white/90 p-2 shadow-lg backdrop-blur-lg dark:border-white/10 dark:bg-black/70"
+						>
+							<GainSlider
+								value={sharedVolume.muted ? 0 : sharedVolume.position * 100}
+								oninput={onVolumeInput}
+								orientation="vertical"
+							/>
+						</div>
+					{/if}
 				</div>
 			{/if}
 		</div>

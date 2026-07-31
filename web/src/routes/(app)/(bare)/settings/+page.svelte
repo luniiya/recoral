@@ -171,9 +171,10 @@
 		<div class="relative">
 			<Avatar name={auth.user.username} avatar={auth.user.avatar} size="size-20" />
 			<button
-				class="absolute right-0 bottom-0 flex size-7 items-center justify-center rounded-full bg-white text-gray-600 shadow ring-1 ring-gray-200 transition hover:text-accent-600 dark:bg-neutral-800 dark:text-gray-300 dark:ring-white/10"
+				class="absolute right-0 bottom-0 flex size-7 items-center justify-center rounded-full bg-white text-gray-600 shadow ring-1 ring-gray-200 transition hover:text-accent-600 disabled:opacity-60 dark:bg-neutral-800 dark:text-gray-300 dark:ring-white/10"
 				onclick={() => fileInput?.click()}
 				aria-label="Change profile picture"
+				disabled={saving}
 			>
 				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="size-3.5">
 					<path
@@ -194,6 +195,12 @@
 		<span class="text-sm font-medium text-gray-900 dark:text-gray-100">{auth.user.username}</span>
 		{#if auth.user.email}
 			<span class="-mt-3 text-sm text-gray-500 dark:text-gray-400">{auth.user.email}</span>
+		{/if}
+		{#if saving}
+			<p class="text-xs text-gray-400">Uploading…</p>
+		{/if}
+		{#if error}
+			<p class="text-sm text-red-600 dark:text-red-400">{error}</p>
 		{/if}
 	</div>
 
@@ -302,10 +309,6 @@
 			Delete account
 		</button>
 	</div>
-
-	{#if error}
-		<p class="mt-4 text-sm text-red-600 dark:text-red-400">{error}</p>
-	{/if}
 {/if}
 
 {#if deleteDialogOpen}

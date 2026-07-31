@@ -121,9 +121,23 @@
 		// event instead, popping the browser's right-click-style menu right on
 		// top of RecordingCard's own hold-to-select gesture. Same "native-
 		// feeling app, not a document" reasoning as the touch-callout rule:
-		// blocked everywhere except text inputs, which still need it for
-		// copy/paste.
+		// blocked on touch, everywhere except text inputs (still need it there
+		// for copy/paste). A real desktop right-click is a completely normal,
+		// wanted thing (e.g. right-click-copy on the now-selectable transcript
+		// text) and must not be swallowed too: 'contextmenu' itself can't tell
+		// touch from mouse directly, so the most recent pointer type is tracked
+		// via 'pointerdown' instead. This used to block unconditionally,
+		// killing right-click everywhere on desktop, confirmed a real bug.
+		let lastPointerWasTouch = false;
+		window.addEventListener(
+			'pointerdown',
+			(event: PointerEvent) => {
+				lastPointerWasTouch = event.pointerType !== 'mouse';
+			},
+			{ capture: true }
+		);
 		const onContextMenu = (event: MouseEvent) => {
+			if (!lastPointerWasTouch) return;
 			const target = event.target as HTMLElement;
 			if (target.closest('input, textarea, [contenteditable]')) return;
 			event.preventDefault();

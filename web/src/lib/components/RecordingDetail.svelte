@@ -45,6 +45,7 @@
 	// frosted-glass Dialog treatment as every other one (bulk delete, tag
 	// trash, tag remove).
 	let pendingDeleteLocal = $state(false);
+	let pendingTrash = $state(false);
 
 	let playbackTime = $state(0);
 	let playbackPlaying = $state(false);
@@ -263,12 +264,8 @@
 				aria-label={isLocal ? 'Delete' : 'Move to bin'}
 				title={isLocal ? 'Delete' : 'Move to bin'}
 				onclick={() => {
-					if (isLocal) {
-						pendingDeleteLocal = true;
-					} else {
-						recordingsStore.trash(recording.id);
-						handleClose();
-					}
+					if (isLocal) pendingDeleteLocal = true;
+					else pendingTrash = true;
 				}}
 			>
 				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="size-4">
@@ -369,6 +366,30 @@
 						onclick={() => {
 							pendingDeleteLocal = false;
 							recordingsStore.deleteForever(recording.id);
+							handleClose();
+						}}
+					>
+						Delete
+					</button>
+				</div>
+			</Dialog>
+		{/if}
+
+		{#if pendingTrash}
+			<Dialog onclose={() => (pendingTrash = false)}>
+				<p class="mb-4 text-sm text-gray-900 dark:text-gray-100">Delete this recording?</p>
+				<div class="flex gap-2">
+					<button
+						class="flex-1 rounded-full px-4 py-2 text-sm font-medium text-gray-600 ring-1 ring-gray-200 transition hover:bg-gray-100 dark:text-gray-300 dark:ring-white/10 dark:hover:bg-white/5"
+						onclick={() => (pendingTrash = false)}
+					>
+						Cancel
+					</button>
+					<button
+						class="flex-1 rounded-full bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700"
+						onclick={() => {
+							pendingTrash = false;
+							recordingsStore.trash(recording.id);
 							handleClose();
 						}}
 					>
