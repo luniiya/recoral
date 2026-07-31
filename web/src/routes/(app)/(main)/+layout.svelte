@@ -2,7 +2,7 @@
 	import { page } from '$app/state';
 	import AvatarMenu from '$lib/components/AvatarMenu.svelte';
 	import BottomNav from '$lib/components/BottomNav.svelte';
-	import Dialog from '$lib/components/Dialog.svelte';
+	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import HeaderBrand from '$lib/components/HeaderBrand.svelte';
 	import SearchBar from '$lib/components/SearchBar.svelte';
 	import Sidebar from '$lib/components/Sidebar.svelte';
@@ -192,8 +192,8 @@
 				title="Archive selected"
 				onclick={bulkArchive}
 			>
-				<svg viewBox="0 0 24 24" fill="currentColor" class="size-4">
-					<path d={navIcons.archive.path} />
+				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="size-4">
+					<path stroke-linecap="round" stroke-linejoin="round" d={navIcons.archive.path} />
 				</svg>
 			</button>
 
@@ -205,8 +205,8 @@
 						title="Add tag to selected"
 						onclick={() => (selectionTagPickerOpen = !selectionTagPickerOpen)}
 					>
-						<svg viewBox="0 0 24 24" fill="currentColor" class="size-4">
-							<path d={navIcons.tags.path} />
+						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="size-4">
+							<path stroke-linecap="round" stroke-linejoin="round" d={navIcons.tags.path} />
 						</svg>
 					</button>
 					{#if selectionTagPickerOpen}
@@ -215,7 +215,7 @@
 							aria-label="Close tag picker"
 							onclick={() => (selectionTagPickerOpen = false)}
 						></button>
-						<div class="card absolute top-full right-0 z-20 mt-1 w-56 p-3">
+						<div class="card accent-scrollbar absolute top-full right-0 z-20 mt-1 max-h-64 w-56 overflow-y-auto p-3">
 							<TagChips tags={tagsStore.list} allTags={tagsStore.list} selected={[]} ontoggle={bulkAddTag} />
 						</div>
 					{/if}
@@ -337,26 +337,17 @@
 <svelte:window bind:innerWidth={windowWidth} />
 
 {#if confirmingBulkDelete}
-	<Dialog onclose={() => (confirmingBulkDelete = false)}>
-		<p class="mb-4 text-sm text-gray-900 dark:text-gray-100">
+	<ConfirmDialog
+		confirmLabel="Delete"
+		danger
+		onconfirm={confirmBulkDelete}
+		onclose={() => (confirmingBulkDelete = false)}
+	>
+		{#snippet message()}
 			Delete <span class="font-semibold">{selectionStore.count}</span>
 			{selectionStore.count === 1 ? 'recording' : 'recordings'}?
-		</p>
-		<div class="flex gap-2">
-			<button
-				class="flex-1 rounded-full px-4 py-2 text-sm font-medium text-gray-600 ring-1 ring-gray-200 transition hover:bg-gray-100 dark:text-gray-300 dark:ring-white/10 dark:hover:bg-white/5"
-				onclick={() => (confirmingBulkDelete = false)}
-			>
-				Cancel
-			</button>
-			<button
-				class="flex-1 rounded-full bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700"
-				onclick={confirmBulkDelete}
-			>
-				Delete
-			</button>
-		</div>
-	</Dialog>
+		{/snippet}
+	</ConfirmDialog>
 {/if}
 
 {#if page.url.pathname === '/' || page.url.pathname === '/favourites' || page.url.pathname === '/archive'}

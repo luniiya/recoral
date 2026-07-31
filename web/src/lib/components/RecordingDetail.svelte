@@ -2,7 +2,7 @@
 	import type { Tag } from '@recoral/shared';
 	import { fadeInAndPlay, fadeOutAndPause } from '$lib/audioFade';
 	import AudioPlayer from './AudioPlayer.svelte';
-	import Dialog from './Dialog.svelte';
+	import ConfirmDialog from './ConfirmDialog.svelte';
 	import FadeScroll from './FadeScroll.svelte';
 	import TagChip from './TagChip.svelte';
 	import TagChips from './TagChips.svelte';
@@ -30,6 +30,13 @@
 	// just permanently (there's no bin for something not even uploaded yet).
 	let isLocal = $derived(recording.syncStatus === 'local');
 	let hasLocalFile = $derived(!!recordingsStore.localFilePath(recording.id));
+	// A retranscribe already in flight has its own status indicator above the
+	// transcript (see the Transcription tab body), the Copy/Retranscribe
+	// buttons in the tab bar below hide themselves during that window instead
+	// of showing redundant/stale controls next to it.
+	let transcriptBusy = $derived(
+		!isLocal && (recording.transcriptStatus === 'pending' || recording.transcriptStatus === 'processing')
+	);
 
 	// Read-only summary row only, see tagPath.ts's visibleTagIds(): hides a tag
 	// if a more specific one already shown covers it. The tag picker below
@@ -48,6 +55,7 @@
 	// trash, tag remove).
 	let pendingDeleteLocal = $state(false);
 	let pendingTrash = $state(false);
+	let pendingRetranscribe = $state(false);
 
 	let playbackTime = $state(0);
 	let playbackPlaying = $state(false);
@@ -344,7 +352,7 @@
 					aria-label="Close tag picker"
 					onclick={() => (tagPickerOpen = false)}
 				></button>
-				<div class="card absolute top-full left-0 z-20 mt-1 w-56 p-3">
+				<div class="card accent-scrollbar absolute top-full left-0 z-20 mt-1 max-h-64 w-56 overflow-y-auto p-3">
 					<TagChips
 						tags={tagsStore.list}
 						allTags={tagsStore.list}
@@ -367,53 +375,52 @@
 		{/if}
 
 		{#if pendingDeleteLocal}
-			<Dialog onclose={() => (pendingDeleteLocal = false)}>
-				<p class="mb-4 text-sm text-gray-900 dark:text-gray-100">
+			<ConfirmDialog
+				confirmLabel="Delete"
+				danger
+				onconfirm={() => {
+					pendingDeleteLocal = false;
+					recordingsStore.deleteForever(recording.id);
+					handleClose();
+				}}
+				onclose={() => (pendingDeleteLocal = false)}
+			>
+				{#snippet message()}
 					Delete this recording? It has not been uploaded yet, this cannot be undone.
-				</p>
-				<div class="flex gap-2">
-					<button
-						class="flex-1 rounded-full px-4 py-2 text-sm font-medium text-gray-600 ring-1 ring-gray-200 transition hover:bg-gray-100 dark:text-gray-300 dark:ring-white/10 dark:hover:bg-white/5"
-						onclick={() => (pendingDeleteLocal = false)}
-					>
-						Cancel
-					</button>
-					<button
-						class="flex-1 rounded-full bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700"
-						onclick={() => {
-							pendingDeleteLocal = false;
-							recordingsStore.deleteForever(recording.id);
-							handleClose();
-						}}
-					>
-						Delete
-					</button>
-				</div>
-			</Dialog>
+				{/snippet}
+			</ConfirmDialog>
+		{/if}
+
+		{#if pendingRetranscribe}
+			<ConfirmDialog
+				confirmLabel="Retranscribe"
+				onconfirm={() => {
+					pendingRetranscribe = false;
+					retryTranscription();
+				}}
+				onclose={() => (pendingRetranscribe = false)}
+			>
+				{#snippet message()}
+					Retranscribe this recording? This will replace the current transcript.
+				{/snippet}
+			</ConfirmDialog>
 		{/if}
 
 		{#if pendingTrash}
-			<Dialog onclose={() => (pendingTrash = false)}>
-				<p class="mb-4 text-sm text-gray-900 dark:text-gray-100">Delete this recording?</p>
-				<div class="flex gap-2">
-					<button
-						class="flex-1 rounded-full px-4 py-2 text-sm font-medium text-gray-600 ring-1 ring-gray-200 transition hover:bg-gray-100 dark:text-gray-300 dark:ring-white/10 dark:hover:bg-white/5"
-						onclick={() => (pendingTrash = false)}
-					>
-						Cancel
-					</button>
-					<button
-						class="flex-1 rounded-full bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700"
-						onclick={() => {
-							pendingTrash = false;
-							recordingsStore.trash(recording.id);
-							handleClose();
-						}}
-					>
-						Delete
-					</button>
-				</div>
-			</Dialog>
+			<ConfirmDialog
+				confirmLabel="Delete"
+				danger
+				onconfirm={() => {
+					pendingTrash = false;
+					recordingsStore.trash(recording.id);
+					handleClose();
+				}}
+				onclose={() => (pendingTrash = false)}
+			>
+				{#snippet message()}
+					Delete this recording?
+				{/snippet}
+			</ConfirmDialog>
 		{/if}
 	</div>
 
@@ -430,46 +437,17 @@
 				</div>
 			{:else if recording.transcript}
 				<div class="flex h-full flex-col gap-3">
-					<div class="flex items-center justify-end gap-2 text-xs">
-						{#if !isLocal && (recording.transcriptStatus === 'pending' || recording.transcriptStatus === 'processing')}
-							<span class="flex items-center gap-1.5 text-gray-400">
-								<svg viewBox="0 0 24 24" fill="none" class="size-3.5 animate-spin text-accent-500">
-									<circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="3" stroke-opacity="0.25" />
-									<path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" stroke-width="3" stroke-linecap="round" />
-								</svg>
-								Retranscribing…
-							</span>
-						{:else}
-							{#if !isLocal && transcribeError}<span class="text-red-500 dark:text-red-400">{transcribeError}</span>{/if}
-							<button
-								class="flex items-center gap-1 rounded-full px-2.5 py-1 font-semibold text-accent-600 ring-1 ring-accent-200 transition hover:bg-accent-50 dark:text-accent-400 dark:ring-accent-500/30 dark:hover:bg-accent-500/10"
-								onclick={copyTranscript}
-								aria-label="Copy transcript"
-							>
-								{#if copied}
-									<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="size-3.5">
-										<path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4.5 4.5L19 7.5" />
-									</svg>
-									Copied
-								{:else}
-									<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="size-3.5">
-										<rect x="8" y="8" width="11" height="11" rx="1.5" />
-										<path d="M5 15V6a1 1 0 0 1 1-1h9" stroke-linecap="round" />
-									</svg>
-									Copy
-								{/if}
-							</button>
-							{#if !isLocal}
-								<button
-									class="rounded-full px-3 py-1 font-semibold text-accent-600 ring-1 ring-accent-200 transition hover:bg-accent-50 disabled:opacity-60 dark:text-accent-400 dark:ring-accent-500/30 dark:hover:bg-accent-500/10"
-									onclick={retryTranscription}
-									disabled={retrying}
-								>
-									{retrying ? 'Starting…' : 'Retranscribe'}
-								</button>
-							{/if}
-						{/if}
-					</div>
+					{#if !isLocal && (recording.transcriptStatus === 'pending' || recording.transcriptStatus === 'processing')}
+						<span class="flex items-center gap-1.5 text-xs text-gray-400">
+							<svg viewBox="0 0 24 24" fill="none" class="size-3.5 animate-spin text-accent-500">
+								<circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="3" stroke-opacity="0.25" />
+								<path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" stroke-width="3" stroke-linecap="round" />
+							</svg>
+							Retranscribing…
+						</span>
+					{:else if !isLocal && transcribeError}
+						<span class="text-xs text-red-500 dark:text-red-400">{transcribeError}</span>
+					{/if}
 					<FadeScroll class="accent-scrollbar" fadeFrom="from-accent-50 dark:from-accent-500/10">
 						<p
 							class="select-text text-sm whitespace-pre-wrap text-gray-700 dark:text-gray-300"
@@ -516,8 +494,38 @@
 			{/if}
 		</div>
 
-		<div class="flex justify-center pb-3">
-			<div class="inline-flex rounded-full bg-black/5 p-1 dark:bg-white/10">
+		<div class="@container flex items-center gap-2 px-5 pb-3">
+			<!-- Three independent flex zones (not one crowded corner) so the tab
+			     pill always lands dead center regardless of which of these two
+			     buttons is showing, rather than fighting Copy/Retranscribe for
+			     space on a single side. -->
+			<div class="flex flex-1 items-center">
+				{#if activeTab === 'transcription' && recording.transcript && !isLocal && !transcriptBusy}
+					<!-- @container (on the row above) so this responds to the
+					     panel's own real width, not the viewport: below @lg
+					     (32rem) it collapses to an icon-only circle (same size
+					     as Copy's, size-8) since the full text pushes the tab
+					     pill/Copy off the edge well before the panel gets
+					     narrow, confirmed by an actual screenshot at a width
+					     the old @sm threshold still let through. -->
+					<button
+						class="flex size-8 items-center justify-center gap-1.5 rounded-full text-accent-600 transition hover:bg-accent-50 disabled:opacity-60 dark:text-accent-400 dark:hover:bg-accent-500/10 @lg:size-auto @lg:px-3 @lg:py-1.5"
+						onclick={() => (pendingRetranscribe = true)}
+						disabled={retrying}
+						aria-label="Retranscribe"
+					>
+						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="size-3.5 shrink-0">
+							<path
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								d="M16.0228 9.34841H21.0154V9.34663M2.98413 19.6444V14.6517M2.98413 14.6517L7.97677 14.6517M2.98413 14.6517L6.16502 17.8347C7.15555 18.8271 8.41261 19.58 9.86436 19.969C14.2654 21.1483 18.7892 18.5364 19.9685 14.1353M4.03073 9.86484C5.21 5.46374 9.73377 2.85194 14.1349 4.03121C15.5866 4.4202 16.8437 5.17312 17.8342 6.1655L21.0154 9.34663M21.0154 4.3558V9.34663"
+							/>
+						</svg>
+						<span class="hidden text-xs font-semibold @lg:inline">{retrying ? 'Starting…' : 'Retranscribe'}</span>
+					</button>
+				{/if}
+			</div>
+			<div class="inline-flex shrink-0 rounded-full bg-black/5 p-1 dark:bg-white/10">
 				<button
 					class="rounded-full px-4 py-1.5 text-sm font-medium transition
 						{activeTab === 'audio'
@@ -536,6 +544,26 @@
 				>
 					Transcription
 				</button>
+			</div>
+			<div class="flex flex-1 items-center justify-end">
+				{#if activeTab === 'transcription' && recording.transcript && !transcriptBusy}
+					<button
+						class="flex size-8 items-center justify-center rounded-full text-accent-600 transition hover:bg-accent-50 dark:text-accent-400 dark:hover:bg-accent-500/10"
+						onclick={copyTranscript}
+						aria-label="Copy transcript"
+					>
+						{#if copied}
+							<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="size-4">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4.5 4.5L19 7.5" />
+							</svg>
+						{:else}
+							<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="size-4">
+								<rect x="8" y="8" width="11" height="11" rx="1.5" />
+								<path d="M5 15V6a1 1 0 0 1 1-1h9" stroke-linecap="round" />
+							</svg>
+						{/if}
+					</button>
+				{/if}
 			</div>
 		</div>
 	</div>

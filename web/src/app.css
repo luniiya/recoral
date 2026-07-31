@@ -84,6 +84,19 @@
 .no-native-scrollbar {
 	scrollbar-width: none;
 	-ms-overflow-style: none;
+	/* VirtualTimeline.svelte sizes its spacer divs from *estimated* row
+	   heights, not the real rendered ones (tags/wrapped descriptions vary a
+	   few px), so the browser's real scrollHeight drifts slightly as the
+	   windowed range shifts during scroll. Chromium's scroll anchoring
+	   (on by default) then "corrects" scrollTop to compensate for that
+	   drift, which fires a scroll event, which can shift the windowed range
+	   again, which drifts scrollHeight again, a real feedback loop, seen as
+	   Scrubber.svelte's thumb rapidly vibrating mid-list. Scroll anchoring
+	   is a nice-to-have for content that loads in unpredictably (e.g. an
+	   infinite-scroll feed), nothing in this app relies on it, so it's just
+	   off entirely here rather than chasing the estimate/real mismatch to
+	   zero (which real content variance makes impractical anyway). */
+	overflow-anchor: none;
 }
 .no-native-scrollbar::-webkit-scrollbar {
 	display: none;

@@ -133,6 +133,19 @@ function preflightResponse(origin: string | null) {
 type RouteHandler = (req: never) => Response | Promise<Response>;
 type RouteValue = RouteHandler | Record<string, RouteHandler>;
 
+// Previously the server logged almost nothing during normal operation (one
+// line at startup, plus a couple of console.error calls in specific
+// catch blocks), so `docker logs` looked empty even while the server was
+// actively handling traffic, no way to tell "no requests are arriving" from
+// "requests are arriving and working fine." One line per request here
+// fixes that for every route this app actually has (all of them go through
+// withCors). Deliberately unconditional (no log-level toggle), this is a
+// small self-hosted server, not something logging at a rate worth gating.
+function logRequest(req: Request, res: Response, startedAt: number) {
+	const ms = Math.round(performance.now() - startedAt);
+	console.log(`${req.method} ${new URL(req.url).pathname} ${res.status} ${ms}ms`);
+}
+
 function withCors<T extends Record<string, RouteValue>>(routes: T): T {
 	const wrapped: Record<string, RouteValue> = {};
 
@@ -141,7 +154,9 @@ function withCors<T extends Record<string, RouteValue>>(routes: T): T {
 			wrapped[path] = async (req: Request) => {
 				const origin = req.headers.get("origin");
 				if (req.method === "OPTIONS") return preflightResponse(origin);
+				const startedAt = performance.now();
 				const res = await value(req as never);
+				logRequest(req, res, startedAt);
 				for (const [key, val] of Object.entries(corsHeaders(origin))) res.headers.set(key, val as string);
 				return res;
 			};
@@ -150,7 +165,9 @@ function withCors<T extends Record<string, RouteValue>>(routes: T): T {
 			for (const [method, fn] of Object.entries(value)) {
 				methods[method] = async (req: Request) => {
 					const origin = req.headers.get("origin");
+					const startedAt = performance.now();
 					const res = await fn(req as never);
+					logRequest(req, res, startedAt);
 					for (const [key, val] of Object.entries(corsHeaders(origin))) res.headers.set(key, val as string);
 					return res;
 				};

@@ -6,6 +6,7 @@
 	import { auth } from '$lib/auth.svelte';
 	import { bootLog } from '$lib/bootLog';
 	import LogoWordmark from '$lib/components/LogoWordmark.svelte';
+	import { clearMediaSession } from '$lib/mediaSession';
 	import { mobileBack } from '$lib/mobileBack.svelte';
 	import { onboarding } from '$lib/onboarding.svelte';
 	import { outboxStore } from '$lib/outbox.svelte';
@@ -142,7 +143,12 @@
 		const onContextMenu = (event: MouseEvent) => {
 			if (!lastPointerWasTouch) return;
 			const target = event.target as HTMLElement;
-			if (target.closest('input, textarea, [contenteditable]')) return;
+			// .select-text: the transcript body (RecordingDetail.svelte) is the
+			// one other place selection is deliberately turned back on outside
+			// a real input, same reasoning as those, blocking this here was
+			// swallowing the native Copy toolbar Android pops up over a touch
+			// selection, even though the selection itself still worked.
+			if (target.closest('input, textarea, [contenteditable], .select-text')) return;
 			event.preventDefault();
 		};
 		window.addEventListener('contextmenu', onContextMenu);
@@ -179,6 +185,21 @@
 					} else {
 						App.exitApp();
 					}
+				});
+
+				// The Android system media notification (navigator.mediaSession,
+				// set up per-open-player in AudioPlayer.svelte) otherwise outlives
+				// the app: backgrounding stops the WebView's JS from running at
+				// all, so the notification's own play/pause/seek buttons go dead
+				// (nothing left to handle those taps) while the notification
+				// itself just sits there looking usable. AudioPlayer's own
+				// onDestroy cleanup only covers the component actually
+				// unmounting (closing the detail panel, navigating away), never
+				// backgrounding/closing the whole app, which doesn't unmount
+				// anything. Clearing it here on isActive:false covers exactly
+				// that gap.
+				App.addListener('appStateChange', ({ isActive }) => {
+					if (!isActive) clearMediaSession();
 				});
 			});
 		}
