@@ -1,6 +1,12 @@
 <script lang="ts">
 	import type { ScrubberSegment } from '$lib/dateGroups';
+	import { isNativePlatform } from '$lib/platform';
 	import { scrubbingStore } from '$lib/scrubbing.svelte';
+
+	// This label repositions every drag frame, the single highest-frequency
+	// repaint in the app; backdrop-blur recomputing on every one of those
+	// frames is a real jank source on Android WebView, so it's dropped there.
+	const nativePlatform = isNativePlatform();
 
 	let { scrollEl, segments }: { scrollEl: HTMLElement | undefined; segments: ScrubberSegment[] } = $props();
 
@@ -215,7 +221,8 @@
 		{#if activeLabel}
 			<div
 				id="scrubber-label"
-				class="pointer-events-none absolute right-7 -translate-y-1/2 rounded-lg border border-gray-200/70 bg-white/70 px-2.5 py-1 text-xs font-medium whitespace-nowrap text-gray-900 shadow-sm backdrop-blur-lg dark:border-white/10 dark:bg-black/60 dark:text-gray-100"
+				class="pointer-events-none absolute right-7 -translate-y-1/2 rounded-lg border border-gray-200/70 px-2.5 py-1 text-xs font-medium whitespace-nowrap text-gray-900 shadow-sm dark:border-white/10 dark:text-gray-100
+					{nativePlatform ? 'bg-white dark:bg-black' : 'bg-white/70 backdrop-blur-lg dark:bg-black/60'}"
 				style:top="{labelY}px"
 			>
 				{activeLabel}

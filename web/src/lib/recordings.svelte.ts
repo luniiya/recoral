@@ -61,6 +61,14 @@ let selectedTagIds = $state<string[]>([]);
 let dateFrom = $state<string | null>(null);
 let dateTo = $state<string | null>(null);
 let importError = $state<string | null>(null);
+// Set whenever upload() gets a 409 (content-hash match against an existing
+// recording), alongside importError, so a caller that specifically cares
+// about *which* recording it's a duplicate of (the outbox flush, to
+// reconcile a stuck local file to the one already on the server instead of
+// retrying it forever, see sync.svelte.ts) can read it right after a failed
+// addRecording() call. Reset at the top of every upload() so a stale value
+// from a previous item's duplicate can't leak onto a later, unrelated failure.
+let lastDuplicate = $state<Recording | null>(null);
 
 function pendingAsRecordings(): DisplayRecording[] {
 	return outboxStore.pending.map((p) => ({
@@ -189,10 +197,12 @@ async function upload(
 	form.append('durationSeconds', String(durationSeconds));
 	if (description) form.append('description', description);
 
+	lastDuplicate = null;
 	const res = await api.fetch('/api/recordings', { method: 'POST', credentials: 'include', body: form });
 
 	if (!res.ok) {
 		const body = await res.json().catch(() => ({}));
+		if (res.status === 409 && body.existing) lastDuplicate = body.existing as Recording;
 		return { error: (body.error as string) ?? 'Something went wrong' };
 	}
 
@@ -553,6 +563,9 @@ export const recordingsStore = {
 	},
 	get importError() {
 		return importError;
+	},
+	get lastDuplicate() {
+		return lastDuplicate;
 	},
 	get loaded() {
 		return loaded;

@@ -89,6 +89,32 @@
 	display: none;
 }
 
+/* For a scroll container that should actually show a thumb (unlike
+   .no-native-scrollbar above), just a thin accent-colored one, no track/
+   buttons/border, since the default OS scrollbar clashes with the app's own
+   flat, no-decoration design language. Shared, not one-off: apply to any
+   scrollable element that wants this instead of the plain default. */
+.accent-scrollbar {
+	scrollbar-width: thin;
+	scrollbar-color: var(--accent-500) transparent;
+}
+.accent-scrollbar::-webkit-scrollbar {
+	width: 6px;
+	height: 6px;
+}
+.accent-scrollbar::-webkit-scrollbar-track {
+	background: transparent;
+}
+.accent-scrollbar::-webkit-scrollbar-thumb {
+	background-color: var(--accent-500);
+	border-radius: 999px;
+}
+.accent-scrollbar::-webkit-scrollbar-button {
+	display: none;
+	height: 0;
+	width: 0;
+}
+
 /* App-wide on mobile (matches Tailwind's md breakpoint, same one used for the
    desktop/mobile layout split everywhere else): a visible scrollbar reads as
    a desktop/browser affordance, not something a native-feeling touch app

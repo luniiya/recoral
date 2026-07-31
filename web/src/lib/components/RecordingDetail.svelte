@@ -3,6 +3,7 @@
 	import { fadeInAndPlay, fadeOutAndPause } from '$lib/audioFade';
 	import AudioPlayer from './AudioPlayer.svelte';
 	import Dialog from './Dialog.svelte';
+	import FadeScroll from './FadeScroll.svelte';
 	import TagChip from './TagChip.svelte';
 	import TagChips from './TagChips.svelte';
 	import TagRemoveConfirm from './TagRemoveConfirm.svelte';
@@ -469,12 +470,14 @@
 							{/if}
 						{/if}
 					</div>
-					<p
-						class="select-text flex-1 overflow-y-auto text-sm whitespace-pre-wrap text-gray-700 dark:text-gray-300"
-						style="-webkit-touch-callout: default;"
-					>
-						{recording.transcript}
-					</p>
+					<FadeScroll class="accent-scrollbar" fadeFrom="from-accent-50 dark:from-accent-500/10">
+						<p
+							class="select-text text-sm whitespace-pre-wrap text-gray-700 dark:text-gray-300"
+							style="-webkit-touch-callout: default;"
+						>
+							{recording.transcript}
+						</p>
+					</FadeScroll>
 				</div>
 			{:else if recording.transcriptStatus === 'pending' || recording.transcriptStatus === 'processing'}
 				<div class="flex h-full flex-col items-center justify-center gap-2 text-sm text-gray-400">

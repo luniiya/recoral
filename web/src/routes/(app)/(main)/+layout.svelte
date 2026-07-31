@@ -14,12 +14,19 @@
 	import { liveRecordingStore } from '$lib/liveRecording.svelte';
 	import { navIcons } from '$lib/navIcons';
 	import { pageSelectStore } from '$lib/pageSelect.svelte';
+	import { isNativePlatform } from '$lib/platform';
 	import { recordingsStore } from '$lib/recordings.svelte';
 	import { selectionStore } from '$lib/selection.svelte';
 	import { tagsStore } from '$lib/tags.svelte';
 	import { onMount } from 'svelte';
 
 	let { children } = $props();
+	// backdrop-filter is a real, measurable jank source on Android WebView
+	// (GPU compositing recomputes the blur every frame something behind it
+	// moves/scrolls), so it's dropped on native rather than fighting it.
+	// Static per app run, not reactive, so computed once rather than called
+	// inline in every class string below.
+	const nativePlatform = isNativePlatform();
 	let fileInput: HTMLInputElement | undefined = $state();
 	let dragging = $state(false);
 	let dragDepth = 0;
@@ -357,7 +364,10 @@
 		class="fixed inset-x-0 bottom-[calc(5rem+var(--safe-area-inset-bottom,env(safe-area-inset-bottom)))] z-20 flex items-center gap-2 px-4 md:hidden"
 	>
 		<SearchBar
-			class="min-w-0 flex-1 border border-gray-200/70 bg-white/70 shadow-sm backdrop-blur-lg dark:border-white/10 dark:bg-black/60"
+			class="min-w-0 flex-1 border border-gray-200/70 shadow-sm dark:border-white/10
+				{nativePlatform
+				? 'bg-white dark:bg-black'
+				: 'bg-white/70 backdrop-blur-lg dark:bg-black/60'}"
 		/>
 		{#if page.url.pathname === '/'}
 			<button

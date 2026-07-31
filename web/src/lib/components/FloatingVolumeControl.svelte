@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { isNativePlatform } from '$lib/platform';
 	import { scrubbingStore } from '$lib/scrubbing.svelte';
 	import { sharedVolume } from '$lib/sharedVolume.svelte';
 	import { sliderToGain } from '$lib/volume';
@@ -22,12 +23,14 @@
 	}
 </script>
 
-{#if !scrubbingStore.active}
+{#if !scrubbingStore.active && !isNativePlatform()}
 	<!-- One shared volume control for pages that show many simultaneous inline
 	     AudioPlayers at once (Bin), instead of a separate slider per card, see
 	     sharedVolume.svelte.ts. Fixed bottom-right, thumb-reachable, out of the
 	     way of the cards themselves. Hidden while the Scrubber (same corner) is
-	     in use, see scrubbing.svelte.ts. -->
+	     in use, see scrubbing.svelte.ts. Hidden entirely on native (mobile
+	     owns volume via hardware buttons already, same reasoning as
+	     AudioPlayer's own in-panel slider). -->
 	<div
 		class="fixed right-4 z-30 flex flex-col items-center gap-2 rounded-full border border-gray-200/70 bg-white/90 p-2.5 shadow-lg backdrop-blur-lg md:right-6 md:bottom-6 dark:border-white/10 dark:bg-black/70
 			{raised
