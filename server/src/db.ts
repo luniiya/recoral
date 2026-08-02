@@ -29,6 +29,9 @@ ensureColumn("users", "accent_hue", "accent_hue INTEGER NOT NULL DEFAULT 26");
 ensureColumn("users", "avatar", "avatar TEXT");
 ensureColumn("users", "is_admin", "is_admin INTEGER NOT NULL DEFAULT 0");
 ensureColumn("users", "storage_limit_mb", "storage_limit_mb INTEGER");
+// Null until the user's first self-service username change (signup doesn't
+// count), then reset on every subsequent change; see USERNAME_CHANGE_COOLDOWN_DAYS.
+ensureColumn("users", "username_changed_at", "username_changed_at TEXT");
 
 db.run(`
 	CREATE TABLE IF NOT EXISTS sessions (
@@ -37,6 +40,22 @@ db.run(`
 		created_at TEXT NOT NULL
 	)
 `);
+// The session list shown to a user must never re-serialize a live, reusable
+// bearer token back into a response body, so listing/revoking needs a
+// separate client-facing id distinct from `token`. Existing rows have no safe
+// way to backfill that id without briefly reusing their real token value as
+// the id, so this invalidates all pre-existing sessions once instead (a
+// one-time forced re-login) rather than risk exposing a real token.
+{
+	const sessionColumns = db.query<{ name: string }, []>(`PRAGMA table_info(sessions)`).all();
+	if (!sessionColumns.some((c) => c.name === "id")) {
+		db.run("DELETE FROM sessions");
+		db.run("ALTER TABLE sessions ADD COLUMN id TEXT");
+	}
+}
+ensureColumn("sessions", "user_agent", "user_agent TEXT");
+ensureColumn("sessions", "last_seen_at", "last_seen_at TEXT");
+db.run("CREATE UNIQUE INDEX IF NOT EXISTS idx_sessions_id ON sessions(id)");
 
 db.run(`
 	CREATE TABLE IF NOT EXISTS tags (
@@ -83,7 +102,9 @@ db.run(`
 		server_storage_limit_mb INTEGER DEFAULT 204800,
 		max_import_size_mb INTEGER NOT NULL DEFAULT 1024,
 		transcription_enabled INTEGER NOT NULL DEFAULT 1,
-		transcription_model TEXT NOT NULL DEFAULT 'tiny'
+		transcription_model TEXT NOT NULL DEFAULT 'tiny',
+		require_strong_passwords INTEGER NOT NULL DEFAULT 1,
+		require_email INTEGER NOT NULL DEFAULT 0
 	)
 `);
 db.run("INSERT OR IGNORE INTO settings (id, default_accent_hue, signup_enabled) VALUES (1, NULL, 1)");
@@ -97,6 +118,13 @@ ensureColumn("settings", "max_import_size_mb", "max_import_size_mb INTEGER NOT N
 // breaking anything else.
 ensureColumn("settings", "transcription_enabled", "transcription_enabled INTEGER NOT NULL DEFAULT 1");
 ensureColumn("settings", "transcription_model", "transcription_model TEXT NOT NULL DEFAULT 'tiny'");
+// On by default; an admin can allow weaker passwords server-wide in /admin.
+// Applies globally to every password-setting path (register, admin-create,
+// self-service change, admin reset), not just new accounts.
+ensureColumn("settings", "require_strong_passwords", "require_strong_passwords INTEGER NOT NULL DEFAULT 1");
+// Off by default (email stays optional/"complementary"); an admin can turn
+// this on in /admin to make email mandatory on every signup/account form.
+ensureColumn("settings", "require_email", "require_email INTEGER NOT NULL DEFAULT 0");
 
 db.run(`
 	CREATE TABLE IF NOT EXISTS recordings (

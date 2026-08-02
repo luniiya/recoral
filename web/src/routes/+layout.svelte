@@ -4,6 +4,9 @@
 	import { page } from '$app/state';
 	import { applyAccentHue, cacheAccentHue } from '$lib/accent';
 	import { auth } from '$lib/auth.svelte';
+	import { bootLog } from '$lib/bootLog';
+	import LogoWordmark from '$lib/components/LogoWordmark.svelte';
+	import { clearMediaSession } from '$lib/mediaSession';
 	import { mobileBack } from '$lib/mobileBack.svelte';
 	import { onboarding } from '$lib/onboarding.svelte';
 	import { outboxStore } from '$lib/outbox.svelte';
@@ -12,10 +15,14 @@
 	import { syncStore } from '$lib/sync.svelte';
 	import { systemAccentStore } from '$lib/systemAccent.svelte';
 	import { themeStore } from '$lib/theme.svelte';
+	import { vimZone } from '$lib/vimZone.svelte';
+	import { vimPreference } from '$lib/vimPreference.svelte';
 	import { wavySeekStore } from '$lib/wavySeek.svelte';
 	import { onMount } from 'svelte';
 
 	let { children } = $props();
+
+	bootLog('root layout: module evaluated, native =', isNativePlatform(), 'onboarding.mode =', onboarding.mode);
 
 	// Mobile only: before anything else loads, make sure a server is picked
 	// (or "go offline" was chosen) at least once. Desktop webUI always talks
@@ -23,8 +30,10 @@
 	$effect(() => {
 		if (!isNativePlatform()) return;
 		if (onboarding.mode === null && page.url.pathname !== '/setup') {
+			bootLog('root layout: no onboarding mode yet, redirecting to /setup');
 			goto('/setup');
 		} else if (onboarding.mode === 'offline' && page.url.pathname !== '/setup/offline') {
+			bootLog('root layout: offline mode, redirecting to /setup/offline');
 			goto('/setup/offline');
 		}
 	});
@@ -34,10 +43,19 @@
 	// just hit a URL that doesn't exist and throw parsing the response.
 	$effect(() => {
 		if (isNativePlatform() && onboarding.mode === null) {
+			bootLog('root layout: skipping auth refresh, no server picked yet');
 			auth.skipRefresh();
 			return;
 		}
+		bootLog('root layout: calling auth.refresh()');
 		auth.refresh();
+	});
+
+	// Diagnostic only, see bootLog.ts: marks exactly when the top-level
+	// "Loading…" screen below actually clears, so its duration is visible
+	// alongside the auth.refresh()/tags/recordings timings logged elsewhere.
+	$effect(() => {
+		bootLog('root layout: auth.loading =', auth.loading);
 	});
 
 	// Once logged in, try to push anything left over in the local outbox
@@ -71,8 +89,10 @@
 	});
 
 	onMount(() => {
+		bootLog('root layout: onMount fired');
 		themeStore.init();
 		wavySeekStore.init();
+		vimPreference.init();
 
 		// Trackpad pinch and ctrl+scroll both fire as a 'wheel' event with
 		// ctrlKey set (that's how Chrome/Firefox represent pinch-zoom on a
@@ -80,13 +100,23 @@
 		// blocking that stops desktop browser zoom the same way touch-action
 		// stops it on mobile. Safari also fires legacy gesture events for
 		// actual pinch, not wheel, so that's blocked separately below.
+		//
+		// Only applies to the native app and an installed PWA (both feel like
+		// "an app", zooming is jarring, matches native mobile's touch-action
+		// zoom block), not a plain desktop browser tab: there, zooming is
+		// completely normal browser behavior a user might genuinely want, and
+		// blocking it there was the actual bug, this whole block used to fire
+		// unconditionally everywhere with no exception for that case.
+		const shouldBlockZoom = isNativePlatform() || window.matchMedia('(display-mode: standalone)').matches;
 		const onWheel = (event: WheelEvent) => {
-			if (event.ctrlKey) event.preventDefault();
+			if (event.ctrlKey && shouldBlockZoom) event.preventDefault();
 		};
 		window.addEventListener('wheel', onWheel, { passive: false });
-		const onGesture = (event: Event) => event.preventDefault();
-		window.addEventListener('gesturestart', onGesture);
-		window.addEventListener('gesturechange', onGesture);
+		if (shouldBlockZoom) {
+			const onGesture = (event: Event) => event.preventDefault();
+			window.addEventListener('gesturestart', onGesture);
+			window.addEventListener('gesturechange', onGesture);
+		}
 
 		// -webkit-touch-callout:none (app.css) only stops iOS Safari's own
 		// long-press callout. On Android/Chrome (which is what the plain mobile
@@ -95,14 +125,58 @@
 		// event instead, popping the browser's right-click-style menu right on
 		// top of RecordingCard's own hold-to-select gesture. Same "native-
 		// feeling app, not a document" reasoning as the touch-callout rule:
-		// blocked everywhere except text inputs, which still need it for
-		// copy/paste.
+		// blocked on touch, everywhere except text inputs (still need it there
+		// for copy/paste). A real desktop right-click is a completely normal,
+		// wanted thing (e.g. right-click-copy on the now-selectable transcript
+		// text) and must not be swallowed too: 'contextmenu' itself can't tell
+		// touch from mouse directly, so the most recent pointer type is tracked
+		// via 'pointerdown' instead. This used to block unconditionally,
+		// killing right-click everywhere on desktop, confirmed a real bug.
+		let lastPointerWasTouch = false;
+		window.addEventListener(
+			'pointerdown',
+			(event: PointerEvent) => {
+				lastPointerWasTouch = event.pointerType !== 'mouse';
+			},
+			{ capture: true }
+		);
 		const onContextMenu = (event: MouseEvent) => {
+			if (!lastPointerWasTouch) return;
 			const target = event.target as HTMLElement;
-			if (target.closest('input, textarea, [contenteditable]')) return;
+			// .select-text: the transcript body (RecordingDetail.svelte) is the
+			// one other place selection is deliberately turned back on outside
+			// a real input, same reasoning as those, blocking this here was
+			// swallowing the native Copy toolbar Android pops up over a touch
+			// selection, even though the selection itself still worked.
+			if (target.closest('input, textarea, [contenteditable], .select-text')) return;
 			event.preventDefault();
 		};
 		window.addEventListener('contextmenu', onContextMenu);
+
+		// See vimZone.svelte.ts: gates the j/k/l/h list-navigation shortcuts
+		// (and drives their little NORMAL/INSERT status indicator) so they
+		// never fire while actually typing into a title/description/search.
+		//
+		// setTimeout(..., 0), not a direct call: a focusin/focusout can fire
+		// as a *side effect* of a DOM node being removed/replaced mid-render
+		// (e.g. a button swapping out while Svelte is still applying that
+		// same update), which lands this state write inside Svelte's own
+		// currently-running flush instead of as a clean top-level event.
+		// Confirmed via a real capture: a genuine
+		// `Uncaught Error: state_unsafe_mutation` originating from setTyping,
+		// with `flush` itself on the call stack. Deferring to a fresh
+		// macrotask guarantees this always runs after that flush has fully
+		// settled, breaking the re-entrancy without changing the behavior
+		// (still effectively instant from a user's perspective).
+		function onFocusIn(event: FocusEvent) {
+			const isTyping = !!(event.target as HTMLElement | null)?.closest('input, textarea, [contenteditable]');
+			setTimeout(() => vimZone.setTyping(isTyping), 0);
+		}
+		function onFocusOut() {
+			setTimeout(() => vimZone.setTyping(false), 0);
+		}
+		window.addEventListener('focusin', onFocusIn);
+		window.addEventListener('focusout', onFocusOut);
 
 		if (!isNativePlatform() && 'serviceWorker' in navigator) {
 			navigator.serviceWorker.register('/service-worker.js');
@@ -125,6 +199,21 @@
 						App.exitApp();
 					}
 				});
+
+				// The Android system media notification (navigator.mediaSession,
+				// set up per-open-player in AudioPlayer.svelte) otherwise outlives
+				// the app: backgrounding stops the WebView's JS from running at
+				// all, so the notification's own play/pause/seek buttons go dead
+				// (nothing left to handle those taps) while the notification
+				// itself just sits there looking usable. AudioPlayer's own
+				// onDestroy cleanup only covers the component actually
+				// unmounting (closing the detail panel, navigating away), never
+				// backgrounding/closing the whole app, which doesn't unmount
+				// anything. Clearing it here on isActive:false covers exactly
+				// that gap.
+				App.addListener('appStateChange', ({ isActive }) => {
+					if (!isActive) clearMediaSession();
+				});
 			});
 		}
 	});
@@ -137,7 +226,14 @@
 </svelte:head>
 
 {#if auth.loading}
-	<div class="flex min-h-dvh items-center justify-center text-sm text-gray-400">Loading&hellip;</div>
+	<!-- Only reached on a genuine first-ever login on this device/browser
+	     (no cached user to show meanwhile), and bounded to ~8s by
+	     auth.refresh()'s own request timeout, not an indefinite spinner. -->
+	<div class="flex min-h-dvh items-center justify-center bg-white dark:bg-black">
+		<div class="animate-pulse">
+			<LogoWordmark size="size-10" textSize="text-xl" colored />
+		</div>
+	</div>
 {:else}
 	{@render children()}
 {/if}

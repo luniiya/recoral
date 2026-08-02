@@ -2,8 +2,12 @@ import type { Recording } from '@recoral/shared';
 import { Capacitor } from '@capacitor/core';
 import { Directory, Filesystem } from '@capacitor/filesystem';
 import { api } from './api.svelte';
+import { bulkJobStore } from './bulkJob.svelte';
 import { readLocalCache, writeLocalCache } from './localCache';
 import { outboxStore } from './outbox.svelte';
+import type { SearchFields } from './recordingFilter';
+import { ancestorTagIds } from './tagPath';
+import { tagsStore } from './tags.svelte';
 
 const TRASH_RETENTION_DAYS = 30;
 
@@ -29,8 +33,43 @@ const CACHED_RECORDINGS_KEY = 'recoral_cached_recordings';
 let all = $state<Recording[]>(readLocalCache<Recording[]>(CACHED_RECORDINGS_KEY, []));
 let loaded = $state(false);
 let search = $state('');
+// Which fields count as a match, toggleable in the filter panel. Transcript
+// defaults off (a transcript is a big loose blob of text, a hit there is
+// less "intentional" than a title/description match), title/description
+// default on.
+let searchFields = $state<SearchFields>({ title: true, description: true, transcript: false });
+// Ids the server confirmed match the current `search` + `searchFields`
+// combination, once it answers, or null if there's no server answer yet for
+// that exact combination (still debouncing, in flight, offline, or timed
+// out). See recordingFilter.ts's matchesSearch(): the local substring match
+// (already covering title/description/transcript, the whole library is
+// always loaded client-side today) is what's shown instantly and what's used
+// whenever this is null, this is purely a reconcile-when-available layer on
+// top, forward-looking for whenever search needs to cover data the client
+// doesn't have loaded, see TODO.md.
+let serverSearchIds = $state<string[] | null>(null);
+let serverSearchKey = $state<string | null>(null);
+let searchDebounce: ReturnType<typeof setTimeout> | null = null;
+
+function searchKey(query: string, fields: SearchFields): string {
+	return `${query}|${fields.title ? 1 : 0}|${fields.description ? 1 : 0}|${fields.transcript ? 1 : 0}`;
+}
 let selectedTagIds = $state<string[]>([]);
+// yyyy-mm-dd (native <input type="date"> format), inclusive on both ends,
+// either end can be open (null) for a one-sided range. Combines with
+// selectedTagIds and search as an AND, same as they combine with each other,
+// see recordingFilter.ts.
+let dateFrom = $state<string | null>(null);
+let dateTo = $state<string | null>(null);
 let importError = $state<string | null>(null);
+// Set whenever upload() gets a 409 (content-hash match against an existing
+// recording), alongside importError, so a caller that specifically cares
+// about *which* recording it's a duplicate of (the outbox flush, to
+// reconcile a stuck local file to the one already on the server instead of
+// retrying it forever, see sync.svelte.ts) can read it right after a failed
+// addRecording() call. Reset at the top of every upload() so a stale value
+// from a previous item's duplicate can't leak onto a later, unrelated failure.
+let lastDuplicate = $state<Recording | null>(null);
 
 function pendingAsRecordings(): DisplayRecording[] {
 	return outboxStore.pending.map((p) => ({
@@ -131,7 +170,10 @@ function readDuration(url: string): Promise<number> {
 
 async function load() {
 	try {
-		const res = await api.fetch('/api/recordings', { credentials: 'include' });
+		// Bounded, see tags.svelte.ts's load() / auth.svelte.ts's refresh() for
+		// why: an unreachable server otherwise leaves this hanging for however
+		// long the OS network stack takes to give up on its own.
+		const res = await api.fetch('/api/recordings', { credentials: 'include', signal: AbortSignal.timeout(8000) });
 		if (res.ok) {
 			all = await res.json();
 			writeLocalCache(CACHED_RECORDINGS_KEY, all);
@@ -156,10 +198,12 @@ async function upload(
 	form.append('durationSeconds', String(durationSeconds));
 	if (description) form.append('description', description);
 
+	lastDuplicate = null;
 	const res = await api.fetch('/api/recordings', { method: 'POST', credentials: 'include', body: form });
 
 	if (!res.ok) {
 		const body = await res.json().catch(() => ({}));
+		if (res.status === 409 && body.existing) lastDuplicate = body.existing as Recording;
 		return { error: (body.error as string) ?? 'Something went wrong' };
 	}
 
@@ -286,39 +330,90 @@ async function deleteForever(id: string) {
 	await api.fetch(`/api/recordings/${id}`, { method: 'DELETE', credentials: 'include' });
 }
 
+// Bin's own bulk restore/delete-forever (a selected subset of already-
+// trashed recordings, not "everything", that's Empty Bin's own dedicated
+// /api/bin endpoint instead): same batched-job treatment as trashMany etc.
+// below, one request instead of one per selected recording.
+function restoreMany(ids: string[]) {
+	void bulkJobStore.start('restore', '/api/recordings/bulk', { ids, trashed: false }, ids.length, load);
+}
+
+function deleteManyForever(ids: string[]) {
+	void bulkJobStore.start('delete', '/api/recordings/bulk-delete', { ids }, ids.length, load);
+}
+
 // Bulk delete from multi-select: local-only recordings have no bin to go to
 // (never uploaded, same reasoning as the single-recording delete button in
-// RecordingDetail), everything else is a normal soft-trash.
+// RecordingDetail), everything else is a real server-side batch job, not
+// this client looping trash() once per id (confirmed a real problem at
+// real scale: a selection of hundreds/thousands of recordings meant
+// hundreds/thousands of individual PATCH requests piling up, some measured
+// taking 3+ seconds to resolve once queued behind each other), see
+// bulkJob.svelte.ts and server/src/bulkJobs.ts.
 function trashMany(ids: string[]) {
-	for (const id of ids) {
-		if (isLocalId(id)) void deleteForever(id);
-		else trash(id);
-	}
+	const localIds = ids.filter(isLocalId);
+	const remoteIds = ids.filter((id) => !isLocalId(id));
+	for (const id of localIds) void deleteForever(id);
+	void bulkJobStore.start('trash', '/api/recordings/bulk', { ids: remoteIds, trashed: true }, remoteIds.length, load);
+}
+
+// Bulk archive/favourite from multi-select: always sets the target state
+// rather than toggling, same reasoning as addTagToMany below, some selected
+// recordings may already be archived/favourited and a toggle would
+// incorrectly flip those back off. Local-only (never-uploaded) recordings
+// have no server row to patch yet, same as trashMany above.
+function archiveMany(ids: string[]) {
+	const remoteIds = ids.filter((id) => !isLocalId(id));
+	void bulkJobStore.start('archive', '/api/recordings/bulk', { ids: remoteIds, archived: true }, remoteIds.length, load);
+}
+
+function favoriteMany(ids: string[]) {
+	const remoteIds = ids.filter((id) => !isLocalId(id));
+	void bulkJobStore.start('favorite', '/api/recordings/bulk', { ids: remoteIds, favorite: true }, remoteIds.length, load);
+}
+
+// Adding a tag also adds all of its ancestor tags as real membership (not
+// just something the filter panel cascades at query time), so a recording
+// tagged only with "voiceacting/certainvoice" genuinely belongs to
+// "voiceacting" too everywhere tagIds gets checked directly, e.g. exports.
+// Removing a tag never removes ancestors, a deliberate one-way rule with no
+// reference-counting against sibling subtags, see toggleRecordingTag.
+async function addTagWithAncestors(recording: Recording, tagId: string) {
+	const tag = tagsStore.list.find((t) => t.id === tagId);
+	const missing = (tag ? ancestorTagIds(tag, tagsStore.list) : []).filter((id) => !recording.tagIds.includes(id));
+	const newIds = [...missing, tagId];
+	recording.tagIds = [...recording.tagIds, ...newIds];
+	await Promise.all(
+		newIds.map((id) =>
+			api.fetch(`/api/recordings/${recording.id}/tags/${id}`, { method: 'POST', credentials: 'include' })
+		)
+	);
 }
 
 // Bulk-add from multi-select's "+ tag": always adds, never removes, unlike
 // toggleRecordingTag, since some selected recordings may already carry the
-// tag and a toggle would incorrectly strip it back off those.
-async function addTagToMany(ids: string[], tagId: string) {
-	for (const id of ids) {
-		if (isLocalId(id)) continue;
-		const recording = all.find((r) => r.id === id);
-		if (!recording || recording.tagIds.includes(tagId)) continue;
-		recording.tagIds = [...recording.tagIds, tagId];
-		await api.fetch(`/api/recordings/${id}/tags/${tagId}`, { method: 'POST', credentials: 'include' });
-	}
+// tag and a toggle would incorrectly strip it back off those. The ancestor
+// set only depends on the one target tag, not on which recording is being
+// tagged, so it's computed once here and sent as a flat tagIds list to the
+// bulk endpoint, real server-side batching instead of this client looping
+// one (or, per recording, several, one per ancestor) requests itself.
+function addTagToMany(ids: string[], tagId: string) {
+	const tag = tagsStore.list.find((t) => t.id === tagId);
+	const tagIds = [...(tag ? ancestorTagIds(tag, tagsStore.list) : []), tagId];
+	const remoteIds = ids.filter((id) => !isLocalId(id));
+	void bulkJobStore.start('addTag', '/api/recordings/bulk-tag', { ids: remoteIds, tagIds }, remoteIds.length, load);
 }
 
 async function toggleRecordingTag(recordingId: string, tagId: string) {
 	if (isLocalId(recordingId)) return;
 	const recording = all.find((r) => r.id === recordingId);
 	if (!recording) return;
-	const has = recording.tagIds.includes(tagId);
-	recording.tagIds = has ? recording.tagIds.filter((id) => id !== tagId) : [...recording.tagIds, tagId];
-	await api.fetch(`/api/recordings/${recordingId}/tags/${tagId}`, {
-		method: has ? 'DELETE' : 'POST',
-		credentials: 'include'
-	});
+	if (recording.tagIds.includes(tagId)) {
+		recording.tagIds = recording.tagIds.filter((id) => id !== tagId);
+		await api.fetch(`/api/recordings/${recordingId}/tags/${tagId}`, { method: 'DELETE', credentials: 'include' });
+		return;
+	}
+	await addTagWithAncestors(recording, tagId);
 }
 
 // Used to poll a single recording while its transcript is pending/processing
@@ -348,8 +443,28 @@ function toggleFilterTag(tagId: string) {
 		: [...selectedTagIds, tagId];
 }
 
+// Used by the filter panel to select/deselect a tag together with all of its
+// subtags in one click (ids computed by the caller via tagPath.ts's
+// subtagIds()). Adds every id if any are missing, so a partially-selected
+// subtree becomes fully selected in one click rather than toggling into a
+// confusing mixed state; only removes them all once every one is already
+// selected.
+function toggleFilterTagGroup(ids: string[]) {
+	const allSelected = ids.every((id) => selectedTagIds.includes(id));
+	selectedTagIds = allSelected
+		? selectedTagIds.filter((id) => !ids.includes(id))
+		: [...new Set([...selectedTagIds, ...ids])];
+}
+
+function setDateRange(from: string | null, to: string | null) {
+	dateFrom = from;
+	dateTo = to;
+}
+
 function clearFilters() {
 	selectedTagIds = [];
+	dateFrom = null;
+	dateTo = null;
 }
 
 // Tapping a tag chip on a recording (RecordingDetail) to browse everything
@@ -360,8 +475,58 @@ function setTagFilter(tagId: string) {
 	selectedTagIds = [tagId];
 }
 
+// Debounced so typing doesn't fire a request per keystroke; the local
+// substring match (recordingFilter.ts) already shows instant results the
+// whole time this is in flight, so there's no rush.
+const SEARCH_DEBOUNCE_MS = 300;
+
+async function searchServer(query: string, fields: SearchFields) {
+	try {
+		const params = new URLSearchParams({
+			q: query,
+			title: fields.title ? '1' : '0',
+			description: fields.description ? '1' : '0',
+			transcript: fields.transcript ? '1' : '0'
+		});
+		const res = await api.fetch(`/api/recordings/search?${params}`, {
+			credentials: 'include',
+			signal: AbortSignal.timeout(8000)
+		});
+		if (!res.ok) return;
+		const results: Recording[] = await res.json();
+		// The query or field toggles could've changed again while this was in
+		// flight; only apply it if it's still the exact combination currently
+		// active.
+		if (searchKey(query, fields) !== searchKey(search.trim().toLowerCase(), searchFields)) return;
+		serverSearchIds = results.map((r) => r.id);
+		serverSearchKey = searchKey(query, fields);
+	} catch {
+		// Offline or timed out: nothing to do, the local match already covers
+		// this today (see the comment on serverSearchIds above), so no error
+		// state is needed here.
+	}
+}
+
 function setSearch(value: string) {
 	search = value;
+	if (searchDebounce) clearTimeout(searchDebounce);
+	const query = value.trim().toLowerCase();
+	if (!query) {
+		serverSearchIds = null;
+		serverSearchKey = null;
+		return;
+	}
+	searchDebounce = setTimeout(() => searchServer(query, searchFields), SEARCH_DEBOUNCE_MS);
+}
+
+// Toggling a search field is a discrete click, not rapid typing, so this
+// fires immediately rather than debouncing like setSearch above.
+function setSearchFields(fields: SearchFields) {
+	searchFields = fields;
+	if (searchDebounce) clearTimeout(searchDebounce);
+	const query = search.trim().toLowerCase();
+	if (!query) return;
+	void searchServer(query, fields);
 }
 
 function daysLeft(recording: Recording) {
@@ -395,11 +560,30 @@ export const recordingsStore = {
 	get search() {
 		return search;
 	},
+	get searchFields() {
+		return searchFields;
+	},
+	// null unless the server has actually answered for this exact current
+	// query + field-toggle combination (see setSearch/searchServer above), so
+	// a stale answer for a query/scope the user has since changed never gets
+	// applied.
+	get serverSearchIds() {
+		return serverSearchKey === searchKey(search.trim().toLowerCase(), searchFields) ? serverSearchIds : null;
+	},
 	get selectedTagIds() {
 		return selectedTagIds;
 	},
+	get dateFrom() {
+		return dateFrom;
+	},
+	get dateTo() {
+		return dateTo;
+	},
 	get importError() {
 		return importError;
+	},
+	get lastDuplicate() {
+		return lastDuplicate;
 	},
 	get loaded() {
 		return loaded;
@@ -417,16 +601,23 @@ export const recordingsStore = {
 	retryTranscription,
 	toggleRecordingTag,
 	toggleFilterTag,
+	toggleFilterTagGroup,
 	setTagFilter,
+	setDateRange,
 	clearFilters,
 	setSearch,
+	setSearchFields,
 	toggleFavorite,
 	archive,
 	unarchive,
 	trash,
 	trashMany,
+	archiveMany,
+	favoriteMany,
 	restore,
+	restoreMany,
 	deleteForever,
+	deleteManyForever,
 	addTagToMany,
 	daysLeft,
 	taggedCount

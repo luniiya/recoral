@@ -19,11 +19,9 @@
 		</div>
 	</header>
 
-	<main class="min-h-0 flex-1 overflow-y-auto">
-		<div class="mx-auto w-full max-w-xl px-6 pt-10 pb-24 md:pb-10">
-			{@render children()}
-		</div>
-	</main>
+	<div class="flex min-h-0 flex-1 flex-col overflow-hidden">
+		{@render children()}
+	</div>
 </div>
 
 <BottomNav />

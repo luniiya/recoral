@@ -1,6 +1,7 @@
 <script lang="ts">
 	import DateSeparator from '$lib/components/DateSeparator.svelte';
 	import EmptyState from '$lib/components/EmptyState.svelte';
+	import FloatingVolumeControl from '$lib/components/FloatingVolumeControl.svelte';
 	import LiveRecordingPanel from '$lib/components/LiveRecordingPanel.svelte';
 	import PullToRefresh from '$lib/components/PullToRefresh.svelte';
 	import RecordingCard from '$lib/components/RecordingCard.svelte';
@@ -8,13 +9,16 @@
 	import Scrubber from '$lib/components/Scrubber.svelte';
 	import VirtualTimeline from '$lib/components/VirtualTimeline.svelte';
 	import { buildScrubberSegments, buildTimeline } from '$lib/dateGroups';
+	import { detailPanelStore } from '$lib/detailPanel.svelte';
 	import { formatDuration, recordingDisplayTitle } from '$lib/format';
 	import { liveRecordingStore } from '$lib/liveRecording.svelte';
 	import { useListBackHandler } from '$lib/listBack.svelte';
 	import { outboxStore } from '$lib/outbox.svelte';
 	import { isNativePlatform } from '$lib/platform';
+	import { hasActiveRecordingFilter, matchesRecordingFilter } from '$lib/recordingFilter';
 	import { recordingsStore } from '$lib/recordings.svelte';
 	import { useTabTapScrollTop } from '$lib/tabTap.svelte';
+	import { useVimNav } from '$lib/vimNav.svelte';
 
 	let scrollEl: HTMLDivElement | undefined = $state();
 	let selectedId = $state<string | null>(null);
@@ -35,16 +39,16 @@
 	});
 
 	let visibleRecordings = $derived(
-		recordingsStore.active.filter((r) => {
-			const query = recordingsStore.search.trim().toLowerCase();
-			const matchesQuery =
-				!query || r.title.toLowerCase().includes(query) || r.description.toLowerCase().includes(query);
-
-			const filterTags = recordingsStore.selectedTagIds;
-			const matchesTags = filterTags.length === 0 || filterTags.some((id) => r.tagIds.includes(id));
-
-			return matchesQuery && matchesTags;
-		})
+		recordingsStore.active.filter((r) =>
+			matchesRecordingFilter(r, {
+				search: recordingsStore.search,
+				searchFields: recordingsStore.searchFields,
+				serverSearchIds: recordingsStore.serverSearchIds,
+				tagIds: recordingsStore.selectedTagIds,
+				dateFrom: recordingsStore.dateFrom,
+				dateTo: recordingsStore.dateTo
+			})
+		)
 	);
 
 	let selectedRecording = $derived(recordingsStore.active.find((r) => r.id === selectedId) ?? null);
@@ -59,13 +63,26 @@
 		if (liveRecordingStore.isRecording) selectedId = null;
 	});
 
+	// See detailPanel.svelte.ts: lets the layout auto-collapse the Sidebar on
+	// narrow desktop widths while a detail/live-recording panel is open here.
+	$effect(() => {
+		detailPanelStore.set(!!selectedRecording || liveRecordingStore.isRecording || liveRecordingStore.savingRecording);
+	});
+	$effect(() => () => detailPanelStore.set(false));
+
+	// j/k/l/h/gg/G list navigation, plus this page's RecordingDetail/
+	// VirtualTimeline instance refs, see vimNav.svelte.ts.
+	const vim = useVimNav({
+		orderedIds: () => orderedIds,
+		getSelectedId: () => selectedId,
+		setSelectedId: (id) => (selectedId = id)
+	});
+
 	// Hardware back button on Android should close the detail panel, then
 	// clear an active search, before ever falling through to Capacitor's
-	// default (leave the page / exit the app).
-	useListBackHandler(
-		() => selectedId,
-		() => (selectedId = null)
-	);
+	// default (leave the page / exit the app). Same fade-before-close as the
+	// on-screen close button (vim.closeDetail wraps handleClose).
+	useListBackHandler(() => selectedId, vim.closeDetail);
 
 	useTabTapScrollTop('/', () => scrollEl);
 </script>
@@ -108,7 +125,7 @@
 			</div>
 
 			<p class="mb-3 text-xs font-medium text-gray-400">
-				{#if recordingsStore.search.trim() || recordingsStore.selectedTagIds.length > 0}
+				{#if recordingsStore.search.trim() || hasActiveRecordingFilter({ tagIds: recordingsStore.selectedTagIds, dateFrom: recordingsStore.dateFrom, dateTo: recordingsStore.dateTo })}
 					{visibleRecordings.length} {visibleRecordings.length === 1 ? 'result' : 'results'}
 				{:else}
 					{recordingsStore.active.length} {recordingsStore.active.length === 1 ? 'recording' : 'recordings'}
@@ -120,12 +137,13 @@
 					message={recordingsStore.active.length > 0 ? 'No recordings match your search' : 'No recordings yet'}
 				/>
 			{:else}
-				<VirtualTimeline {timeline} {scrollEl}>
+				<VirtualTimeline bind:this={vim.timelineRef} {timeline} {scrollEl}>
 					{#snippet recordingRow(row)}
 						<RecordingCard
 							recording={row.recording}
 							selected={selectedId === row.recording.id}
 							onselect={() => (selectedId = row.recording.id)}
+							cursor={vim.cursorId === row.recording.id}
 							{orderedIds}
 						/>
 					{/snippet}
@@ -155,7 +173,11 @@
 		</div>
 	{:else if selectedRecording}
 		<div class="fixed inset-0 z-40 bg-white dark:bg-black md:static md:inset-auto md:z-auto md:min-w-0 md:flex-1 md:border-l md:border-gray-200 md:dark:border-white/10">
-			<RecordingDetail recording={selectedRecording} onclose={() => (selectedId = null)} />
+			<RecordingDetail bind:this={vim.detailRef} recording={selectedRecording} onclose={() => (selectedId = null)} />
 		</div>
 	{/if}
 </div>
+
+{#if !liveRecordingStore.isRecording && !liveRecordingStore.savingRecording && !selectedRecording && recordingsStore.active.length > 0}
+	<FloatingVolumeControl raised />
+{/if}

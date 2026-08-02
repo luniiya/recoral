@@ -12,6 +12,8 @@ interface SettingsRow {
 	max_import_size_mb: number;
 	transcription_enabled: number;
 	transcription_model: string;
+	require_strong_passwords: number;
+	require_email: number;
 }
 
 function toSettings(row: SettingsRow): Settings {
@@ -24,7 +26,9 @@ function toSettings(row: SettingsRow): Settings {
 		transcriptionEnabled: row.transcription_enabled === 1,
 		transcriptionModel: (TRANSCRIPTION_MODELS as string[]).includes(row.transcription_model)
 			? (row.transcription_model as TranscriptionModel)
-			: "tiny"
+			: "tiny",
+		requireStrongPasswords: row.require_strong_passwords === 1,
+		requireEmail: row.require_email === 1
 	};
 }
 
@@ -39,7 +43,9 @@ export function getSettings(): Settings {
 				serverStorageLimitMb: 204800,
 				maxImportSizeMb: 1024,
 				transcriptionEnabled: true,
-				transcriptionModel: "tiny"
+				transcriptionModel: "tiny",
+				requireStrongPasswords: true,
+				requireEmail: false
 			};
 }
 
@@ -51,6 +57,8 @@ export function updateSettings(updates: {
 	maxImportSizeMb?: number;
 	transcriptionEnabled?: boolean;
 	transcriptionModel?: TranscriptionModel;
+	requireStrongPasswords?: boolean;
+	requireEmail?: boolean;
 }): Settings {
 	if (updates.defaultAccentHue !== undefined) {
 		const hue =
@@ -76,6 +84,14 @@ export function updateSettings(updates: {
 	}
 	if (updates.transcriptionModel !== undefined && TRANSCRIPTION_MODELS.includes(updates.transcriptionModel)) {
 		db.run("UPDATE settings SET transcription_model = ? WHERE id = 1", [updates.transcriptionModel]);
+	}
+	if (updates.requireStrongPasswords !== undefined) {
+		db.run("UPDATE settings SET require_strong_passwords = ? WHERE id = 1", [
+			updates.requireStrongPasswords ? 1 : 0
+		]);
+	}
+	if (updates.requireEmail !== undefined) {
+		db.run("UPDATE settings SET require_email = ? WHERE id = 1", [updates.requireEmail ? 1 : 0]);
 	}
 	return getSettings();
 }

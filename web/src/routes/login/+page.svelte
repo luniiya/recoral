@@ -1,11 +1,15 @@
 <script lang="ts">
 	import type { Settings } from '@recoral/shared';
+	import { USERNAME_HTML_PATTERN, validatePassword } from '@recoral/shared';
 	import { goto } from '$app/navigation';
 	import { applyAccentHue, cacheAccentHue, readCachedAccentHue } from '$lib/accent';
 	import { api } from '$lib/api.svelte';
 	import { auth } from '$lib/auth.svelte';
 	import ColorPicker from '$lib/components/ColorPicker.svelte';
 	import LogoWordmark from '$lib/components/LogoWordmark.svelte';
+	import PasswordInput from '$lib/components/PasswordInput.svelte';
+	import PasswordMatchHint from '$lib/components/PasswordMatchHint.svelte';
+	import PasswordStrengthHint from '$lib/components/PasswordStrengthHint.svelte';
 	import ThemeToggle from '$lib/components/ThemeToggle.svelte';
 	import { onboarding } from '$lib/onboarding.svelte';
 	import { isNativePlatform } from '$lib/platform';
@@ -17,6 +21,7 @@
 	let username = $state('');
 	let email = $state('');
 	let password = $state('');
+	let confirmPassword = $state('');
 	// Mobile only: shown editable right here so there's always a way to see
 	// or change which server you're talking to, not just once during setup.
 	let serverUrl = $state(api.baseUrl);
@@ -29,6 +34,8 @@
 	// confirmed/corrected once they do. See Logo.svelte for why this matters.
 	let randomAccent = $state(readCachedAccentHue() === null);
 	let signupEnabled = $state(true);
+	let requireStrongPasswords = $state(true);
+	let requireEmail = $state(false);
 	let backgroundImage = $state<string | null>(null);
 	let error = $state('');
 	let submitting = $state(false);
@@ -80,6 +87,8 @@
 		if (!settingsRes.ok) return;
 		const settings: Settings = await settingsRes.json();
 		signupEnabled = settings.signupEnabled;
+		requireStrongPasswords = settings.requireStrongPasswords;
+		requireEmail = settings.requireEmail;
 		if (settings.defaultAccentHue !== null) {
 			accentHue = settings.defaultAccentHue;
 			cacheAccentHue(settings.defaultAccentHue);
@@ -96,6 +105,25 @@
 	async function submit(event: SubmitEvent) {
 		event.preventDefault();
 		error = '';
+
+		if (needsSetup || mode === 'register') {
+			// Client-side checks for instant feedback; register() still
+			// re-validates server-side regardless (defense in depth).
+			if (requireEmail && !email) {
+				error = 'Email is required';
+				return;
+			}
+			if (password !== confirmPassword) {
+				error = "Passwords don't match";
+				return;
+			}
+			const check = validatePassword(password, requireStrongPasswords);
+			if (!check.valid) {
+				error = check.reason ?? 'Invalid password';
+				return;
+			}
+		}
+
 		submitting = true;
 		try {
 			if (needsSetup || mode === 'register') await auth.register(username, password, email, accentHue);
@@ -166,27 +194,45 @@
 						required
 						minlength="3"
 						maxlength="32"
-						pattern="[a-zA-Z0-9_.-]+"
+						pattern={USERNAME_HTML_PATTERN}
 						autocomplete="username"
 					/>
 				</label>
 
 				<label class="flex flex-col gap-1.5">
-					<span class="form-label">Email <span class="text-gray-400">(optional)</span></span>
-					<input class="form-input" type="email" bind:value={email} autocomplete="email" />
+					<span class="form-label">
+						Email {#if !requireEmail}<span class="text-gray-400">(optional)</span>{/if}
+					</span>
+					<input
+						class="form-input"
+						type="email"
+						bind:value={email}
+						required={requireEmail}
+						autocomplete="email"
+					/>
 				</label>
 			{/if}
 
 			<label class="flex flex-col gap-1.5">
 				<span class="form-label">Password</span>
-				<input
-					class="form-input"
-					type="password"
+				<PasswordInput
 					bind:value={password}
 					required
+					minlength={needsSetup || mode === 'register' ? 8 : undefined}
 					autocomplete={needsSetup || mode === 'register' ? 'new-password' : 'current-password'}
 				/>
+				{#if needsSetup || mode === 'register'}
+					<PasswordStrengthHint {password} requireStrong={requireStrongPasswords} />
+				{/if}
 			</label>
+
+			{#if needsSetup || mode === 'register'}
+				<label class="flex flex-col gap-1.5">
+					<span class="form-label">Confirm password</span>
+					<PasswordInput bind:value={confirmPassword} required minlength={8} autocomplete="new-password" />
+					<PasswordMatchHint {password} confirm={confirmPassword} />
+				</label>
+			{/if}
 
 			{#if needsSetup || mode === 'register'}
 				<div class="flex flex-col gap-1.5">

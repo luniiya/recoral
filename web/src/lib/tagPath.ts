@@ -30,6 +30,41 @@ export function parentTag(tag: Tag, allTags: Tag[]): Tag | null {
 	return allTags.find((t) => t.name === parentName) ?? null;
 }
 
+// Every ancestor of `tag`, immediate parent first up to the root, by
+// repeating the same one-level walk parentTag() already does.
+export function ancestorTagIds(tag: Tag, allTags: Tag[]): string[] {
+	const ids: string[] = [];
+	let current: Tag | null = tag;
+	while ((current = parentTag(current, allTags))) {
+		ids.push(current.id);
+	}
+	return ids;
+}
+
+// Given a recording's real tagIds (which, once a subtag is added, also
+// genuinely include its ancestor tags, see toggleRecordingTag), returns just
+// the Tag records worth showing: a tag is hidden from a read-only display if
+// a more specific tag already covers it (e.g. having both "voiceacting" and
+// "voiceacting/certainvoice" only shows the latter). Editable tag pickers
+// must NOT use this: they need to show true membership, or a chip that looks
+// unselected could actually be present already, silently removing it on
+// click instead of adding it.
+//
+// Returns the actual Tag[] directly (not ids a caller then has to map back
+// to Tag objects with a second full-list pass, which is what every real
+// call site was doing), and the initial filter is a Set lookup, not
+// `allTags.filter(t => tagIds.includes(t.id))`, an O(allTags x tagIds) scan
+// over the user's *entire* tag catalog, called once per rendered card, on
+// every scroll-driven re-render. Confirmed a real regression (didn't exist
+// in v0.2.0 at all): with a large tag catalog and a virtualized list still
+// rendering a couple dozen cards near the viewport, this was real,
+// measurable per-frame cost while scrolling.
+export function visibleTags(tagIds: string[], allTags: Tag[]): Tag[] {
+	const idSet = new Set(tagIds);
+	const tags = allTags.filter((t) => idSet.has(t.id));
+	return tags.filter((t) => !tags.some((other) => other.id !== t.id && other.name.startsWith(`${t.name}/`)));
+}
+
 export interface TrashedTagGroup {
 	root: Tag;
 	descendants: Tag[];
@@ -66,6 +101,14 @@ export function groupTrashedTags(trashedTags: Tag[]): TrashedTagGroup[] {
 		if (root.id !== tag.id) groups.get(root.id)!.descendants.push(tag);
 	}
 	return [...groups.values()];
+}
+
+// A tag's own id plus every tag nested under it (e.g. selecting "voiceacting"
+// should also cover "voiceacting/certainvoice"), computed directly off the
+// flat name string like the rest of this file, no tree build needed.
+export function subtagIds(tag: Tag, allTags: Tag[]): string[] {
+	const prefix = `${tag.name}/`;
+	return allTags.filter((t) => t.id === tag.id || t.name.startsWith(prefix)).map((t) => t.id);
 }
 
 export function collectTagIds(node: TagNode): string[] {

@@ -31,6 +31,7 @@
 
 <script lang="ts">
 	import { getAccentColorHex } from '$lib/accent';
+	import { AUDIO_FADE_MS, fadeInAndPlay, fadeOutAndPause } from '$lib/audioFade';
 	import {
 		clearMediaSession,
 		setMediaSessionHandlers,
@@ -40,8 +41,12 @@
 	} from '$lib/mediaSession';
 	import { isSupported as nativePlaybackSupported, Playback } from '$lib/nativePlayback';
 	import { isNativePlatform } from '$lib/platform';
+	import { sharedVolume } from '$lib/sharedVolume.svelte';
+	import { sliderToGain } from '$lib/volume';
 	import { wavySeekStore } from '$lib/wavySeek.svelte';
 	import { onDestroy, untrack } from 'svelte';
+	import GainSlider from './GainSlider.svelte';
+	import VolumeIcon from './VolumeIcon.svelte';
 
 	interface Props {
 		src: string;
@@ -58,6 +63,12 @@
 		// have hardware volume, leaving that side otherwise empty felt wasted.
 		favorite?: boolean;
 		onToggleFavorite?: () => void;
+		// Pages showing many simultaneous inline players at once (Bin) hide the
+		// per-card slider in favor of one shared floating control instead, see
+		// FloatingVolumeControl.svelte; the volume level itself is always the
+		// same shared value either way (sharedVolume.svelte.ts), this only
+		// hides the redundant inline UI.
+		hideVolumeControl?: boolean;
 	}
 
 	let {
@@ -68,7 +79,8 @@
 		audioEl = $bindable(undefined),
 		showTotalTime = false,
 		favorite,
-		onToggleFavorite
+		onToggleFavorite,
+		hideVolumeControl = false
 	}: Props = $props();
 
 	let waveActive = $derived(playing && wavySeekStore.enabled);
@@ -101,8 +113,8 @@
 	// themselves reactive; only the OS-level media widget/notification needs
 	// these at all (desktop media keys/widget, Android's media notification).
 	setMediaSessionHandlers({
-		play: () => audioEl?.play(),
-		pause: () => audioEl?.pause(),
+		play: () => audioEl && fadeInAndPlay(audioEl),
+		pause: () => audioEl && fadeOutAndPause(audioEl),
 		seekBackward: () => skip(-10),
 		seekForward: () => skip(10)
 	});
@@ -153,8 +165,8 @@
 			color: getAccentColorHex()
 		});
 		void Playback.addListener('playbackAction', (data) => {
-			if (data.action === 'play') audioEl?.play();
-			else if (data.action === 'pause') audioEl?.pause();
+			if (data.action === 'play') audioEl && fadeInAndPlay(audioEl);
+			else if (data.action === 'pause') audioEl && fadeOutAndPause(audioEl);
 			else if (data.action === 'seekBackward') skip(-10);
 			else if (data.action === 'seekForward') skip(10);
 			else if (data.action === 'seekTo' && data.position !== undefined) seekTo(data.position);
@@ -201,6 +213,19 @@
 		return () => clearInterval(interval);
 	});
 
+	// Only covers this component actually unmounting (closing the detail
+	// panel while the app stays open), not the app backgrounding or closing.
+	// PlaybackService is a real foreground Service (see nativePlayback.ts):
+	// once started it keeps running and showing its notification completely
+	// independently of the Activity/WebView, by design, that's what makes
+	// background playback with working notification controls possible at
+	// all. Tearing it down on a plain minimize (Capacitor's appStateChange
+	// firing isActive:false) was a real bug tried here before: that event
+	// fires on every minimize, not just a real close, so it killed
+	// background playback entirely instead of just cleaning up after a
+	// genuine close. The real "app closed" signal (task swiped from
+	// Recents, as opposed to just minimized) only exists natively, via
+	// Service.onTaskRemoved(), see PlaybackService.java.
 	onDestroy(() => {
 		removeNativeListener?.();
 		if (nativeSessionStarted) void Playback.stop();
@@ -217,8 +242,19 @@
 		}
 		if (!audioEl) return;
 
+		const endFadeSec = AUDIO_FADE_MS / 1000;
+
 		let frame = requestAnimationFrame(function tick() {
 			smoothTime = audioEl!.currentTime;
+			// Same declick reasoning as fadeOutAndPause/fadeInAndPlay (see
+			// audioFade.ts), but for the one stop this component doesn't
+			// initiate itself: the browser's own natural end-of-track. Ramping
+			// down over the last ~30ms as playback approaches the real end
+			// keeps that abrupt hardware-stream stop from producing a click.
+			if (duration > 0) {
+				const remaining = duration - smoothTime;
+				audioEl!.volume = remaining < endFadeSec ? gain * Math.max(0, remaining / endFadeSec) : gain;
+			}
 			frame = requestAnimationFrame(tick);
 		});
 		return () => cancelAnimationFrame(frame);
@@ -241,22 +277,12 @@
 		buffered = audioEl.buffered.end(audioEl.buffered.length - 1);
 	}
 
-	// Volume slider: linear audio.volume feels dead for most of the slider's
-	// travel then jumps hard near the top, because loudness perception is
-	// roughly logarithmic, not linear (the classic "YouTube slider" mistake).
-	// Map the 0-1 slider position through an exponential curve so each step
-	// of the slider is an equal dB step instead, which is what actually
-	// sounds "even" to the ear.
-	const VOLUME_RANGE_DB = 50;
-	let volumePosition = $state(1);
-	let muted = $state(false);
-
-	function sliderToGain(t: number) {
-		if (t <= 0) return 0;
-		return Math.pow(10, ((t - 1) * VOLUME_RANGE_DB) / 20);
-	}
-
-	let gain = $derived(muted ? 0 : sliderToGain(volumePosition));
+	// Volume is a single shared value across every player instance, not a
+	// separate memory per recording, see sharedVolume.svelte.ts. The
+	// logarithmic taper (sliderToGain) is what makes equal slider steps feel
+	// like equal loudness steps, instead of the classic "YouTube slider"
+	// mistake of raw linear gain.
+	let gain = $derived(sharedVolume.muted ? 0 : sliderToGain(sharedVolume.position));
 
 	$effect(() => {
 		if (audioEl) audioEl.volume = gain;
@@ -273,8 +299,8 @@
 
 	function togglePlay() {
 		if (!audioEl) return;
-		if (playing) audioEl.pause();
-		else audioEl.play();
+		if (playing) fadeOutAndPause(audioEl);
+		else fadeInAndPlay(audioEl);
 	}
 
 	function skip(delta: number) {
@@ -290,6 +316,7 @@
 
 	let trackEl: HTMLDivElement | undefined = $state();
 	let dragging = $state(false);
+	let volumePopoverOpen = $state(false);
 
 	function seekTo(value: number) {
 		const clamped = Math.max(0, Math.min(duration, value));
@@ -340,12 +367,7 @@
 	}
 
 	function onVolumeInput(event: Event) {
-		volumePosition = Number((event.currentTarget as HTMLInputElement).value) / 100;
-		if (volumePosition > 0) muted = false;
-	}
-
-	function toggleMute() {
-		muted = !muted;
+		sharedVolume.setPosition(Number((event.currentTarget as HTMLInputElement).value) / 100);
 	}
 </script>
 
@@ -487,7 +509,10 @@
 		<!-- Android/iOS manage system volume directly (hardware buttons,
 			 the OS volume UI), an in-app slider would just be a second,
 			 conflicting volume control, so that side shows the favorite
-			 toggle instead on native rather than sitting empty. -->
+			 toggle instead on native rather than sitting empty. Pages with many
+			 simultaneous inline players (Bin) pass hideVolumeControl instead,
+			 relying on FloatingVolumeControl for that page; the reserved width
+			 on this wrapper keeps the transport controls centered either way. -->
 		<div class="flex w-16 shrink-0 items-center justify-end gap-1.5 md:w-28">
 			{#if isNativePlatform()}
 				{#if onToggleFavorite}
@@ -506,69 +531,49 @@
 						</svg>
 					</button>
 				{/if}
-			{:else}
-				<input
-					type="range"
-					min="0"
-					max="100"
-					value={muted ? 0 : volumePosition * 100}
-					oninput={onVolumeInput}
-					class="seek-bar min-w-0 flex-1"
-					aria-label="Volume"
-				/>
-				<button
-					class="flex size-7 shrink-0 items-center justify-center rounded-full text-gray-500 transition hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-white/5"
-					aria-label={muted || gain === 0 ? 'Unmute' : 'Mute'}
-					onclick={toggleMute}
-				>
-					{#if muted || gain === 0}
-						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="size-4.5">
-							<path stroke-linecap="round" stroke-linejoin="round" d="M11 5 6 9H3v6h3l5 4V5Z" />
-							<path stroke-linecap="round" d="m16 9 5 6m0-6-5 6" />
-						</svg>
-					{:else if volumePosition < 0.5}
-						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="size-4.5">
-							<path stroke-linecap="round" stroke-linejoin="round" d="M11 5 6 9H3v6h3l5 4V5Z" />
-							<path stroke-linecap="round" d="M16.5 9.5a5 5 0 0 1 0 5" />
-						</svg>
-					{:else}
-						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="size-4.5">
-							<path stroke-linecap="round" stroke-linejoin="round" d="M11 5 6 9H3v6h3l5 4V5Z" />
-							<path stroke-linecap="round" d="M16.5 9.5a5 5 0 0 1 0 5M19 7a9 9 0 0 1 0 10" />
-						</svg>
+			{:else if !hideVolumeControl}
+				<!-- An always-inline slider here has no room to shrink once the
+					 detail panel itself gets narrow (list+detail split on a smaller
+					 desktop window), and was overflowing off the edge of the panel
+					 entirely rather than wrapping. A fixed-size button that reveals
+					 the slider in a small popover instead can never overflow, since
+					 the popover is positioned absolutely and doesn't take up row
+					 space. Click-to-toggle (not hover): a hover popover here had a
+					 gap between the button and the popup above it that broke hover
+					 continuity the instant the mouse moved from one to the other,
+					 making the slider disappear before it could ever be dragged. -->
+				<div class="relative">
+					<button
+						class="flex size-7 shrink-0 items-center justify-center rounded-full text-gray-500 transition hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-white/5"
+						aria-label="Volume"
+						onclick={() => (volumePopoverOpen = !volumePopoverOpen)}
+					>
+						<VolumeIcon muted={sharedVolume.muted} {gain} position={sharedVolume.position} />
+					</button>
+
+					{#if volumePopoverOpen}
+						<button
+							class="fixed inset-0 z-10 cursor-default"
+							aria-label="Close volume"
+							onclick={() => (volumePopoverOpen = false)}
+						></button>
+						<div
+							class="absolute right-0 bottom-full z-20 mb-2 flex h-28 w-9 items-center justify-center rounded-full border border-gray-200/70 bg-white/90 p-2 shadow-lg backdrop-blur-lg dark:border-white/10 dark:bg-black/70"
+						>
+							<GainSlider
+								value={sharedVolume.muted ? 0 : sharedVolume.position * 100}
+								oninput={onVolumeInput}
+								orientation="vertical"
+							/>
+						</div>
 					{/if}
-				</button>
+				</div>
 			{/if}
 		</div>
 	</div>
 </div>
 
 <style>
-	.seek-bar {
-		appearance: none;
-		height: 0.35rem;
-		border-radius: 999px;
-		background: var(--accent-500);
-	}
-
-	.seek-bar::-webkit-slider-thumb {
-		appearance: none;
-		width: 0.85rem;
-		height: 0.85rem;
-		border-radius: 999px;
-		background: var(--accent-500);
-		cursor: pointer;
-	}
-
-	.seek-bar::-moz-range-thumb {
-		width: 0.85rem;
-		height: 0.85rem;
-		border: none;
-		border-radius: 999px;
-		background: var(--accent-500);
-		cursor: pointer;
-	}
-
 	/* Shifting by exactly one wavelength (14px, matching WAVE_LENGTH) loops
 	   seamlessly since the wave is periodic. Paused via animation-play-state
 	   rather than removed, so it resumes mid-phase instead of resetting. */

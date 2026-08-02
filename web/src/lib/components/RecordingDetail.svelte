@@ -1,6 +1,9 @@
 <script lang="ts">
 	import type { Tag } from '@recoral/shared';
+	import { fadeInAndPlay, fadeOutAndPause } from '$lib/audioFade';
 	import AudioPlayer from './AudioPlayer.svelte';
+	import ConfirmDialog from './ConfirmDialog.svelte';
+	import FadeScroll from './FadeScroll.svelte';
 	import TagChip from './TagChip.svelte';
 	import TagChips from './TagChips.svelte';
 	import TagRemoveConfirm from './TagRemoveConfirm.svelte';
@@ -10,7 +13,8 @@
 	import type { DisplayRecording } from '$lib/recordings.svelte';
 	import { recordingsStore } from '$lib/recordings.svelte';
 	import { tagsStore } from '$lib/tags.svelte';
-	import { parentTag, tagBreadcrumb } from '$lib/tagPath';
+	import { parentTag, tagBreadcrumb, visibleTags as computeVisibleTags } from '$lib/tagPath';
+	import { useEscapeToClose } from '$lib/vimEscapeToClose';
 	import StatusBarSpacer from './StatusBarSpacer.svelte';
 
 	interface Props {
@@ -26,22 +30,68 @@
 	// just permanently (there's no bin for something not even uploaded yet).
 	let isLocal = $derived(recording.syncStatus === 'local');
 	let hasLocalFile = $derived(!!recordingsStore.localFilePath(recording.id));
+	// A retranscribe already in flight has its own status indicator above the
+	// transcript (see the Transcription tab body), the Copy/Retranscribe
+	// buttons in the tab bar below hide themselves during that window instead
+	// of showing redundant/stale controls next to it.
+	let transcriptBusy = $derived(
+		!isLocal && (recording.transcriptStatus === 'pending' || recording.transcriptStatus === 'processing')
+	);
+
+	// Read-only summary row only, see tagPath.ts's visibleTags(): hides a tag
+	// if a more specific one already shown covers it. The tag picker below
+	// deliberately does NOT use this, it needs to show true membership.
+	let visibleTags = $derived(computeVisibleTags(recording.tagIds, tagsStore.list));
 
 	let activeTab = $state<'audio' | 'transcription'>('audio');
 	let tagPickerOpen = $state(false);
 	let pendingRemoveTag = $state<Tag | null>(null);
+	// Only reachable for a not-yet-uploaded local recording (isLocal), see the
+	// delete button below: was a native browser confirm() before, the one
+	// destructive-action confirm in the app that never got the same
+	// frosted-glass Dialog treatment as every other one (bulk delete, tag
+	// trash, tag remove).
+	let pendingDeleteLocal = $state(false);
+	let pendingTrash = $state(false);
+	let pendingRetranscribe = $state(false);
 
-	function searchByTag(tag: Tag) {
-		recordingsStore.setTagFilter(tag.id);
-		onclose();
-	}
 	let playbackTime = $state(0);
 	let playbackPlaying = $state(false);
 	let playbackEl = $state<HTMLAudioElement | undefined>(undefined);
+
+	// Quickly closing/navigating away while a recording is actively playing
+	// was producing an audible pop, since the <audio> element just got torn
+	// down mid-waveform with no chance to stop cleanly first. Fading it out
+	// (a few dozen ms, imperceptible as a delay) before the real onclose()
+	// actually unmounts everything avoids that, see audioFade.ts.
+	// Exported (not just internal) so the parent page's hardware/gesture
+	// back-button handler can trigger the same fade-before-close as the
+	// on-screen close button, instead of yanking selectedId to null directly
+	// and reproducing the same speaker pop this was built to avoid.
+	export async function handleClose() {
+		if (playbackPlaying && playbackEl) await fadeOutAndPause(playbackEl);
+		onclose();
+	}
+
+	// vimNav.svelte.ts: Space toggles play/pause while this detail panel is
+	// open, same fade-aware play()/pause() AudioPlayer's own transport button
+	// uses, not a raw .play()/.pause() that'd reintroduce the speaker pop.
+	export function togglePlayback() {
+		if (!playbackEl) return;
+		if (playbackPlaying) void fadeOutAndPause(playbackEl);
+		else void fadeInAndPlay(playbackEl);
+	}
+
+	function searchByTag(tag: Tag) {
+		recordingsStore.setTagFilter(tag.id);
+		handleClose();
+	}
 	let transcribeError = $state('');
 	let retrying = $state(false);
 	let downloading = $state(false);
 	let sharing = $state(false);
+	let copied = $state(false);
+	let copyTimeout: ReturnType<typeof setTimeout> | null = null;
 
 	function retryTranscription() {
 		transcribeError = '';
@@ -52,6 +102,14 @@
 				if (result.error) transcribeError = result.error;
 			})
 			.finally(() => (retrying = false));
+	}
+
+	async function copyTranscript() {
+		if (!recording.transcript) return;
+		await navigator.clipboard.writeText(recording.transcript);
+		copied = true;
+		if (copyTimeout) clearTimeout(copyTimeout);
+		copyTimeout = setTimeout(() => (copied = false), 1500);
 	}
 
 	// While a transcript is in flight, poll this one recording so the tab
@@ -117,6 +175,12 @@
 		window.addEventListener('keydown', onKeydown);
 		return () => window.removeEventListener('keydown', onKeydown);
 	});
+
+	// Plain Escape closes this panel when vim mode is off (works whether it's
+	// never been touched at all, same fade-aware handleClose() either way).
+	// While vim mode IS on, that's 'h' instead (vimNav.svelte.ts), see
+	// vimEscapeToClose.ts for why Escape itself is reserved.
+	useEscapeToClose(() => void handleClose(), { skipWhileTyping: true });
 </script>
 
 <div class="flex h-full flex-col">
@@ -127,7 +191,7 @@
 		<button
 			class="flex size-8 items-center justify-center rounded-full text-gray-500 transition hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-white/5"
 			aria-label="Close"
-			onclick={onclose}
+			onclick={handleClose}
 		>
 			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="size-4 md:hidden">
 				<path stroke-linecap="round" stroke-linejoin="round" d="M15 18l-6-6 6-6" />
@@ -206,7 +270,7 @@
 					onclick={() => {
 						if (recording.archivedAt) recordingsStore.unarchive(recording.id);
 						else recordingsStore.archive(recording.id);
-						onclose();
+						handleClose();
 					}}
 				>
 					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="size-4">
@@ -223,13 +287,8 @@
 				aria-label={isLocal ? 'Delete' : 'Move to bin'}
 				title={isLocal ? 'Delete' : 'Move to bin'}
 				onclick={() => {
-					if (isLocal) {
-						if (!confirm('Delete this recording? It has not been uploaded yet, this cannot be undone.')) return;
-						recordingsStore.deleteForever(recording.id);
-					} else {
-						recordingsStore.trash(recording.id);
-					}
-					onclose();
+					if (isLocal) pendingDeleteLocal = true;
+					else pendingTrash = true;
 				}}
 			>
 				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="size-4">
@@ -266,7 +325,7 @@
 		/>
 
 		<div class="relative flex flex-wrap items-center gap-1.5">
-			{#each tagsStore.list.filter((t) => recording.tagIds.includes(t.id)) as tag (tag.id)}
+			{#each visibleTags as tag (tag.id)}
 				<TagChip
 					{tag}
 					label={tagBreadcrumb(tag.name)}
@@ -291,7 +350,7 @@
 					aria-label="Close tag picker"
 					onclick={() => (tagPickerOpen = false)}
 				></button>
-				<div class="card absolute top-full left-0 z-20 mt-1 w-56 p-3">
+				<div class="card accent-scrollbar absolute top-full left-0 z-20 mt-1 max-h-64 w-56 overflow-y-auto p-3">
 					<TagChips
 						tags={tagsStore.list}
 						allTags={tagsStore.list}
@@ -312,6 +371,55 @@
 				oncancel={() => (pendingRemoveTag = null)}
 			/>
 		{/if}
+
+		{#if pendingDeleteLocal}
+			<ConfirmDialog
+				confirmLabel="Delete"
+				danger
+				onconfirm={() => {
+					pendingDeleteLocal = false;
+					recordingsStore.deleteForever(recording.id);
+					handleClose();
+				}}
+				onclose={() => (pendingDeleteLocal = false)}
+			>
+				{#snippet message()}
+					Delete this recording? It has not been uploaded yet, this cannot be undone.
+				{/snippet}
+			</ConfirmDialog>
+		{/if}
+
+		{#if pendingRetranscribe}
+			<ConfirmDialog
+				confirmLabel="Retranscribe"
+				onconfirm={() => {
+					pendingRetranscribe = false;
+					retryTranscription();
+				}}
+				onclose={() => (pendingRetranscribe = false)}
+			>
+				{#snippet message()}
+					Retranscribe this recording? This will replace the current transcript.
+				{/snippet}
+			</ConfirmDialog>
+		{/if}
+
+		{#if pendingTrash}
+			<ConfirmDialog
+				confirmLabel="Delete"
+				danger
+				onconfirm={() => {
+					pendingTrash = false;
+					recordingsStore.trash(recording.id);
+					handleClose();
+				}}
+				onclose={() => (pendingTrash = false)}
+			>
+				{#snippet message()}
+					Delete this recording?
+				{/snippet}
+			</ConfirmDialog>
+		{/if}
 	</div>
 
 	<div class="mx-5 my-4 flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl bg-accent-50 dark:bg-accent-500/10">
@@ -327,29 +435,25 @@
 				</div>
 			{:else if recording.transcript}
 				<div class="flex h-full flex-col gap-3">
-					<p class="flex-1 text-sm whitespace-pre-wrap text-gray-700 dark:text-gray-300">{recording.transcript}</p>
-					{#if !isLocal}
-						<div class="flex items-center justify-end gap-2 text-xs">
-							{#if recording.transcriptStatus === 'pending' || recording.transcriptStatus === 'processing'}
-								<span class="flex items-center gap-1.5 text-gray-400">
-									<svg viewBox="0 0 24 24" fill="none" class="size-3.5 animate-spin text-accent-500">
-										<circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="3" stroke-opacity="0.25" />
-										<path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" stroke-width="3" stroke-linecap="round" />
-									</svg>
-									Retranscribing…
-								</span>
-							{:else}
-								{#if transcribeError}<span class="text-red-500 dark:text-red-400">{transcribeError}</span>{/if}
-								<button
-									class="rounded-full px-3 py-1 font-semibold text-accent-600 ring-1 ring-accent-200 transition hover:bg-accent-50 disabled:opacity-60 dark:text-accent-400 dark:ring-accent-500/30 dark:hover:bg-accent-500/10"
-									onclick={retryTranscription}
-									disabled={retrying}
-								>
-									{retrying ? 'Starting…' : 'Retranscribe'}
-								</button>
-							{/if}
-						</div>
+					{#if !isLocal && (recording.transcriptStatus === 'pending' || recording.transcriptStatus === 'processing')}
+						<span class="flex items-center gap-1.5 text-xs text-gray-400">
+							<svg viewBox="0 0 24 24" fill="none" class="size-3.5 animate-spin text-accent-500">
+								<circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="3" stroke-opacity="0.25" />
+								<path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" stroke-width="3" stroke-linecap="round" />
+							</svg>
+							Retranscribing…
+						</span>
+					{:else if !isLocal && transcribeError}
+						<span class="text-xs text-red-500 dark:text-red-400">{transcribeError}</span>
 					{/if}
+					<FadeScroll class="accent-scrollbar" fadeFrom="from-accent-50 dark:from-accent-500/10">
+						<p
+							class="select-text text-sm whitespace-pre-wrap text-gray-700 dark:text-gray-300"
+							style="-webkit-touch-callout: default;"
+						>
+							{recording.transcript}
+						</p>
+					</FadeScroll>
 				</div>
 			{:else if recording.transcriptStatus === 'pending' || recording.transcriptStatus === 'processing'}
 				<div class="flex h-full flex-col items-center justify-center gap-2 text-sm text-gray-400">
@@ -388,8 +492,38 @@
 			{/if}
 		</div>
 
-		<div class="flex justify-center pb-3">
-			<div class="inline-flex rounded-full bg-black/5 p-1 dark:bg-white/10">
+		<div class="@container flex items-center gap-2 px-5 pb-3">
+			<!-- Three independent flex zones (not one crowded corner) so the tab
+			     pill always lands dead center regardless of which of these two
+			     buttons is showing, rather than fighting Copy/Retranscribe for
+			     space on a single side. -->
+			<div class="flex flex-1 items-center">
+				{#if activeTab === 'transcription' && recording.transcript && !isLocal && !transcriptBusy}
+					<!-- @container (on the row above) so this responds to the
+					     panel's own real width, not the viewport: below @lg
+					     (32rem) it collapses to an icon-only circle (same size
+					     as Copy's, size-8) since the full text pushes the tab
+					     pill/Copy off the edge well before the panel gets
+					     narrow, confirmed by an actual screenshot at a width
+					     the old @sm threshold still let through. -->
+					<button
+						class="flex size-8 items-center justify-center gap-1.5 rounded-full text-accent-600 transition hover:bg-accent-50 disabled:opacity-60 dark:text-accent-400 dark:hover:bg-accent-500/10 @lg:size-auto @lg:px-3 @lg:py-1.5"
+						onclick={() => (pendingRetranscribe = true)}
+						disabled={retrying}
+						aria-label="Retranscribe"
+					>
+						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="size-3.5 shrink-0">
+							<path
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								d="M16.0228 9.34841H21.0154V9.34663M2.98413 19.6444V14.6517M2.98413 14.6517L7.97677 14.6517M2.98413 14.6517L6.16502 17.8347C7.15555 18.8271 8.41261 19.58 9.86436 19.969C14.2654 21.1483 18.7892 18.5364 19.9685 14.1353M4.03073 9.86484C5.21 5.46374 9.73377 2.85194 14.1349 4.03121C15.5866 4.4202 16.8437 5.17312 17.8342 6.1655L21.0154 9.34663M21.0154 4.3558V9.34663"
+							/>
+						</svg>
+						<span class="hidden text-xs font-semibold @lg:inline">{retrying ? 'Starting…' : 'Retranscribe'}</span>
+					</button>
+				{/if}
+			</div>
+			<div class="inline-flex shrink-0 rounded-full bg-black/5 p-1 dark:bg-white/10">
 				<button
 					class="rounded-full px-4 py-1.5 text-sm font-medium transition
 						{activeTab === 'audio'
@@ -408,6 +542,26 @@
 				>
 					Transcription
 				</button>
+			</div>
+			<div class="flex flex-1 items-center justify-end">
+				{#if activeTab === 'transcription' && recording.transcript && !transcriptBusy}
+					<button
+						class="flex size-8 items-center justify-center rounded-full text-accent-600 transition hover:bg-accent-50 dark:text-accent-400 dark:hover:bg-accent-500/10"
+						onclick={copyTranscript}
+						aria-label="Copy transcript"
+					>
+						{#if copied}
+							<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="size-4">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4.5 4.5L19 7.5" />
+							</svg>
+						{:else}
+							<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="size-4">
+								<rect x="8" y="8" width="11" height="11" rx="1.5" />
+								<path d="M5 15V6a1 1 0 0 1 1-1h9" stroke-linecap="round" />
+							</svg>
+						{/if}
+					</button>
+				{/if}
 			</div>
 		</div>
 	</div>

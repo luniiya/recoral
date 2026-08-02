@@ -16,3 +16,16 @@ services:
       - /dev/dri
     security_opt:
       - seccomp=unconfined
+
+  # Needs the NVIDIA Container Toolkit on the host for this device
+  # reservation to actually resolve to a real GPU, see
+  # transcription/Dockerfile.cuda's own note.
+  cuda:
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities:
+                - gpu

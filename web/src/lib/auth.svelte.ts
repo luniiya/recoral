@@ -1,6 +1,9 @@
 import type { User } from '@recoral/shared';
 import { api } from './api.svelte';
+import { bootLog } from './bootLog';
 import { readLocalCache, writeLocalCache } from './localCache';
+import { isNativePlatform } from './platform';
+import { untrack } from 'svelte';
 
 // Cached alongside the token so a native app opened with no network at all
 // (local-first mobile's whole point) starts out logged in with last-known
@@ -14,7 +17,15 @@ function cacheUser(next: User | null) {
 }
 
 let user = $state<User | null>(readLocalCache<User | null>(CACHED_USER_KEY, null));
-let loading = $state(true);
+// Only true when there's genuinely nothing to show yet (first-ever login on
+// this device/browser). A cached user means the app renders instantly with
+// that stale-but-usable state while refresh() reconciles with the server in
+// the background, same "cache first, reconcile after" treatment tags and
+// recordings already get, rather than blocking the entire app behind a
+// network round trip that (confirmed via bootLog while chasing the
+// slow-loading bug) can take anywhere from milliseconds to minutes when the
+// server is unreachable, since nothing timed it out.
+let loading = $state(user === null);
 
 // Doesn't apply the accent itself: the root layout's effect owns that,
 // since the effective hue also depends on systemAccentStore (Android system
@@ -26,23 +37,72 @@ function setUser(next: User | null) {
 }
 
 async function refresh() {
-	loading = true;
+	// Only block rendering when there's no cached user to show meanwhile, see
+	// the comment on `loading`'s declaration above. A background reconcile
+	// (there's already a user shown) must never flip this back to true, or
+	// every refresh would blank the whole app again.
+	//
+	// untrack() here matters a lot more than it looks: this read runs
+	// synchronously (before the first await below), so without it, whatever
+	// effect *called* refresh() (the root layout's, see +layout.svelte)
+	// implicitly picks up `user` as one of its own reactive dependencies,
+	// even though it's read inside a different function/file entirely,
+	// Svelte's dependency tracking is based on the synchronous call stack,
+	// not lexical scope. Since every refresh() call reassigns `user` to a
+	// brand-new object (setUser() below, from a fresh res.json() each time),
+	// that "accidental" dependency made the calling effect re-run on every
+	// single refresh, which called refresh() again, forever, confirmed via a
+	// real capture: 118 GET /api/auth/me calls in a few seconds from one
+	// page load, a genuine self-inflicted request storm against the server.
+	const hadUser = untrack(() => user !== null);
+	if (!hadUser) loading = true;
+	const startedAt = Date.now();
+	// Same untrack() reasoning as `hadUser` above, api.baseUrl is also
+	// $state-backed, and this argument gets evaluated (a synchronous read)
+	// before bootLog() is even called, regardless of whether bootLog's own
+	// body ends up logging anything.
+	bootLog('auth.refresh: start, baseUrl =', untrack(() => JSON.stringify(api.baseUrl)) || '(same-origin)');
+
+	// Diagnostic only, see bootLog.ts: distinguishes "device has no network at
+	// all" from "device is online but the server specifically isn't
+	// responding", which look identical from a plain fetch() rejection alone.
+	if (isNativePlatform()) {
+		try {
+			const { Network } = await import('@capacitor/network');
+			const status = await Network.getStatus();
+			bootLog('auth.refresh: device network status =', JSON.stringify(status));
+		} catch (err) {
+			bootLog('auth.refresh: could not read device network status:', err);
+		}
+	}
+
 	try {
-		const res = await api.fetch('/api/auth/me', { credentials: 'include' });
+		// Bounded so a background reconcile against an unreachable server
+		// settles in a predictable ~8s (matching the setup page's own
+		// server-check timeout) instead of however long the OS network stack
+		// takes to give up on its own, confirmed to range from milliseconds to
+		// over two minutes.
+		const res = await api.fetch('/api/auth/me', { credentials: 'include', signal: AbortSignal.timeout(8000) });
 		if (res.ok) {
 			setUser(await res.json());
+			bootLog(`auth.refresh: ok, logged in (${Date.now() - startedAt}ms total)`);
 		} else if (res.status === 401) {
 			// Server explicitly says this session is invalid, a real logout.
 			setUser(null);
+			bootLog(`auth.refresh: 401, session invalid (${Date.now() - startedAt}ms total)`);
+		} else {
+			bootLog(`auth.refresh: unexpected status ${res.status}, keeping cached user (${Date.now() - startedAt}ms total)`);
 		}
 		// Any other non-ok response: leave the cached user alone rather than
 		// logging out over a transient server error.
-	} catch {
+	} catch (err) {
 		// Couldn't reach the server at all. Stay logged in with whatever's
 		// cached rather than forcing a login screen there'd be no way to
 		// actually use offline anyway.
+		bootLog(`auth.refresh: unreachable, keeping cached user (${Date.now() - startedAt}ms total):`, err);
 	} finally {
 		loading = false;
+		bootLog(`auth.refresh: done, loading = false (${Date.now() - startedAt}ms total)`);
 	}
 }
 
@@ -75,7 +135,14 @@ async function register(username: string, password: string, email: string, accen
 	await submit('/api/auth/register', { username, password, email: email || null, accentHue });
 }
 
-async function updateAccount(updates: { accentHue?: number; avatar?: string | null }) {
+async function updateAccount(updates: {
+	accentHue?: number;
+	avatar?: string | null;
+	username?: string;
+	email?: string | null;
+	password?: string;
+	currentPassword?: string;
+}) {
 	const res = await api.fetch('/api/account', {
 		method: 'PATCH',
 		headers: { 'Content-Type': 'application/json' },
@@ -87,8 +154,35 @@ async function updateAccount(updates: { accentHue?: number; avatar?: string | nu
 	setUser(data as User);
 }
 
-async function logout() {
-	await api.fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
+async function deleteAccount(currentPassword: string) {
+	const res = await api.fetch('/api/account', {
+		method: 'DELETE',
+		headers: { 'Content-Type': 'application/json' },
+		credentials: 'include',
+		body: JSON.stringify({ currentPassword })
+	});
+	if (!res.ok) {
+		const data = await res.json().catch(() => ({}));
+		throw new Error(data.error ?? 'Something went wrong');
+	}
+	api.setToken(null);
+	setUser(null);
+}
+
+function logout() {
+	// Telling the server is best-effort and must never block clearing the
+	// local session, which has to work instantly even fully offline (this was
+	// exactly the "sign out button does nothing offline" bug: the old code
+	// awaited this call first, so an unreachable server just hung forever
+	// with no timeout). Fired before setToken(null) below so the request
+	// still captures the real Authorization header while it's building, not
+	// after it's already been cleared.
+	api
+		.fetch('/api/auth/logout', { method: 'POST', credentials: 'include', signal: AbortSignal.timeout(8000) })
+		.catch(() => {
+			// Couldn't reach the server to invalidate the session there.
+			// Nothing more to do locally, already logged out below regardless.
+		});
 	api.setToken(null);
 	setUser(null);
 }
@@ -105,5 +199,6 @@ export const auth = {
 	login,
 	register,
 	updateAccount,
+	deleteAccount,
 	logout
 };

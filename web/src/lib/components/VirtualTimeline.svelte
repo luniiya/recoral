@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { TimelineRow } from '$lib/dateGroups';
 	import type { Snippet } from 'svelte';
+	import { tick } from 'svelte';
 
 	interface Props {
 		timeline: TimelineRow[];
@@ -79,6 +80,52 @@
 
 	let topSpacer = $derived(offsets[range.start] ?? 0);
 	let bottomSpacer = $derived(Math.max(0, totalHeight - (offsets[range.end] ?? totalHeight)));
+
+	// vimNav.svelte.ts's j/k cursor otherwise has no reason to keep the
+	// scroll position in sync (it doesn't render anything itself), so a
+	// cursor several rows past the current viewport just goes invisible with
+	// no indication which way to keep pressing.
+	//
+	// Two-step, not just one scrollTo: the estimated row-height offsets above
+	// are deliberately approximate (real cards vary a few px with tags/
+	// wrapping descriptions), and `scrollTop` here only updates from the
+	// DOM's own async 'scroll' event, so reading it back immediately after
+	// calling scrollTo() raced that event and reused a stale value, which is
+	// what made this drift or miss the target entirely under fast repeated
+	// j/k. Fixed by (1) syncing `scrollTop` synchronously ourselves instead
+	// of waiting on the event, so `range` recomputes in the same tick and the
+	// row is guaranteed actually in the DOM, then (2) once it's there,
+	// correcting against its real rendered position via scrollIntoView
+	// instead of trusting the estimate for the final placement.
+	//
+	// Holding j/k fires keydown (and this) many times a second, faster than
+	// one `await tick()` round-trip: without the requestId check below, an
+	// older call's correction could still land *after* a newer keypress had
+	// already jumped somewhere else, yanking the view back to a stale
+	// position mid-hold. Only the most recent call's correction is allowed
+	// to actually apply.
+	let scrollRequestId = 0;
+	export async function scrollToRecording(id: string) {
+		if (!scrollEl) return;
+		const index = timeline.findIndex((row) => row.kind === 'recording' && row.recording.id === id);
+		if (index === -1) return;
+
+		const requestId = ++scrollRequestId;
+
+		const rowTop = offsets[index];
+		const rowHeight = heightOf(timeline[index]);
+		const estimatedTop = Math.max(0, rowTop - clientHeight / 2 + rowHeight / 2);
+		scrollEl.scrollTop = estimatedTop;
+		scrollTop = estimatedTop;
+
+		await tick();
+		if (requestId !== scrollRequestId) return;
+
+		scrollEl.querySelector<HTMLElement>(`[data-recording-id="${CSS.escape(id)}"]`)?.scrollIntoView({
+			block: 'center',
+			behavior: 'auto'
+		});
+	}
 </script>
 
 <div style:height="{topSpacer}px"></div>

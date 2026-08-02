@@ -2,27 +2,50 @@
 	import { page } from '$app/state';
 	import AvatarMenu from '$lib/components/AvatarMenu.svelte';
 	import BottomNav from '$lib/components/BottomNav.svelte';
-	import Dialog from '$lib/components/Dialog.svelte';
+	import BulkJobToast from '$lib/components/BulkJobToast.svelte';
+	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import HeaderBrand from '$lib/components/HeaderBrand.svelte';
 	import SearchBar from '$lib/components/SearchBar.svelte';
 	import Sidebar from '$lib/components/Sidebar.svelte';
 	import StatusBarSpacer from '$lib/components/StatusBarSpacer.svelte';
 	import TagChips from '$lib/components/TagChips.svelte';
 	import ThemeToggle from '$lib/components/ThemeToggle.svelte';
+	import VimEscapeHandler from '$lib/components/VimEscapeHandler.svelte';
+	import VimSearchHandler from '$lib/components/VimSearchHandler.svelte';
+	import { bulkJobStore } from '$lib/bulkJob.svelte';
+	import { detailPanelStore } from '$lib/detailPanel.svelte';
 	import { liveRecordingStore } from '$lib/liveRecording.svelte';
+	import { navIcons } from '$lib/navIcons';
 	import { pageSelectStore } from '$lib/pageSelect.svelte';
+	import { isNativePlatform } from '$lib/platform';
 	import { recordingsStore } from '$lib/recordings.svelte';
 	import { selectionStore } from '$lib/selection.svelte';
 	import { tagsStore } from '$lib/tags.svelte';
 	import { onMount } from 'svelte';
 
 	let { children } = $props();
+	// backdrop-filter is a real, measurable jank source on Android WebView
+	// (GPU compositing recomputes the blur every frame something behind it
+	// moves/scrolls), so it's dropped on native rather than fighting it.
+	// Static per app run, not reactive, so computed once rather than called
+	// inline in every class string below.
+	const nativePlatform = isNativePlatform();
 	let fileInput: HTMLInputElement | undefined = $state();
 	let dragging = $state(false);
 	let dragDepth = 0;
 	let selectionTagPickerOpen = $state(false);
 	let confirmingBulkDelete = $state(false);
 	let refreshing = $state(false);
+
+	// Sidebar (224px) + the list rail a detail panel shrinks to (416px) leaves
+	// a cramped detail view below this width, so it auto-collapses to
+	// icon-only there instead, but only while a detail panel is actually
+	// open (no reason to shrink it just because the window happens to be
+	// this width otherwise). Desktop-only concern: on mobile the Sidebar
+	// isn't shown at all (see Sidebar.svelte's own `hidden md:flex`).
+	let windowWidth = $state(0);
+	const SIDEBAR_COLLAPSE_WIDTH = 1100;
+	let sidebarCollapsed = $derived(detailPanelStore.open && windowWidth > 0 && windowWidth < SIDEBAR_COLLAPSE_WIDTH);
 
 	async function refresh() {
 		if (refreshing) return;
@@ -37,6 +60,16 @@
 	function bulkAddTag(tagId: string) {
 		recordingsStore.addTagToMany(selectionStore.selectedIds, tagId);
 		selectionTagPickerOpen = false;
+		selectionStore.clear();
+	}
+
+	function bulkFavorite() {
+		recordingsStore.favoriteMany(selectionStore.selectedIds);
+		selectionStore.clear();
+	}
+
+	function bulkArchive() {
+		recordingsStore.archiveMany(selectionStore.selectedIds);
 		selectionStore.clear();
 	}
 
@@ -127,10 +160,13 @@
 
 <div class="flex h-dvh flex-col overflow-hidden bg-white dark:bg-black">
 	<StatusBarSpacer />
-	<header class="relative flex h-16 shrink-0 items-center gap-3 border-b border-gray-200 px-6 dark:border-white/10">
+	<header
+		class="relative flex h-16 shrink-0 items-center gap-1 border-b border-gray-200 px-6 transition-colors dark:border-white/10
+			{selectionStore.active ? 'bg-accent-50/70 dark:bg-accent-500/10' : ''}"
+	>
 		{#if selectionStore.active}
 			<button
-				class="flex size-8 shrink-0 items-center justify-center rounded-full text-gray-500 transition hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-white/5"
+				class="flex size-8 shrink-0 items-center justify-center rounded-full text-gray-500 transition hover:bg-black/5 dark:text-gray-400 dark:hover:bg-white/10"
 				aria-label="Cancel selection"
 				onclick={() => selectionStore.clear()}
 			>
@@ -138,17 +174,43 @@
 					<path stroke-linecap="round" stroke-linejoin="round" d="M18 6 6 18M6 6l12 12" />
 				</svg>
 			</button>
-			<span class="flex-1 text-sm font-medium text-gray-900 dark:text-gray-100">
+			<span class="flex-1 pl-1 text-sm font-medium text-gray-900 dark:text-gray-100">
 				{selectionStore.count} selected
 			</span>
+
+			<button
+				class="flex size-8 shrink-0 items-center justify-center rounded-full text-gray-500 transition hover:bg-black/5 dark:text-gray-400 dark:hover:bg-white/10"
+				aria-label="Favourite selected"
+				title="Favourite selected"
+				onclick={bulkFavorite}
+			>
+				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="size-4">
+					<path stroke-linecap="round" stroke-linejoin="round" d={navIcons.favourites.path} />
+				</svg>
+			</button>
+
+			<button
+				class="flex size-8 shrink-0 items-center justify-center rounded-full text-gray-500 transition hover:bg-black/5 dark:text-gray-400 dark:hover:bg-white/10"
+				aria-label="Archive selected"
+				title="Archive selected"
+				onclick={bulkArchive}
+			>
+				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="size-4">
+					<path stroke-linecap="round" stroke-linejoin="round" d={navIcons.archive.path} />
+				</svg>
+			</button>
 
 			{#if tagsStore.list.length > 0}
 				<div class="relative">
 					<button
-						class="rounded-full px-3.5 py-1.5 text-sm text-gray-600 ring-1 ring-gray-200 transition hover:bg-gray-100 dark:text-gray-300 dark:ring-white/10 dark:hover:bg-white/5"
+						class="flex size-8 shrink-0 items-center justify-center rounded-full text-gray-500 transition hover:bg-black/5 dark:text-gray-400 dark:hover:bg-white/10"
+						aria-label="Add tag to selected"
+						title="Add tag to selected"
 						onclick={() => (selectionTagPickerOpen = !selectionTagPickerOpen)}
 					>
-						+ Tag
+						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="size-4">
+							<path stroke-linecap="round" stroke-linejoin="round" d={navIcons.tags.path} />
+						</svg>
 					</button>
 					{#if selectionTagPickerOpen}
 						<button
@@ -156,7 +218,7 @@
 							aria-label="Close tag picker"
 							onclick={() => (selectionTagPickerOpen = false)}
 						></button>
-						<div class="card absolute top-full right-0 z-20 mt-1 w-56 p-3">
+						<div class="card accent-scrollbar absolute top-full right-0 z-20 mt-1 max-h-64 w-56 overflow-y-auto p-3">
 							<TagChips tags={tagsStore.list} allTags={tagsStore.list} selected={[]} ontoggle={bulkAddTag} />
 						</div>
 					{/if}
@@ -164,10 +226,14 @@
 			{/if}
 
 			<button
-				class="rounded-full px-3.5 py-1.5 text-sm font-medium text-red-600 ring-1 ring-red-200 transition hover:bg-red-50 dark:text-red-400 dark:ring-red-500/30 dark:hover:bg-red-500/10"
+				class="flex size-8 shrink-0 items-center justify-center rounded-full text-red-600 transition hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-500/10"
+				aria-label="Delete selected"
+				title="Delete selected"
 				onclick={() => (confirmingBulkDelete = true)}
 			>
-				Delete
+				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="size-4">
+					<path stroke-linecap="round" stroke-linejoin="round" d={navIcons.bin.path} />
+				</svg>
 			</button>
 		{:else}
 			<HeaderBrand />
@@ -175,8 +241,14 @@
 			<!-- Absolutely positioned (not a flex-1 middle child) so it centers on
 				 the actual screen/header width, not just the leftover space between
 				 the brand/select/import clusters, which shifts around as those
-				 change width (e.g. Select appearing/disappearing per-route). -->
-			<div class="pointer-events-none absolute inset-x-0 top-1/2 hidden -translate-y-1/2 justify-center md:flex">
+				 change width (e.g. Select appearing/disappearing per-route).
+				 Centered via inset-0 + flex, deliberately not a top-1/2/
+				 -translate-y-1/2 transform: a `transform` on an ancestor traps any
+				 position:fixed descendant (FilterPanel's Dialog popover) into this
+				 box as its containing block instead of the viewport, which is
+				 exactly what broke that popover's centering, stacking, and
+				 click-outside-to-close all at once. -->
+			<div class="pointer-events-none absolute inset-0 hidden items-center justify-center md:flex">
 				<SearchBar class="pointer-events-auto w-full max-w-md bg-[#e5e7eb] dark:bg-white/5" />
 			</div>
 
@@ -198,8 +270,27 @@
 					</button>
 				{/if}
 
+				{#if bulkJobStore.active}
+					<!-- Mobile only: takes the Import button's exact slot while a huge
+					     bulk operation (multi-select trash/tag/etc, see
+					     bulkJob.svelte.ts) is running, there's no room for both an
+					     import affordance and a progress readout in this tight a
+					     toolbar. Desktop gets the full per-job breakdown instead
+					     (BulkJobToast.svelte's floating corner cards), it has the
+					     room, so the Import button there is untouched. -->
+					<div
+						class="flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-sm text-gray-600 dark:text-gray-300 md:hidden"
+					>
+						<svg viewBox="0 0 24 24" fill="none" class="size-4 shrink-0 animate-spin text-accent-500">
+							<circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="3" stroke-opacity="0.25" />
+							<path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" stroke-width="3" stroke-linecap="round" />
+						</svg>
+						<span class="tabular-nums">{bulkJobStore.combinedProgress.processed}/{bulkJobStore.combinedProgress.total}</span>
+					</div>
+				{/if}
 				<button
-					class="group flex items-center overflow-hidden rounded-full px-2.5 py-1.5 text-sm text-gray-600 transition-colors hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-white/5"
+					class="group flex items-center overflow-hidden rounded-full px-2.5 py-1.5 text-sm text-gray-600 transition-colors hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-white/5
+						{bulkJobStore.active ? 'hidden md:flex' : ''}"
 					onclick={() => fileInput?.click()}
 				>
 					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="size-4 shrink-0">
@@ -257,7 +348,7 @@
 	</header>
 
 	<div class="flex min-h-0 flex-1">
-		<Sidebar />
+		<Sidebar collapsed={sidebarCollapsed} />
 
 		<main class="min-h-0 flex-1 overflow-hidden">
 			{@render children()}
@@ -265,27 +356,20 @@
 	</div>
 </div>
 
+<svelte:window bind:innerWidth={windowWidth} />
+
 {#if confirmingBulkDelete}
-	<Dialog onclose={() => (confirmingBulkDelete = false)}>
-		<p class="mb-4 text-sm text-gray-900 dark:text-gray-100">
+	<ConfirmDialog
+		confirmLabel="Delete"
+		danger
+		onconfirm={confirmBulkDelete}
+		onclose={() => (confirmingBulkDelete = false)}
+	>
+		{#snippet message()}
 			Delete <span class="font-semibold">{selectionStore.count}</span>
 			{selectionStore.count === 1 ? 'recording' : 'recordings'}?
-		</p>
-		<div class="flex gap-2">
-			<button
-				class="flex-1 rounded-full px-4 py-2 text-sm font-medium text-gray-600 ring-1 ring-gray-200 transition hover:bg-gray-100 dark:text-gray-300 dark:ring-white/10 dark:hover:bg-white/5"
-				onclick={() => (confirmingBulkDelete = false)}
-			>
-				Cancel
-			</button>
-			<button
-				class="flex-1 rounded-full bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700"
-				onclick={confirmBulkDelete}
-			>
-				Delete
-			</button>
-		</div>
-	</Dialog>
+		{/snippet}
+	</ConfirmDialog>
 {/if}
 
 {#if page.url.pathname === '/' || page.url.pathname === '/favourites' || page.url.pathname === '/archive'}
@@ -293,7 +377,10 @@
 		class="fixed inset-x-0 bottom-[calc(5rem+var(--safe-area-inset-bottom,env(safe-area-inset-bottom)))] z-20 flex items-center gap-2 px-4 md:hidden"
 	>
 		<SearchBar
-			class="min-w-0 flex-1 border border-gray-200/70 bg-white/70 shadow-sm backdrop-blur-lg dark:border-white/10 dark:bg-black/60"
+			class="min-w-0 flex-1 border border-gray-200/70 shadow-sm dark:border-white/10
+				{nativePlatform
+				? 'bg-white dark:bg-black'
+				: 'bg-white/70 backdrop-blur-lg dark:bg-black/60'}"
 		/>
 		{#if page.url.pathname === '/'}
 			<button
@@ -313,6 +400,10 @@
 {/if}
 
 <BottomNav />
+
+<VimEscapeHandler />
+<VimSearchHandler />
+<BulkJobToast />
 
 {#if recordingsStore.importError}
 	<div class="fixed top-4 left-1/2 z-50 -translate-x-1/2">

@@ -1,17 +1,22 @@
-import { APP_VERSION, type TranscriptionModel } from "@recoral/shared";
+import { APP_VERSION, isValidUsername, type TranscriptionModel } from "@recoral/shared";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Readable } from "node:stream";
+import { getBulkJob, startBulkJob } from "./bulkJobs";
 import {
 	adminCreateUser,
 	adminUpdateUser,
 	clearSessionCookie,
+	deleteOwnAccount,
 	deleteUser,
 	endSession,
+	listSessions,
 	listUsers,
 	login,
 	register,
+	revokeSession,
 	sessionCookie,
+	tokenFromRequest,
 	updateAccount,
 	userCount,
 	userFromRequest
@@ -23,12 +28,14 @@ import {
 	deleteRecording,
 	detachTag as detachRecordingTag,
 	DuplicateError,
+	emptyTrashedRecordings,
 	getAudioFile,
 	getRecording,
 	globalStorageBytes,
 	listRecordings,
 	purgeExpiredTrash,
 	QuotaError,
+	searchRecordings,
 	updateRecording,
 	userStorageBytes
 } from "./recordings";
@@ -37,14 +44,13 @@ import { getRecoralImportJob, startRecoralImport } from "./recoralImport";
 import { subscribe as subscribeToEvents } from "./realtime";
 import { getSettings, updateSettings } from "./settings";
 import { getImportJob, startTakeoutImport } from "./takeoutImport";
-import { createTag, deleteTagForever, listTags, purgeExpiredTagTrash, updateTag } from "./tags";
+import { createTag, deleteTagForever, emptyTrashedTags, listTags, purgeExpiredTagTrash, updateTag } from "./tags";
 import { enqueueAllUntranscribed, enqueueTranscription, requeueStuckTranscriptions } from "./transcription";
 
 const webDir = new URL("../../web/build/", import.meta.url);
 const MAX_AVATAR_LENGTH = 2_000_000; // ~1.5MB decoded, generous for a small profile picture
-const MAX_BACKGROUND_LENGTH = 8_000_000; // ~6MB decoded, a full-bleed page background needs more room
+const MAX_BACKGROUND_LENGTH = 22_369_622; // 16MiB decoded (base64 inflates by 4/3), a full-bleed page background needs more room
 
-const USERNAME_PATTERN = /^[a-zA-Z0-9_.-]{3,32}$/;
 const TRANSCRIPTION_MODELS: TranscriptionModel[] = ["tiny", "base", "small", "medium", "large"];
 
 async function readRegisterBody(req: Request) {
@@ -54,10 +60,12 @@ async function readRegisterBody(req: Request) {
 	const password = typeof body.password === "string" ? body.password : "";
 	const accentHue = typeof body.accentHue === "number" ? body.accentHue : undefined;
 
-	if (!USERNAME_PATTERN.test(username)) {
+	if (!isValidUsername(username)) {
 		throw new Error("Username must be 3-32 characters, letters, numbers, dots, underscores or hyphens only");
 	}
-	if (!password) throw new Error("Password is required");
+	// Password strength (empty vs. weak vs. the requireStrongPasswords toggle)
+	// is all enforced inside register() itself, the single source of truth,
+	// no need to duplicate any of that check here.
 
 	return { username, email, password, accentHue };
 }
@@ -127,6 +135,19 @@ function preflightResponse(origin: string | null) {
 type RouteHandler = (req: never) => Response | Promise<Response>;
 type RouteValue = RouteHandler | Record<string, RouteHandler>;
 
+// Previously the server logged almost nothing during normal operation (one
+// line at startup, plus a couple of console.error calls in specific
+// catch blocks), so `docker logs` looked empty even while the server was
+// actively handling traffic, no way to tell "no requests are arriving" from
+// "requests are arriving and working fine." One line per request here
+// fixes that for every route this app actually has (all of them go through
+// withCors). Deliberately unconditional (no log-level toggle), this is a
+// small self-hosted server, not something logging at a rate worth gating.
+function logRequest(req: Request, res: Response, startedAt: number) {
+	const ms = Math.round(performance.now() - startedAt);
+	console.log(`${req.method} ${new URL(req.url).pathname} ${res.status} ${ms}ms`);
+}
+
 function withCors<T extends Record<string, RouteValue>>(routes: T): T {
 	const wrapped: Record<string, RouteValue> = {};
 
@@ -135,7 +156,9 @@ function withCors<T extends Record<string, RouteValue>>(routes: T): T {
 			wrapped[path] = async (req: Request) => {
 				const origin = req.headers.get("origin");
 				if (req.method === "OPTIONS") return preflightResponse(origin);
+				const startedAt = performance.now();
 				const res = await value(req as never);
+				logRequest(req, res, startedAt);
 				for (const [key, val] of Object.entries(corsHeaders(origin))) res.headers.set(key, val as string);
 				return res;
 			};
@@ -144,7 +167,9 @@ function withCors<T extends Record<string, RouteValue>>(routes: T): T {
 			for (const [method, fn] of Object.entries(value)) {
 				methods[method] = async (req: Request) => {
 					const origin = req.headers.get("origin");
+					const startedAt = performance.now();
 					const res = await fn(req as never);
+					logRequest(req, res, startedAt);
 					for (const [key, val] of Object.entries(corsHeaders(origin))) res.headers.set(key, val as string);
 					return res;
 				};
@@ -164,6 +189,13 @@ const server = Bun.serve({
 	// ceiling; the actual admin-configurable limit (Settings.maxImportSizeMb,
 	// default 1GiB) is enforced in the /api/import/takeout route itself.
 	maxRequestBodySize: 10 * 1024 * 1024 * 1024,
+	// Bun's default idle timeout is 10s. /api/export streams a zip of the
+	// user's whole library (dataExport.ts), which for a four-figure library
+	// can go quiet for longer than that while archiving/compressing between
+	// flushed chunks, confirmed via a real "request timed out after 10
+	// seconds" log killing the connection with nothing ever reaching the
+	// browser. 255 is the max Bun allows (stored as a single byte internally).
+	idleTimeout: 255,
 	routes: withCors({
 		"/api/health": () => Response.json({ status: "ok", version: APP_VERSION }),
 
@@ -174,7 +206,13 @@ const server = Bun.serve({
 						return Response.json({ error: "Sign ups are currently disabled" }, { status: 403 });
 					}
 					const { username, email, password, accentHue } = await readRegisterBody(req);
-					const { user, token } = await register(username, password, email, accentHue);
+					const { user, token } = await register(
+						username,
+						password,
+						email,
+						accentHue,
+						req.headers.get("user-agent")
+					);
 					return Response.json({ ...user, token }, { headers: { "Set-Cookie": sessionCookie(token) } });
 				} catch (err) {
 					return Response.json({ error: (err as Error).message }, { status: 400 });
@@ -186,7 +224,7 @@ const server = Bun.serve({
 			POST: async (req) => {
 				try {
 					const { identifier, password } = await readLoginBody(req);
-					const { user, token } = await login(identifier, password);
+					const { user, token } = await login(identifier, password, req.headers.get("user-agent"));
 					return Response.json({ ...user, token }, { headers: { "Set-Cookie": sessionCookie(token) } });
 				} catch (err) {
 					return Response.json({ error: (err as Error).message }, { status: 401 });
@@ -211,7 +249,14 @@ const server = Bun.serve({
 				try {
 					const user = requireUser(req);
 					const body = await req.json();
-					const updates: { accentHue?: number; avatar?: string | null } = {};
+					const updates: {
+						accentHue?: number;
+						avatar?: string | null;
+						username?: string;
+						email?: string | null;
+						password?: string;
+						currentPassword?: string;
+					} = {};
 
 					if (typeof body.accentHue === "number") updates.accentHue = body.accentHue;
 					if (body.avatar === null) updates.avatar = null;
@@ -221,11 +266,53 @@ const server = Bun.serve({
 						}
 						updates.avatar = body.avatar;
 					}
+					if (typeof body.username === "string") updates.username = body.username.trim().toLowerCase();
+					if (body.email === null) updates.email = null;
+					else if (typeof body.email === "string" && body.email.trim()) {
+						updates.email = body.email.trim().toLowerCase();
+					}
+					if (typeof body.password === "string" && body.password) updates.password = body.password;
+					if (typeof body.currentPassword === "string") updates.currentPassword = body.currentPassword;
 
-					return Response.json(updateAccount(user.id, updates));
+					return Response.json(await updateAccount(user.id, updates));
 				} catch (err) {
 					if (err instanceof UnauthorizedError) return new Response(null, { status: 401 });
 					return Response.json({ error: (err as Error).message }, { status: 400 });
+				}
+			},
+			DELETE: async (req) => {
+				try {
+					const user = requireUser(req);
+					const body = await req.json().catch(() => ({}));
+					const currentPassword = typeof body.currentPassword === "string" ? body.currentPassword : "";
+					await deleteOwnAccount(user.id, currentPassword);
+					return new Response(null, { status: 204, headers: { "Set-Cookie": clearSessionCookie() } });
+				} catch (err) {
+					if (err instanceof UnauthorizedError) return new Response(null, { status: 401 });
+					return Response.json({ error: (err as Error).message }, { status: 400 });
+				}
+			}
+		},
+
+		"/api/account/sessions": {
+			GET: (req) => {
+				try {
+					const user = requireUser(req);
+					return Response.json(listSessions(user.id, tokenFromRequest(req)));
+				} catch (err) {
+					return authErrorResponse(err) ?? new Response(null, { status: 401 });
+				}
+			}
+		},
+
+		"/api/account/sessions/:id": {
+			DELETE: (req) => {
+				try {
+					const user = requireUser(req);
+					revokeSession(user.id, req.params.id);
+					return new Response(null, { status: 204 });
+				} catch (err) {
+					return authErrorResponse(err) ?? new Response(null, { status: 401 });
 				}
 			}
 		},
@@ -299,7 +386,7 @@ const server = Bun.serve({
 					const password = typeof body.password === "string" ? body.password : "";
 					const isAdmin = body.isAdmin === true;
 
-					if (!USERNAME_PATTERN.test(username)) {
+					if (!isValidUsername(username)) {
 						return Response.json(
 							{ error: "Username must be 3-32 characters, letters, numbers, dots, underscores or hyphens only" },
 							{ status: 400 }
@@ -319,7 +406,7 @@ const server = Bun.serve({
 				try {
 					const admin = requireAdmin(req);
 					const body = await req.json();
-					const updates: { isAdmin?: boolean; storageLimitMb?: number | null } = {};
+					const updates: { isAdmin?: boolean; storageLimitMb?: number | null; password?: string } = {};
 
 					if (typeof body.isAdmin === "boolean") {
 						if (req.params.id === admin.id && body.isAdmin === false) {
@@ -330,10 +417,15 @@ const server = Bun.serve({
 					if (body.storageLimitMb === null || typeof body.storageLimitMb === "number") {
 						updates.storageLimitMb = body.storageLimitMb;
 					}
+					if (typeof body.password === "string" && body.password) updates.password = body.password;
 
-					return Response.json(adminUpdateUser(req.params.id, updates));
+					return Response.json(await adminUpdateUser(req.params.id, updates));
 				} catch (err) {
-					return authErrorResponse(err) ?? new Response(null, { status: 401 });
+					// A plain thrown Error here (weak password, "User not found") is a
+					// real validation message the client should see, not an auth
+					// failure, so this now matches the same fallback shape /api/account
+					// and other mutating routes already use instead of a blank 401.
+					return authErrorResponse(err) ?? Response.json({ error: (err as Error).message }, { status: 400 });
 				}
 			},
 			DELETE: (req) => {
@@ -367,6 +459,8 @@ const server = Bun.serve({
 						maxImportSizeMb?: number;
 						transcriptionEnabled?: boolean;
 						transcriptionModel?: TranscriptionModel;
+						requireStrongPasswords?: boolean;
+						requireEmail?: boolean;
 					} = {};
 
 					if (body.defaultAccentHue === null || typeof body.defaultAccentHue === "number") {
@@ -391,6 +485,12 @@ const server = Bun.serve({
 					}
 					if (TRANSCRIPTION_MODELS.includes(body.transcriptionModel)) {
 						updates.transcriptionModel = body.transcriptionModel;
+					}
+					if (typeof body.requireStrongPasswords === "boolean") {
+						updates.requireStrongPasswords = body.requireStrongPasswords;
+					}
+					if (typeof body.requireEmail === "boolean") {
+						updates.requireEmail = body.requireEmail;
 					}
 
 					const newSettings = updateSettings(updates);
@@ -455,6 +555,33 @@ const server = Bun.serve({
 			}
 		},
 
+		// Server-side search: the client always searches its own already-loaded
+		// copy first (instant, see recordingFilter.ts), then reconciles with
+		// this once it answers. Exists mainly so search can eventually cover
+		// data the client doesn't have loaded in bulk, not because today's
+		// client-side match is missing anything, see TODO.md. title/
+		// description/transcript params each default to "on" (true unless
+		// explicitly "0") so the endpoint still searches everything if called
+		// without them, matching searchRecordings()'s own defaults.
+		"/api/recordings/search": {
+			GET: (req) => {
+				try {
+					const user = requireUser(req);
+					const url = new URL(req.url);
+					const query = url.searchParams.get("q")?.trim() ?? "";
+					if (!query) return Response.json([]);
+					const fields = {
+						title: url.searchParams.get("title") !== "0",
+						description: url.searchParams.get("description") !== "0",
+						transcript: url.searchParams.get("transcript") !== "0"
+					};
+					return Response.json(searchRecordings(user.id, query, fields));
+				} catch (err) {
+					return authErrorResponse(err) ?? new Response(null, { status: 401 });
+				}
+			}
+		},
+
 		"/api/recordings/:id": {
 			GET: (req) => {
 				try {
@@ -494,6 +621,97 @@ const server = Bun.serve({
 					const user = requireUser(req);
 					deleteRecording(user.id, req.params.id);
 					return new Response(null, { status: 204 });
+				} catch (err) {
+					return authErrorResponse(err) ?? new Response(null, { status: 401 });
+				}
+			}
+		},
+
+		// "Empty Bin": permanently deletes every trashed recording and tag in
+		// one request, not one DELETE per item from the client (see
+		// emptyTrashedRecordings/emptyTrashedTags, both batched into a single
+		// DB transaction each).
+		"/api/bin": {
+			DELETE: (req) => {
+				try {
+					const user = requireUser(req);
+					emptyTrashedRecordings(user.id);
+					emptyTrashedTags(user.id);
+					return new Response(null, { status: 204 });
+				} catch (err) {
+					return authErrorResponse(err) ?? new Response(null, { status: 401 });
+				}
+			}
+		},
+
+		// Multi-select bulk operations (trash/restore/archive/favorite, add-tag,
+		// delete-forever): one request starts a background job over however many
+		// ids were selected, the client polls /api/jobs/:id for real progress
+		// instead of firing one request per recording itself, see bulkJobs.ts.
+		// Unlike Empty Bin above, these are genuinely gradual (real DB writes,
+		// sometimes real file I/O), worth reporting real progress for, at real
+		// scale (hundreds to thousands of selected recordings).
+		"/api/recordings/bulk": {
+			POST: async (req) => {
+				try {
+					const user = requireUser(req);
+					const body = await req.json();
+					const ids = Array.isArray(body.ids) ? (body.ids as string[]) : [];
+					const updates: { trashed?: boolean; archived?: boolean; favorite?: boolean } = {};
+					if (typeof body.trashed === "boolean") updates.trashed = body.trashed;
+					if (typeof body.archived === "boolean") updates.archived = body.archived;
+					if (typeof body.favorite === "boolean") updates.favorite = body.favorite;
+					const job = startBulkJob(user.id, ids, (id) => void updateRecording(user.id, id, updates));
+					return Response.json({ jobId: job.id }, { status: 202 });
+				} catch (err) {
+					return authErrorResponse(err) ?? new Response(null, { status: 401 });
+				}
+			}
+		},
+
+		"/api/recordings/bulk-delete": {
+			POST: async (req) => {
+				try {
+					const user = requireUser(req);
+					const body = await req.json();
+					const ids = Array.isArray(body.ids) ? (body.ids as string[]) : [];
+					const job = startBulkJob(user.id, ids, (id) => deleteRecording(user.id, id));
+					return Response.json({ jobId: job.id }, { status: 202 });
+				} catch (err) {
+					return authErrorResponse(err) ?? new Response(null, { status: 401 });
+				}
+			}
+		},
+
+		// Ancestor tag ids are resolved client-side (tagPath.ts's
+		// ancestorTagIds(), the same hierarchy-from-name parsing the rest of the
+		// app already relies on) and sent as one flat tagIds list here, the same
+		// list applies to every selected recording, computing it once client-
+		// side beats re-deriving it per recording server-side for no benefit.
+		"/api/recordings/bulk-tag": {
+			POST: async (req) => {
+				try {
+					const user = requireUser(req);
+					const body = await req.json();
+					const ids = Array.isArray(body.ids) ? (body.ids as string[]) : [];
+					const tagIds = Array.isArray(body.tagIds) ? (body.tagIds as string[]) : [];
+					const job = startBulkJob(user.id, ids, (id) => {
+						for (const tagId of tagIds) attachRecordingTag(user.id, id, tagId);
+					});
+					return Response.json({ jobId: job.id }, { status: 202 });
+				} catch (err) {
+					return authErrorResponse(err) ?? new Response(null, { status: 401 });
+				}
+			}
+		},
+
+		"/api/jobs/:id": {
+			GET: (req) => {
+				try {
+					const user = requireUser(req);
+					const job = getBulkJob(user.id, req.params.id);
+					if (!job) return new Response(null, { status: 404 });
+					return Response.json(job);
 				} catch (err) {
 					return authErrorResponse(err) ?? new Response(null, { status: 401 });
 				}

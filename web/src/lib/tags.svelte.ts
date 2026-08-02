@@ -13,7 +13,11 @@ let trashed = $derived(all.filter((t) => t.trashedAt !== null));
 
 async function load() {
 	try {
-		const res = await api.fetch('/api/tags', { credentials: 'include' });
+		// Bounded: an unreachable server otherwise leaves `loaded` (and
+		// whatever's waiting on it) hanging for however long the OS network
+		// stack takes to give up, observed anywhere from milliseconds to
+		// minutes, see auth.svelte.ts's refresh() for the same fix.
+		const res = await api.fetch('/api/tags', { credentials: 'include', signal: AbortSignal.timeout(8000) });
 		if (res.ok) {
 			all = await res.json();
 			writeLocalCache(CACHED_TAGS_KEY, all);

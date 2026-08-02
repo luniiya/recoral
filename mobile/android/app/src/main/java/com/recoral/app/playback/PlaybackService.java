@@ -17,6 +17,7 @@ import androidx.media.app.NotificationCompat.MediaStyle;
 import android.support.v4.media.MediaMetadataCompat;
 import android.support.v4.media.session.MediaSessionCompat;
 import android.support.v4.media.session.PlaybackStateCompat;
+import com.recoral.app.MainActivity;
 import com.recoral.app.R;
 
 // Real Android system media notification ("media card") for playback, same
@@ -260,6 +261,20 @@ public class PlaybackService extends Service {
         return PendingIntent.getService(this, requestCode, intent, flags);
     }
 
+    // Tapping the notification/media card itself (not one of the transport
+    // action buttons above, those already have their own PendingIntents via
+    // actionIntent()) used to do nothing at all: buildNotification() never
+    // attached a contentIntent, so there was no PendingIntent on the card's
+    // tap target whatsoever. CLEAR_TOP+SINGLE_TOP brings the existing
+    // MainActivity instance back to front instead of creating a new one on
+    // top of it if it's still alive in the background.
+    private PendingIntent contentIntent() {
+        Intent intent = new Intent(this, MainActivity.class);
+        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+        int flags = PendingIntent.FLAG_UPDATE_CURRENT | (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M ? PendingIntent.FLAG_IMMUTABLE : 0);
+        return PendingIntent.getActivity(this, 0, intent, flags);
+    }
+
     private Notification buildNotification() {
         NotificationCompat.Action rewind = new NotificationCompat.Action(
             R.drawable.ic_media_rewind,
@@ -284,6 +299,7 @@ public class PlaybackService extends Service {
             .setContentTitle(title)
             .setContentText("recoral")
             .setSmallIcon(R.drawable.ic_notification)
+            .setContentIntent(contentIntent())
             // A MediaStyle notification with a session token auto-colorizes on
             // its own (confirmed: Android O+ colorizes any notification with
             // setMediaSession() attached unless explicitly opted out), but
@@ -328,5 +344,20 @@ public class PlaybackService extends Service {
             mediaSession = null;
         }
         super.onDestroy();
+    }
+
+    // The real "app closed" signal: fires only when the whole task is swiped
+    // away from Recents, unlike Capacitor's appStateChange (isActive:false),
+    // which fires on every plain minimize too (tried that first, it killed
+    // background playback entirely instead of just cleaning up after an
+    // actual close, see AudioPlayer.svelte). Deliberately does NOT mirror
+    // RecorderService, which must keep recording after this same event, this
+    // service's whole job is showing controls for something the user can
+    // still see and act on, which stops being true the moment the task itself
+    // is gone.
+    @Override
+    public void onTaskRemoved(Intent rootIntent) {
+        stop();
+        super.onTaskRemoved(rootIntent);
     }
 }
