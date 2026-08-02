@@ -72,6 +72,51 @@ function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
 	return timedFetch(path, { ...init, headers });
 }
 
+// fetch() still has no reliable cross-browser way to observe upload (request
+// body) progress, only download progress via the response stream, so a real
+// "X% uploaded" indicator for a large file needs XMLHttpRequest specifically,
+// the one place in the app that still reaches for it. Wraps the XHR response
+// back into a real Response so every existing `res.ok`/`res.json()` call site
+// (identical to what timedFetch already returns) keeps working unchanged.
+function uploadWithProgress(
+	path: string,
+	form: FormData,
+	opts: { onProgress?: (fraction: number) => void; signal?: AbortSignal } = {}
+): Promise<Response> {
+	const url = apiUrl(path);
+	console.log(`[api] -> POST ${url} (upload)`);
+	const startedAt = Date.now();
+	return new Promise((resolve, reject) => {
+		const xhr = new XMLHttpRequest();
+		xhr.open('POST', url);
+		if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+		xhr.withCredentials = true;
+		xhr.upload.onprogress = (e) => {
+			if (e.lengthComputable) opts.onProgress?.(e.loaded / e.total);
+		};
+		xhr.onload = () => {
+			console.log(`[api] <- POST ${url} ${xhr.status} (${Date.now() - startedAt}ms, upload)`);
+			resolve(new Response(xhr.response, { status: xhr.status, statusText: xhr.statusText }));
+		};
+		xhr.onerror = () => {
+			console.log(`[api] xx POST ${url} network error after ${Date.now() - startedAt}ms (upload)`);
+			reject(new TypeError('Network error'));
+		};
+		xhr.onabort = () => {
+			console.log(`[api] xx POST ${url} aborted after ${Date.now() - startedAt}ms (upload)`);
+			reject(new DOMException('The upload was aborted', 'AbortError'));
+		};
+		if (opts.signal) {
+			if (opts.signal.aborted) {
+				xhr.abort();
+				return;
+			}
+			opts.signal.addEventListener('abort', () => xhr.abort());
+		}
+		xhr.send(form);
+	});
+}
+
 export const api = {
 	get baseUrl() {
 		return baseUrl;
@@ -82,5 +127,6 @@ export const api = {
 	setBaseUrl,
 	setToken,
 	url: apiUrl,
-	fetch: apiFetch
+	fetch: apiFetch,
+	uploadWithProgress
 };

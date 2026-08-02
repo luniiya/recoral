@@ -238,6 +238,18 @@
 			if (cancelled) return;
 			App.addListener('appStateChange', ({ isActive }) => {
 				if (isActive || !nativeSessionStarted) return;
+				// Pausing (not just tearing down the native session) matters here:
+				// `playing` staying true while nativeSessionStarted flips to false
+				// is exactly the condition the start effect above (line ~153)
+				// treats as "fresh start, go create the session", so leaving the
+				// audio element itself playing made the notification resurrect
+				// itself immediately after this very call tore it down, confirmed
+				// via a real device log: stop() followed a couple seconds later by
+				// another start() with playback still advancing, matching a real
+				// report that only force-stopping the whole app actually got rid
+				// of it. Pausing first makes that guard's `!playing` check true,
+				// so the effect doesn't re-fire.
+				if (audioEl) fadeOutAndPause(audioEl);
 				nativeSessionStarted = false;
 				void Playback.stop();
 			}).then((handle) => {

@@ -24,12 +24,32 @@
 		latestDate: string | null;
 	}
 
+	// Dev-only verbose tracing for the upload path specifically, same gating
+	// pattern as bootLog.ts (dead-code-eliminated from production builds).
+	// Exists because a hung/failing import otherwise gives almost nothing to
+	// go on: this logs every phase (file picked, request about to fire,
+	// response received, poll ticks) with enough detail to tell "never left
+	// the browser" apart from "server never responded" apart from "server
+	// responded but the job stayed stuck".
+	function uploadLog(...args: unknown[]) {
+		if (import.meta.env.DEV) console.log('[import]', ...args);
+	}
+
+	// A real export can genuinely be hundreds of MB, so this has to be
+	// generous, not a quick "give up" threshold, but it still has to exist:
+	// confirmed a real case where the upload just hung indefinitely with the
+	// UI stuck on a bare "Importing…" and no percentage at all (job never
+	// arrives, since that only ever gets set from this same request's
+	// response), no error, no way out short of reloading the page.
+	const UPLOAD_TIMEOUT_MS = 5 * 60 * 1000;
+
 	let step = $state<Step>('format');
 	let format = $state<Format | null>(null);
 	let selectedFile = $state<File | null>(null);
 	let dragging = $state(false);
 	let fileInput: HTMLInputElement | undefined = $state();
 	let uploadError = $state('');
+	let uploadProgress = $state(0);
 	let job = $state<ImportJob | null>(null);
 	let pollHandle: ReturnType<typeof setInterval> | null = null;
 
@@ -82,30 +102,88 @@
 	async function confirmImport() {
 		if (!selectedFile || !format) return;
 		uploadError = '';
+		uploadProgress = 0;
 		step = 'progress';
+
+		uploadLog('starting upload', {
+			format,
+			name: selectedFile.name,
+			size: selectedFile.size,
+			type: selectedFile.type,
+			baseUrl: api.baseUrl || '(same-origin)'
+		});
 
 		const form = new FormData();
 		form.append('file', selectedFile);
 
-		const res = await api.fetch(`/api/import/${format}`, { method: 'POST', credentials: 'include', body: form });
+		const startedAt = Date.now();
+		let res: Response;
+		try {
+			res = await api.uploadWithProgress(`/api/import/${format}`, form, {
+				onProgress: (fraction) => (uploadProgress = fraction),
+				signal: AbortSignal.timeout(UPLOAD_TIMEOUT_MS)
+			});
+			uploadLog(`response after ${Date.now() - startedAt}ms`, { status: res.status, ok: res.ok });
+		} catch (err) {
+			uploadLog(`request threw after ${Date.now() - startedAt}ms`, err);
+			uploadError =
+				(err as Error).name === 'TimeoutError'
+					? "Upload timed out. The file may be too large, or the connection dropped. Check your network and try again."
+					: "Upload failed. Check your connection and try again.";
+			step = 'confirm';
+			return;
+		}
 		if (!res.ok) {
 			const body = await res.json().catch(() => ({}));
+			uploadLog('non-ok response body', body);
 			uploadError = body.error ?? 'Something went wrong';
 			step = 'confirm';
 			return;
 		}
 
 		const { jobId } = await res.json();
+		uploadLog('upload accepted, job started', jobId);
 		pollJob(jobId);
 	}
 
 	function pollJob(jobId: string) {
+		uploadLog('poll starting', jobId);
 		if (pollHandle) clearInterval(pollHandle);
+		// Same silent-indefinite-wait failure mode as the upload itself can hit
+		// here too, just later: if the connection drops after the job already
+		// started, a bare `if (!res.ok) return` polled forever with nothing ever
+		// telling the user. A run of failed polls (not just one, a single blip
+		// shouldn't trip this) now surfaces as a real error instead.
+		let consecutiveFailures = 0;
 		pollHandle = setInterval(async () => {
-			const res = await api.fetch(`/api/import/${format}/${jobId}`, { credentials: 'include' });
-			if (!res.ok) return;
+			let res: Response;
+			try {
+				res = await api.fetch(`/api/import/${format}/${jobId}`, { credentials: 'include' });
+			} catch {
+				consecutiveFailures++;
+				if (consecutiveFailures >= 30 && pollHandle) {
+					clearInterval(pollHandle);
+					pollHandle = null;
+					uploadError = 'Lost connection while importing. The import may still be running on the server, check back later.';
+					step = 'confirm';
+				}
+				return;
+			}
+			if (!res.ok) {
+				consecutiveFailures++;
+				if (consecutiveFailures >= 30 && pollHandle) {
+					clearInterval(pollHandle);
+					pollHandle = null;
+					uploadError = 'Lost connection while importing. The import may still be running on the server, check back later.';
+					step = 'confirm';
+				}
+				return;
+			}
+			consecutiveFailures = 0;
 			job = await res.json();
+			uploadLog('poll tick', $state.snapshot(job));
 			if (job && job.status !== 'processing' && pollHandle) {
+				uploadLog('poll finished', job.status);
 				clearInterval(pollHandle);
 				pollHandle = null;
 			}
@@ -257,13 +335,17 @@
 		<div class="card p-6">
 			{#if !job || job.status === 'processing'}
 				<div class="mb-2 flex items-center justify-between text-sm text-gray-700 dark:text-gray-300">
-					<span>Importing…</span>
-					{#if job}<span class="tabular-nums">{job.processed} / {job.total}</span>{/if}
+					<span>{job ? 'Importing…' : 'Uploading…'}</span>
+					{#if job}
+						<span class="tabular-nums">{job.processed} / {job.total}</span>
+					{:else}
+						<span class="tabular-nums">{Math.round(uploadProgress * 100)}%</span>
+					{/if}
 				</div>
 				<div class="h-1.5 w-full overflow-hidden rounded-full bg-gray-200 dark:bg-white/10">
 					<div
 						class="h-full rounded-full bg-accent-500 transition-[width]"
-						style:width="{job && job.total ? (job.processed / job.total) * 100 : 0}%"
+						style:width="{job ? (job.total ? (job.processed / job.total) * 100 : 0) : uploadProgress * 100}%"
 					></div>
 				</div>
 			{:else if job.status === 'done'}

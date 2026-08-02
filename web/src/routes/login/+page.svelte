@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { Settings } from '@recoral/shared';
-	import { validatePassword } from '@recoral/shared';
+	import { USERNAME_HTML_PATTERN, validatePassword } from '@recoral/shared';
 	import { goto } from '$app/navigation';
 	import { applyAccentHue, cacheAccentHue, readCachedAccentHue } from '$lib/accent';
 	import { api } from '$lib/api.svelte';
@@ -194,7 +194,7 @@
 						required
 						minlength="3"
 						maxlength="32"
-						pattern="[a-zA-Z0-9_.-]+"
+						pattern={USERNAME_HTML_PATTERN}
 						autocomplete="username"
 					/>
 				</label>

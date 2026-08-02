@@ -7,7 +7,22 @@ export const APP_VERSION = "0.3.0";
 // username or email" lookup (auth.ts's login() queries
 // `WHERE username = ? OR email = ?` against the same typed value, undefined
 // which row wins if a username ever equalled a different user's email).
-const USERNAME_PATTERN = /^[a-zA-Z0-9_.-]{3,32}$/;
+//
+// The character class lives here, once, specifically so every <input
+// pattern="..."> using it (three separate web/ files used to each hand-type
+// their own copy of this exact string) stays in sync automatically instead
+// of drifting. The hyphen is escaped (\\-) even though it doesn't need to be
+// for a plain RegExp literal like USERNAME_PATTERN below: browsers parse an
+// <input pattern> attribute's regex under the newer, stricter "v" flag
+// (Unicode Sets) rules, which do require it, confirmed via a real browser
+// throwing "Invalid regular expression: ...: Invalid character in character
+// class" on the unescaped version. USERNAME_HTML_PATTERN has no ^/$ or
+// {3,32}: HTML pattern attributes already fully anchor the match on their
+// own, and length is already covered separately by minlength/maxlength on
+// those same inputs.
+const USERNAME_CHARS = "a-zA-Z0-9_.\\-";
+const USERNAME_PATTERN = new RegExp(`^[${USERNAME_CHARS}]{3,32}$`);
+export const USERNAME_HTML_PATTERN = `[${USERNAME_CHARS}]+`;
 
 export function isValidUsername(username: string): boolean {
 	return USERNAME_PATTERN.test(username);

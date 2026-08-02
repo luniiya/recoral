@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { AdminUserSummary, Settings } from '@recoral/shared';
-	import { validatePassword } from '@recoral/shared';
+	import { USERNAME_HTML_PATTERN, validatePassword } from '@recoral/shared';
 	import { auth } from '$lib/auth.svelte';
 	import Avatar from '$lib/components/Avatar.svelte';
 	import Dialog from '$lib/components/Dialog.svelte';
@@ -169,7 +169,7 @@
 						bind:value={newUsername}
 						minlength="3"
 						maxlength="32"
-						pattern="[a-zA-Z0-9_.-]+"
+						pattern={USERNAME_HTML_PATTERN}
 						class="min-w-0 flex-1 rounded-lg bg-white px-3 py-2 text-sm text-gray-900 outline-none ring-1 ring-gray-200 focus:ring-2 focus:ring-accent-500 dark:bg-neutral-800 dark:text-gray-100 dark:ring-white/10"
 					/>
 					<input

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { USERNAME_CHANGE_COOLDOWN_DAYS, validatePassword } from '@recoral/shared';
+	import { USERNAME_CHANGE_COOLDOWN_DAYS, USERNAME_HTML_PATTERN, validatePassword } from '@recoral/shared';
 	import { goto } from '$app/navigation';
 	import { auth } from '$lib/auth.svelte';
 	import Avatar from '$lib/components/Avatar.svelte';
@@ -111,7 +111,8 @@
 			newPassword !== ''
 	);
 
-	async function saveAccountDetails() {
+	async function saveAccountDetails(event: SubmitEvent) {
+		event.preventDefault();
 		detailsError = '';
 		detailsSuccess = '';
 		if (!hasChanges) return;
@@ -211,7 +212,7 @@
 			Changing your username, email, or password requires your current password.
 		</p>
 
-		<div class="flex flex-col gap-4">
+		<form class="flex flex-col gap-4" onsubmit={saveAccountDetails}>
 			<label class="flex flex-col gap-1.5">
 				<span class="form-label">Username</span>
 				<input
@@ -219,7 +220,7 @@
 					bind:value={detailsUsername}
 					minlength="3"
 					maxlength="32"
-					pattern="[a-zA-Z0-9_.-]+"
+					pattern={USERNAME_HTML_PATTERN}
 					autocomplete="username"
 					disabled={!!usernameLockedUntil}
 				/>
@@ -290,13 +291,13 @@
 			{/if}
 
 			<button
+				type="submit"
 				class="self-start rounded-full bg-accent-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-accent-600 disabled:opacity-60"
 				disabled={detailsSaving || !hasChanges || !currentPassword}
-				onclick={saveAccountDetails}
 			>
 				{detailsSaving ? 'Saving…' : 'Save changes'}
 			</button>
-		</div>
+		</form>
 	</div>
 
 	<div class="card mt-6 border-red-200 p-6 dark:border-red-500/20">
