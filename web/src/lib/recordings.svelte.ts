@@ -2,6 +2,7 @@ import type { Recording } from '@recoral/shared';
 import { Capacitor } from '@capacitor/core';
 import { Directory, Filesystem } from '@capacitor/filesystem';
 import { api } from './api.svelte';
+import { bulkJobStore } from './bulkJob.svelte';
 import { readLocalCache, writeLocalCache } from './localCache';
 import { outboxStore } from './outbox.svelte';
 import type { SearchFields } from './recordingFilter';
@@ -329,14 +330,31 @@ async function deleteForever(id: string) {
 	await api.fetch(`/api/recordings/${id}`, { method: 'DELETE', credentials: 'include' });
 }
 
+// Bin's own bulk restore/delete-forever (a selected subset of already-
+// trashed recordings, not "everything", that's Empty Bin's own dedicated
+// /api/bin endpoint instead): same batched-job treatment as trashMany etc.
+// below, one request instead of one per selected recording.
+function restoreMany(ids: string[]) {
+	void bulkJobStore.start('restore', '/api/recordings/bulk', { ids, trashed: false }, ids.length, load);
+}
+
+function deleteManyForever(ids: string[]) {
+	void bulkJobStore.start('delete', '/api/recordings/bulk-delete', { ids }, ids.length, load);
+}
+
 // Bulk delete from multi-select: local-only recordings have no bin to go to
 // (never uploaded, same reasoning as the single-recording delete button in
-// RecordingDetail), everything else is a normal soft-trash.
+// RecordingDetail), everything else is a real server-side batch job, not
+// this client looping trash() once per id (confirmed a real problem at
+// real scale: a selection of hundreds/thousands of recordings meant
+// hundreds/thousands of individual PATCH requests piling up, some measured
+// taking 3+ seconds to resolve once queued behind each other), see
+// bulkJob.svelte.ts and server/src/bulkJobs.ts.
 function trashMany(ids: string[]) {
-	for (const id of ids) {
-		if (isLocalId(id)) void deleteForever(id);
-		else trash(id);
-	}
+	const localIds = ids.filter(isLocalId);
+	const remoteIds = ids.filter((id) => !isLocalId(id));
+	for (const id of localIds) void deleteForever(id);
+	void bulkJobStore.start('trash', '/api/recordings/bulk', { ids: remoteIds, trashed: true }, remoteIds.length, load);
 }
 
 // Bulk archive/favourite from multi-select: always sets the target state
@@ -345,15 +363,13 @@ function trashMany(ids: string[]) {
 // incorrectly flip those back off. Local-only (never-uploaded) recordings
 // have no server row to patch yet, same as trashMany above.
 function archiveMany(ids: string[]) {
-	for (const id of ids) {
-		if (!isLocalId(id)) archive(id);
-	}
+	const remoteIds = ids.filter((id) => !isLocalId(id));
+	void bulkJobStore.start('archive', '/api/recordings/bulk', { ids: remoteIds, archived: true }, remoteIds.length, load);
 }
 
 function favoriteMany(ids: string[]) {
-	for (const id of ids) {
-		if (!isLocalId(id)) patch(id, { favorite: true });
-	}
+	const remoteIds = ids.filter((id) => !isLocalId(id));
+	void bulkJobStore.start('favorite', '/api/recordings/bulk', { ids: remoteIds, favorite: true }, remoteIds.length, load);
 }
 
 // Adding a tag also adds all of its ancestor tags as real membership (not
@@ -376,14 +392,16 @@ async function addTagWithAncestors(recording: Recording, tagId: string) {
 
 // Bulk-add from multi-select's "+ tag": always adds, never removes, unlike
 // toggleRecordingTag, since some selected recordings may already carry the
-// tag and a toggle would incorrectly strip it back off those.
-async function addTagToMany(ids: string[], tagId: string) {
-	for (const id of ids) {
-		if (isLocalId(id)) continue;
-		const recording = all.find((r) => r.id === id);
-		if (!recording || recording.tagIds.includes(tagId)) continue;
-		await addTagWithAncestors(recording, tagId);
-	}
+// tag and a toggle would incorrectly strip it back off those. The ancestor
+// set only depends on the one target tag, not on which recording is being
+// tagged, so it's computed once here and sent as a flat tagIds list to the
+// bulk endpoint, real server-side batching instead of this client looping
+// one (or, per recording, several, one per ancestor) requests itself.
+function addTagToMany(ids: string[], tagId: string) {
+	const tag = tagsStore.list.find((t) => t.id === tagId);
+	const tagIds = [...(tag ? ancestorTagIds(tag, tagsStore.list) : []), tagId];
+	const remoteIds = ids.filter((id) => !isLocalId(id));
+	void bulkJobStore.start('addTag', '/api/recordings/bulk-tag', { ids: remoteIds, tagIds }, remoteIds.length, load);
 }
 
 async function toggleRecordingTag(recordingId: string, tagId: string) {
@@ -597,7 +615,9 @@ export const recordingsStore = {
 	archiveMany,
 	favoriteMany,
 	restore,
+	restoreMany,
 	deleteForever,
+	deleteManyForever,
 	addTagToMany,
 	daysLeft,
 	taggedCount

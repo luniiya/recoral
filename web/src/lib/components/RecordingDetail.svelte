@@ -13,7 +13,7 @@
 	import type { DisplayRecording } from '$lib/recordings.svelte';
 	import { recordingsStore } from '$lib/recordings.svelte';
 	import { tagsStore } from '$lib/tags.svelte';
-	import { parentTag, tagBreadcrumb, visibleTagIds } from '$lib/tagPath';
+	import { parentTag, tagBreadcrumb, visibleTags as computeVisibleTags } from '$lib/tagPath';
 	import { useEscapeToClose } from '$lib/vimEscapeToClose';
 	import StatusBarSpacer from './StatusBarSpacer.svelte';
 
@@ -38,12 +38,10 @@
 		!isLocal && (recording.transcriptStatus === 'pending' || recording.transcriptStatus === 'processing')
 	);
 
-	// Read-only summary row only, see tagPath.ts's visibleTagIds(): hides a tag
+	// Read-only summary row only, see tagPath.ts's visibleTags(): hides a tag
 	// if a more specific one already shown covers it. The tag picker below
 	// deliberately does NOT use this, it needs to show true membership.
-	let visibleTags = $derived(
-		tagsStore.list.filter((t) => visibleTagIds(recording.tagIds, tagsStore.list).includes(t.id))
-	);
+	let visibleTags = $derived(computeVisibleTags(recording.tagIds, tagsStore.list));
 
 	let activeTab = $state<'audio' | 'transcription'>('audio');
 	let tagPickerOpen = $state(false);

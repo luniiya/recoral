@@ -74,21 +74,29 @@
 		anchorKey = null;
 	}
 
+	// Recordings go through the batched job endpoints (bulkJob.svelte.ts,
+	// same as the multi-select bulk actions elsewhere), tag groups stay as
+	// individual calls for now, there's realistically never hundreds of
+	// trashed tag groups at once the way there can be trashed recordings.
 	function bulkRestore() {
+		const recordingIds: string[] = [];
 		for (const item of items) {
 			if (!selectedKeys.includes(keyOf(item))) continue;
-			if (item.kind === 'recording') recordingsStore.restore(item.recording.id);
+			if (item.kind === 'recording') recordingIds.push(item.recording.id);
 			else tagsStore.restore(item.group.root.id);
 		}
+		recordingsStore.restoreMany(recordingIds);
 		clearSelection();
 	}
 
 	function bulkDeleteForever() {
+		const recordingIds: string[] = [];
 		for (const item of items) {
 			if (!selectedKeys.includes(keyOf(item))) continue;
-			if (item.kind === 'recording') recordingsStore.deleteForever(item.recording.id);
+			if (item.kind === 'recording') recordingIds.push(item.recording.id);
 			else tagsStore.deleteForever(item.group.root.id);
 		}
+		recordingsStore.deleteManyForever(recordingIds);
 		confirmingBulkDelete = false;
 		clearSelection();
 	}

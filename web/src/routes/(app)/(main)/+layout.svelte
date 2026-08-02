@@ -2,6 +2,7 @@
 	import { page } from '$app/state';
 	import AvatarMenu from '$lib/components/AvatarMenu.svelte';
 	import BottomNav from '$lib/components/BottomNav.svelte';
+	import BulkJobToast from '$lib/components/BulkJobToast.svelte';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import HeaderBrand from '$lib/components/HeaderBrand.svelte';
 	import SearchBar from '$lib/components/SearchBar.svelte';
@@ -11,6 +12,7 @@
 	import ThemeToggle from '$lib/components/ThemeToggle.svelte';
 	import VimEscapeHandler from '$lib/components/VimEscapeHandler.svelte';
 	import VimSearchHandler from '$lib/components/VimSearchHandler.svelte';
+	import { bulkJobStore } from '$lib/bulkJob.svelte';
 	import { detailPanelStore } from '$lib/detailPanel.svelte';
 	import { liveRecordingStore } from '$lib/liveRecording.svelte';
 	import { navIcons } from '$lib/navIcons';
@@ -268,8 +270,27 @@
 					</button>
 				{/if}
 
+				{#if bulkJobStore.active}
+					<!-- Mobile only: takes the Import button's exact slot while a huge
+					     bulk operation (multi-select trash/tag/etc, see
+					     bulkJob.svelte.ts) is running, there's no room for both an
+					     import affordance and a progress readout in this tight a
+					     toolbar. Desktop gets the full per-job breakdown instead
+					     (BulkJobToast.svelte's floating corner cards), it has the
+					     room, so the Import button there is untouched. -->
+					<div
+						class="flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-sm text-gray-600 dark:text-gray-300 md:hidden"
+					>
+						<svg viewBox="0 0 24 24" fill="none" class="size-4 shrink-0 animate-spin text-accent-500">
+							<circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="3" stroke-opacity="0.25" />
+							<path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" stroke-width="3" stroke-linecap="round" />
+						</svg>
+						<span class="tabular-nums">{bulkJobStore.combinedProgress.processed}/{bulkJobStore.combinedProgress.total}</span>
+					</div>
+				{/if}
 				<button
-					class="group flex items-center overflow-hidden rounded-full px-2.5 py-1.5 text-sm text-gray-600 transition-colors hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-white/5"
+					class="group flex items-center overflow-hidden rounded-full px-2.5 py-1.5 text-sm text-gray-600 transition-colors hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-white/5
+						{bulkJobStore.active ? 'hidden md:flex' : ''}"
 					onclick={() => fileInput?.click()}
 				>
 					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="size-4 shrink-0">
@@ -382,6 +403,7 @@
 
 <VimEscapeHandler />
 <VimSearchHandler />
+<BulkJobToast />
 
 {#if recordingsStore.importError}
 	<div class="fixed top-4 left-1/2 z-50 -translate-x-1/2">

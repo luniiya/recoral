@@ -2,7 +2,7 @@
 	import { formatTimestamp } from '$lib/format';
 	import type { DisplayRecording } from '$lib/recordings.svelte';
 	import { rangeBetween, selectionStore } from '$lib/selection.svelte';
-	import { parentTag, visibleTagIds } from '$lib/tagPath';
+	import { parentTag, visibleTags as computeVisibleTags } from '$lib/tagPath';
 	import { tagsStore } from '$lib/tags.svelte';
 	import { viewportStore } from '$lib/viewport.svelte';
 	import RecordingCardHeader from './RecordingCardHeader.svelte';
@@ -30,10 +30,8 @@
 
 	// Read-only display: hides a tag if a more specific one already shown
 	// covers it (e.g. only "voiceacting/certainvoice" shows, not also its
-	// parent "voiceacting"), see tagPath.ts's visibleTagIds().
-	let visibleTags = $derived(
-		tagsStore.list.filter((t) => visibleTagIds(recording.tagIds, tagsStore.list).includes(t.id))
-	);
+	// parent "voiceacting"), see tagPath.ts's visibleTags().
+	let visibleTags = $derived(computeVisibleTags(recording.tagIds, tagsStore.list));
 
 	const HOLD_MS = 550;
 	const MOVE_CANCEL_PX = 10;
