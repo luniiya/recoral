@@ -283,6 +283,35 @@ export function deleteRecording(userId: string, id: string) {
 	broadcast(userId, "recordings");
 }
 
+// "Empty Bin": one request, one transaction, instead of the client looping
+// deleteRecording() once per item (confirmed a real problem: a bin with
+// hundreds of items meant hundreds of individual DELETE requests hammering
+// the server one at a time). File removal stays outside the DB transaction
+// (filesystem writes aren't part of SQLite's atomicity anyway, and a failed
+// unlink is already non-fatal, see deleteRecording above), everything else
+// happens as a single batch.
+export function emptyTrashedRecordings(userId: string) {
+	const rows = db
+		.query<RecordingRow, [string]>("SELECT * FROM recordings WHERE user_id = ? AND trashed_at IS NOT NULL")
+		.all(userId);
+	if (rows.length === 0) return;
+
+	const deleteAll = db.transaction(() => {
+		for (const row of rows) {
+			db.run("DELETE FROM recording_tags WHERE recording_id = ?", [row.id]);
+			db.run("DELETE FROM recordings WHERE id = ?", [row.id]);
+		}
+	});
+	deleteAll();
+
+	for (const row of rows) {
+		try {
+			unlinkSync(row.file_path);
+		} catch {}
+	}
+	broadcast(userId, "recordings");
+}
+
 export function purgeExpiredTrash() {
 	const cutoff = new Date(Date.now() - TRASH_RETENTION_DAYS * 24 * 60 * 60 * 1000).toISOString();
 	const rows = db

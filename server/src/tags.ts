@@ -132,6 +132,22 @@ export function deleteTagForever(userId: string, tagId: string) {
 	broadcast(userId, "tags");
 }
 
+// Same "one request, one transaction" reasoning as emptyTrashedRecordings
+// in recordings.ts, see there.
+export function emptyTrashedTags(userId: string) {
+	const rows = db.query<{ id: string }, [string]>("SELECT id FROM tags WHERE user_id = ? AND trashed_at IS NOT NULL").all(userId);
+	if (rows.length === 0) return;
+
+	const deleteAll = db.transaction(() => {
+		for (const row of rows) {
+			db.run("DELETE FROM recording_tags WHERE tag_id = ?", [row.id]);
+			db.run("DELETE FROM tags WHERE id = ?", [row.id]);
+		}
+	});
+	deleteAll();
+	broadcast(userId, "tags");
+}
+
 export function purgeExpiredTagTrash() {
 	const cutoff = new Date(Date.now() - TAG_TRASH_RETENTION_DAYS * 24 * 60 * 60 * 1000).toISOString();
 	const rows = db

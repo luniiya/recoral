@@ -3,6 +3,7 @@ import { api } from './api.svelte';
 import { bootLog } from './bootLog';
 import { readLocalCache, writeLocalCache } from './localCache';
 import { isNativePlatform } from './platform';
+import { untrack } from 'svelte';
 
 // Cached alongside the token so a native app opened with no network at all
 // (local-first mobile's whole point) starts out logged in with last-known
@@ -40,10 +41,27 @@ async function refresh() {
 	// the comment on `loading`'s declaration above. A background reconcile
 	// (there's already a user shown) must never flip this back to true, or
 	// every refresh would blank the whole app again.
-	const hadUser = user !== null;
+	//
+	// untrack() here matters a lot more than it looks: this read runs
+	// synchronously (before the first await below), so without it, whatever
+	// effect *called* refresh() (the root layout's, see +layout.svelte)
+	// implicitly picks up `user` as one of its own reactive dependencies,
+	// even though it's read inside a different function/file entirely,
+	// Svelte's dependency tracking is based on the synchronous call stack,
+	// not lexical scope. Since every refresh() call reassigns `user` to a
+	// brand-new object (setUser() below, from a fresh res.json() each time),
+	// that "accidental" dependency made the calling effect re-run on every
+	// single refresh, which called refresh() again, forever, confirmed via a
+	// real capture: 118 GET /api/auth/me calls in a few seconds from one
+	// page load, a genuine self-inflicted request storm against the server.
+	const hadUser = untrack(() => user !== null);
 	if (!hadUser) loading = true;
 	const startedAt = Date.now();
-	bootLog('auth.refresh: start, baseUrl =', JSON.stringify(api.baseUrl) || '(same-origin)');
+	// Same untrack() reasoning as `hadUser` above, api.baseUrl is also
+	// $state-backed, and this argument gets evaluated (a synchronous read)
+	// before bootLog() is even called, regardless of whether bootLog's own
+	// body ends up logging anything.
+	bootLog('auth.refresh: start, baseUrl =', untrack(() => JSON.stringify(api.baseUrl)) || '(same-origin)');
 
 	// Diagnostic only, see bootLog.ts: distinguishes "device has no network at
 	// all" from "device is online but the server specifically isn't

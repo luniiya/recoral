@@ -156,11 +156,24 @@
 		// See vimZone.svelte.ts: gates the j/k/l/h list-navigation shortcuts
 		// (and drives their little NORMAL/INSERT status indicator) so they
 		// never fire while actually typing into a title/description/search.
+		//
+		// setTimeout(..., 0), not a direct call: a focusin/focusout can fire
+		// as a *side effect* of a DOM node being removed/replaced mid-render
+		// (e.g. a button swapping out while Svelte is still applying that
+		// same update), which lands this state write inside Svelte's own
+		// currently-running flush instead of as a clean top-level event.
+		// Confirmed via a real capture: a genuine
+		// `Uncaught Error: state_unsafe_mutation` originating from setTyping,
+		// with `flush` itself on the call stack. Deferring to a fresh
+		// macrotask guarantees this always runs after that flush has fully
+		// settled, breaking the re-entrancy without changing the behavior
+		// (still effectively instant from a user's perspective).
 		function onFocusIn(event: FocusEvent) {
-			vimZone.setTyping(!!(event.target as HTMLElement | null)?.closest('input, textarea, [contenteditable]'));
+			const isTyping = !!(event.target as HTMLElement | null)?.closest('input, textarea, [contenteditable]');
+			setTimeout(() => vimZone.setTyping(isTyping), 0);
 		}
 		function onFocusOut() {
-			vimZone.setTyping(false);
+			setTimeout(() => vimZone.setTyping(false), 0);
 		}
 		window.addEventListener('focusin', onFocusIn);
 		window.addEventListener('focusout', onFocusOut);

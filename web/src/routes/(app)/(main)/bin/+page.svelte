@@ -1,9 +1,10 @@
 <script lang="ts">
 	import BinRecordingCard from '$lib/components/BinRecordingCard.svelte';
 	import BinTagGroupCard from '$lib/components/BinTagGroupCard.svelte';
-	import Dialog from '$lib/components/Dialog.svelte';
+	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import EmptyState from '$lib/components/EmptyState.svelte';
 	import FloatingVolumeControl from '$lib/components/FloatingVolumeControl.svelte';
+	import { api } from '$lib/api.svelte';
 	import { pageSelectStore } from '$lib/pageSelect.svelte';
 	import { recordingsStore } from '$lib/recordings.svelte';
 	import { rangeBetween } from '$lib/selection.svelte';
@@ -94,6 +95,20 @@
 
 	let pendingDelete = $state<{ label: string; onconfirm: () => void } | null>(null);
 	let confirmingBulkDelete = $state(false);
+	let confirmingEmptyBin = $state(false);
+
+	// One request, server-side batch (server/src/recordings.ts's
+	// emptyTrashedRecordings + tags.ts's emptyTrashedTags, both a single DB
+	// transaction each), not the client looping deleteForever() once per
+	// item like bulkDeleteForever above still does: a bin with hundreds of
+	// items meant hundreds of individual DELETE requests hammering the
+	// server one at a time, confirmed a real problem via a live capture.
+	async function emptyBin() {
+		await api.fetch('/api/bin', { method: 'DELETE', credentials: 'include' });
+		confirmingEmptyBin = false;
+		clearSelection();
+		await Promise.all([recordingsStore.load(), tagsStore.load()]);
+	}
 
 	onMount(() => {
 		function onKeydown(e: KeyboardEvent) {
@@ -144,9 +159,19 @@
 				</button>
 			</div>
 		{:else}
-			<div class="mb-6">
-				<h1 class="mb-2 text-lg font-semibold text-gray-900 dark:text-gray-100">Bin</h1>
-				<p class="text-sm text-gray-500 dark:text-gray-400">Items here are deleted for good after 30 days.</p>
+			<div class="mb-6 flex items-start justify-between gap-3">
+				<div>
+					<h1 class="mb-2 text-lg font-semibold text-gray-900 dark:text-gray-100">Bin</h1>
+					<p class="text-sm text-gray-500 dark:text-gray-400">Items here are deleted for good after 30 days.</p>
+				</div>
+				{#if items.length > 0}
+					<button
+						class="shrink-0 rounded-full px-3.5 py-1.5 text-sm font-medium text-red-600 ring-1 ring-red-200 transition hover:bg-red-50 dark:text-red-400 dark:ring-red-500/30 dark:hover:bg-red-500/10"
+						onclick={() => (confirmingEmptyBin = true)}
+					>
+						Empty Bin
+					</button>
+				{/if}
 			</div>
 		{/if}
 
@@ -198,49 +223,35 @@
 {/if}
 
 {#if pendingDelete}
-	<Dialog onclose={() => (pendingDelete = null)}>
-		<p class="mb-4 text-sm text-gray-900 dark:text-gray-100">
-			Permanently delete <span class="font-semibold">{pendingDelete.label}</span>? This can't be undone.
-		</p>
-		<div class="flex gap-2">
-			<button
-				class="flex-1 rounded-full px-4 py-2 text-sm font-medium text-gray-600 ring-1 ring-gray-200 transition hover:bg-gray-100 dark:text-gray-300 dark:ring-white/10 dark:hover:bg-white/5"
-				onclick={() => (pendingDelete = null)}
-			>
-				Cancel
-			</button>
-			<button
-				class="flex-1 rounded-full bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700"
-				onclick={() => {
-					pendingDelete?.onconfirm();
-					pendingDelete = null;
-				}}
-			>
-				Delete
-			</button>
-		</div>
-	</Dialog>
+	<ConfirmDialog
+		confirmLabel="Delete"
+		danger
+		onconfirm={() => {
+			pendingDelete?.onconfirm();
+			pendingDelete = null;
+		}}
+		onclose={() => (pendingDelete = null)}
+	>
+		{#snippet message()}
+			Permanently delete <span class="font-semibold">{pendingDelete?.label}</span>? This can't be undone.
+		{/snippet}
+	</ConfirmDialog>
 {/if}
 
 {#if confirmingBulkDelete}
-	<Dialog onclose={() => (confirmingBulkDelete = false)}>
-		<p class="mb-4 text-sm text-gray-900 dark:text-gray-100">
+	<ConfirmDialog confirmLabel="Delete" danger onconfirm={bulkDeleteForever} onclose={() => (confirmingBulkDelete = false)}>
+		{#snippet message()}
 			Permanently delete <span class="font-semibold">{selectedKeys.length}</span>
 			{selectedKeys.length === 1 ? 'item' : 'items'}? This can't be undone.
-		</p>
-		<div class="flex gap-2">
-			<button
-				class="flex-1 rounded-full px-4 py-2 text-sm font-medium text-gray-600 ring-1 ring-gray-200 transition hover:bg-gray-100 dark:text-gray-300 dark:ring-white/10 dark:hover:bg-white/5"
-				onclick={() => (confirmingBulkDelete = false)}
-			>
-				Cancel
-			</button>
-			<button
-				class="flex-1 rounded-full bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700"
-				onclick={bulkDeleteForever}
-			>
-				Delete
-			</button>
-		</div>
-	</Dialog>
+		{/snippet}
+	</ConfirmDialog>
+{/if}
+
+{#if confirmingEmptyBin}
+	<ConfirmDialog confirmLabel="Empty Bin" danger onconfirm={emptyBin} onclose={() => (confirmingEmptyBin = false)}>
+		{#snippet message()}
+			Permanently delete all <span class="font-semibold">{items.length}</span>
+			{items.length === 1 ? 'item' : 'items'} in the bin? This can't be undone.
+		{/snippet}
+	</ConfirmDialog>
 {/if}

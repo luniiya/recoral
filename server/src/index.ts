@@ -2,6 +2,7 @@ import { APP_VERSION, isValidUsername, type TranscriptionModel } from "@recoral/
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Readable } from "node:stream";
+import { getBulkJob, startBulkJob } from "./bulkJobs";
 import {
 	adminCreateUser,
 	adminUpdateUser,
@@ -27,6 +28,7 @@ import {
 	deleteRecording,
 	detachTag as detachRecordingTag,
 	DuplicateError,
+	emptyTrashedRecordings,
 	getAudioFile,
 	getRecording,
 	globalStorageBytes,
@@ -42,7 +44,7 @@ import { getRecoralImportJob, startRecoralImport } from "./recoralImport";
 import { subscribe as subscribeToEvents } from "./realtime";
 import { getSettings, updateSettings } from "./settings";
 import { getImportJob, startTakeoutImport } from "./takeoutImport";
-import { createTag, deleteTagForever, listTags, purgeExpiredTagTrash, updateTag } from "./tags";
+import { createTag, deleteTagForever, emptyTrashedTags, listTags, purgeExpiredTagTrash, updateTag } from "./tags";
 import { enqueueAllUntranscribed, enqueueTranscription, requeueStuckTranscriptions } from "./transcription";
 
 const webDir = new URL("../../web/build/", import.meta.url);
@@ -619,6 +621,97 @@ const server = Bun.serve({
 					const user = requireUser(req);
 					deleteRecording(user.id, req.params.id);
 					return new Response(null, { status: 204 });
+				} catch (err) {
+					return authErrorResponse(err) ?? new Response(null, { status: 401 });
+				}
+			}
+		},
+
+		// "Empty Bin": permanently deletes every trashed recording and tag in
+		// one request, not one DELETE per item from the client (see
+		// emptyTrashedRecordings/emptyTrashedTags, both batched into a single
+		// DB transaction each).
+		"/api/bin": {
+			DELETE: (req) => {
+				try {
+					const user = requireUser(req);
+					emptyTrashedRecordings(user.id);
+					emptyTrashedTags(user.id);
+					return new Response(null, { status: 204 });
+				} catch (err) {
+					return authErrorResponse(err) ?? new Response(null, { status: 401 });
+				}
+			}
+		},
+
+		// Multi-select bulk operations (trash/restore/archive/favorite, add-tag,
+		// delete-forever): one request starts a background job over however many
+		// ids were selected, the client polls /api/jobs/:id for real progress
+		// instead of firing one request per recording itself, see bulkJobs.ts.
+		// Unlike Empty Bin above, these are genuinely gradual (real DB writes,
+		// sometimes real file I/O), worth reporting real progress for, at real
+		// scale (hundreds to thousands of selected recordings).
+		"/api/recordings/bulk": {
+			POST: async (req) => {
+				try {
+					const user = requireUser(req);
+					const body = await req.json();
+					const ids = Array.isArray(body.ids) ? (body.ids as string[]) : [];
+					const updates: { trashed?: boolean; archived?: boolean; favorite?: boolean } = {};
+					if (typeof body.trashed === "boolean") updates.trashed = body.trashed;
+					if (typeof body.archived === "boolean") updates.archived = body.archived;
+					if (typeof body.favorite === "boolean") updates.favorite = body.favorite;
+					const job = startBulkJob(user.id, ids, (id) => void updateRecording(user.id, id, updates));
+					return Response.json({ jobId: job.id }, { status: 202 });
+				} catch (err) {
+					return authErrorResponse(err) ?? new Response(null, { status: 401 });
+				}
+			}
+		},
+
+		"/api/recordings/bulk-delete": {
+			POST: async (req) => {
+				try {
+					const user = requireUser(req);
+					const body = await req.json();
+					const ids = Array.isArray(body.ids) ? (body.ids as string[]) : [];
+					const job = startBulkJob(user.id, ids, (id) => deleteRecording(user.id, id));
+					return Response.json({ jobId: job.id }, { status: 202 });
+				} catch (err) {
+					return authErrorResponse(err) ?? new Response(null, { status: 401 });
+				}
+			}
+		},
+
+		// Ancestor tag ids are resolved client-side (tagPath.ts's
+		// ancestorTagIds(), the same hierarchy-from-name parsing the rest of the
+		// app already relies on) and sent as one flat tagIds list here, the same
+		// list applies to every selected recording, computing it once client-
+		// side beats re-deriving it per recording server-side for no benefit.
+		"/api/recordings/bulk-tag": {
+			POST: async (req) => {
+				try {
+					const user = requireUser(req);
+					const body = await req.json();
+					const ids = Array.isArray(body.ids) ? (body.ids as string[]) : [];
+					const tagIds = Array.isArray(body.tagIds) ? (body.tagIds as string[]) : [];
+					const job = startBulkJob(user.id, ids, (id) => {
+						for (const tagId of tagIds) attachRecordingTag(user.id, id, tagId);
+					});
+					return Response.json({ jobId: job.id }, { status: 202 });
+				} catch (err) {
+					return authErrorResponse(err) ?? new Response(null, { status: 401 });
+				}
+			}
+		},
+
+		"/api/jobs/:id": {
+			GET: (req) => {
+				try {
+					const user = requireUser(req);
+					const job = getBulkJob(user.id, req.params.id);
+					if (!job) return new Response(null, { status: 404 });
+					return Response.json(job);
 				} catch (err) {
 					return authErrorResponse(err) ?? new Response(null, { status: 401 });
 				}
