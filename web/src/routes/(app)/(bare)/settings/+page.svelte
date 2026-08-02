@@ -7,6 +7,7 @@
 	import Dialog from '$lib/components/Dialog.svelte';
 	import PasswordInput from '$lib/components/PasswordInput.svelte';
 	import PasswordMatchHint from '$lib/components/PasswordMatchHint.svelte';
+	import PasswordStrengthHint from '$lib/components/PasswordStrengthHint.svelte';
 	import { api } from '$lib/api.svelte';
 	import { readAsDataUrl } from '$lib/file';
 	import { onMount } from 'svelte';
@@ -256,6 +257,7 @@
 						<label class="flex flex-col gap-1.5">
 							<span class="form-label">New password</span>
 							<PasswordInput bind:value={newPassword} minlength={8} autocomplete="new-password" />
+							<PasswordStrengthHint password={newPassword} requireStrong={requireStrongPasswords} />
 						</label>
 
 						<label class="flex flex-col gap-1.5">

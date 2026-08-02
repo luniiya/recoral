@@ -6,6 +6,7 @@
 	import Dialog from '$lib/components/Dialog.svelte';
 	import PasswordInput from '$lib/components/PasswordInput.svelte';
 	import PasswordMatchHint from '$lib/components/PasswordMatchHint.svelte';
+	import PasswordStrengthHint from '$lib/components/PasswordStrengthHint.svelte';
 	import Toggle from '$lib/components/Toggle.svelte';
 	import UserDetail from '$lib/components/UserDetail.svelte';
 	import { api } from '$lib/api.svelte';
@@ -193,6 +194,7 @@
 						inputClass="w-full rounded-lg bg-white px-3 py-2 text-sm text-gray-900 outline-none ring-1 ring-gray-200 focus:ring-2 focus:ring-accent-500 dark:bg-neutral-800 dark:text-gray-100 dark:ring-white/10"
 					/>
 				</div>
+				<PasswordStrengthHint password={newPassword} requireStrong={settings?.requireStrongPasswords ?? true} />
 				<PasswordMatchHint password={newPassword} confirm={newConfirmPassword} />
 				<label class="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
 					<Toggle checked={newIsAdmin} onchange={(checked) => (newIsAdmin = checked)} label="Make admin" />

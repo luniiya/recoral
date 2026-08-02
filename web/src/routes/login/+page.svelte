@@ -9,6 +9,7 @@
 	import LogoWordmark from '$lib/components/LogoWordmark.svelte';
 	import PasswordInput from '$lib/components/PasswordInput.svelte';
 	import PasswordMatchHint from '$lib/components/PasswordMatchHint.svelte';
+	import PasswordStrengthHint from '$lib/components/PasswordStrengthHint.svelte';
 	import ThemeToggle from '$lib/components/ThemeToggle.svelte';
 	import { onboarding } from '$lib/onboarding.svelte';
 	import { isNativePlatform } from '$lib/platform';
@@ -220,6 +221,9 @@
 					minlength={needsSetup || mode === 'register' ? 8 : undefined}
 					autocomplete={needsSetup || mode === 'register' ? 'new-password' : 'current-password'}
 				/>
+				{#if needsSetup || mode === 'register'}
+					<PasswordStrengthHint {password} requireStrong={requireStrongPasswords} />
+				{/if}
 			</label>
 
 			{#if needsSetup || mode === 'register'}

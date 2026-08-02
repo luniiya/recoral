@@ -5,6 +5,7 @@
 	import OverflowMenu from './OverflowMenu.svelte';
 	import PasswordInput from './PasswordInput.svelte';
 	import PasswordMatchHint from './PasswordMatchHint.svelte';
+	import PasswordStrengthHint from './PasswordStrengthHint.svelte';
 	import StatCard from './StatCard.svelte';
 	import Toggle from './Toggle.svelte';
 	import { slide } from 'svelte/transition';
@@ -184,6 +185,7 @@
 				<p class="text-sm font-semibold text-gray-900 dark:text-gray-100">Change password</p>
 				<PasswordInput placeholder="New password" bind:value={resetPassword} minlength={8} />
 				<PasswordInput placeholder="Confirm new password" bind:value={resetConfirmPassword} minlength={8} />
+				<PasswordStrengthHint password={resetPassword} requireStrong={settings.requireStrongPasswords} />
 				<PasswordMatchHint password={resetPassword} confirm={resetConfirmPassword} />
 				{#if resetPasswordError}
 					<p class="text-sm text-red-600 dark:text-red-400">{resetPasswordError}</p>
