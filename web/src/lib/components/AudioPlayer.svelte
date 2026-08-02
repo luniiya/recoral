@@ -213,54 +213,22 @@
 		return () => clearInterval(interval);
 	});
 
+	// Only covers this component actually unmounting (closing the detail
+	// panel while the app stays open), not the app backgrounding or closing.
+	// PlaybackService is a real foreground Service (see nativePlayback.ts):
+	// once started it keeps running and showing its notification completely
+	// independently of the Activity/WebView, by design, that's what makes
+	// background playback with working notification controls possible at
+	// all. Tearing it down on a plain minimize (Capacitor's appStateChange
+	// firing isActive:false) was a real bug tried here before: that event
+	// fires on every minimize, not just a real close, so it killed
+	// background playback entirely instead of just cleaning up after a
+	// genuine close. The real "app closed" signal (task swiped from
+	// Recents, as opposed to just minimized) only exists natively, via
+	// Service.onTaskRemoved(), see PlaybackService.java.
 	onDestroy(() => {
 		removeNativeListener?.();
 		if (nativeSessionStarted) void Playback.stop();
-	});
-
-	// PlaybackService is a real foreground Service (see nativePlayback.ts):
-	// once started it keeps running and showing its notification completely
-	// independently of the Activity/WebView, onDestroy above only covers this
-	// component actually unmounting (closing the detail panel), never the
-	// whole app closing/backgrounding, which doesn't unmount anything. Without
-	// this, closing the app left the notification behind forever, showing
-	// play/pause controls with nothing left alive to actually act on them.
-	// (clearMediaSession()/appStateChange in the root layout does NOT cover
-	// this despite looking like it should: the plain Web Media Session API
-	// never surfaces a notification on Android at all in a bare WebView, this
-	// native service is the only thing actually showing one, confirmed via
-	// dumpsys notification, see nativePlayback.ts.)
-	$effect(() => {
-		if (!nativePlaybackSupported()) return;
-		let removeAppStateListener: (() => void) | undefined;
-		let cancelled = false;
-		import('@capacitor/app').then(({ App }) => {
-			if (cancelled) return;
-			App.addListener('appStateChange', ({ isActive }) => {
-				if (isActive || !nativeSessionStarted) return;
-				// Pausing (not just tearing down the native session) matters here:
-				// `playing` staying true while nativeSessionStarted flips to false
-				// is exactly the condition the start effect above (line ~153)
-				// treats as "fresh start, go create the session", so leaving the
-				// audio element itself playing made the notification resurrect
-				// itself immediately after this very call tore it down, confirmed
-				// via a real device log: stop() followed a couple seconds later by
-				// another start() with playback still advancing, matching a real
-				// report that only force-stopping the whole app actually got rid
-				// of it. Pausing first makes that guard's `!playing` check true,
-				// so the effect doesn't re-fire.
-				if (audioEl) fadeOutAndPause(audioEl);
-				nativeSessionStarted = false;
-				void Playback.stop();
-			}).then((handle) => {
-				if (cancelled) handle.remove();
-				else removeAppStateListener = () => handle.remove();
-			});
-		});
-		return () => {
-			cancelled = true;
-			removeAppStateListener?.();
-		};
 	});
 
 	$effect(() => {

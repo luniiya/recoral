@@ -345,4 +345,19 @@ public class PlaybackService extends Service {
         }
         super.onDestroy();
     }
+
+    // The real "app closed" signal: fires only when the whole task is swiped
+    // away from Recents, unlike Capacitor's appStateChange (isActive:false),
+    // which fires on every plain minimize too (tried that first, it killed
+    // background playback entirely instead of just cleaning up after an
+    // actual close, see AudioPlayer.svelte). Deliberately does NOT mirror
+    // RecorderService, which must keep recording after this same event, this
+    // service's whole job is showing controls for something the user can
+    // still see and act on, which stops being true the moment the task itself
+    // is gone.
+    @Override
+    public void onTaskRemoved(Intent rootIntent) {
+        stop();
+        super.onTaskRemoved(rootIntent);
+    }
 }
