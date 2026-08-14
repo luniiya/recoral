@@ -1,4 +1,4 @@
-export const APP_VERSION = "0.3.0";
+export const APP_VERSION = "0.3.1";
 
 // Letters/digits/underscore/dot/hyphen, 3-32 chars: matches the pattern/
 // minlength/maxlength already live on the signup form's username input, just

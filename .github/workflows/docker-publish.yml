@@ -20,6 +20,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Without QEMU registered, Buildx can only produce images for the
+      # runner's own architecture (linux/amd64, GitHub's runners are all
+      # x86_64), so nothing published ever got an arm64 entry in the
+      # manifest list, confirmed by a real Raspberry Pi's `docker compose
+      # up` failing outright with "no matching manifest for
+      # linux/arm64/v8 ... not found". This registers emulated
+      # arm64 execution so the `platforms:` line below can actually
+      # cross-build for it.
+      - uses: docker/setup-qemu-action@v3
+
       - uses: docker/setup-buildx-action@v3
 
       - uses: docker/login-action@v3
@@ -36,6 +46,7 @@ jobs:
         with:
           context: .
           push: true
+          platforms: linux/amd64,linux/arm64
           cache-from: type=gha,scope=server
           cache-to: type=gha,mode=max,scope=server
           tags: |
@@ -49,6 +60,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # See the server job's identical step above: no QEMU means no arm64
+      # manifest at all, which is exactly what broke a real Raspberry Pi
+      # install (this is the other image its docker-compose.yml pulls by
+      # default alongside recoral:latest).
+      - uses: docker/setup-qemu-action@v3
+
       - uses: docker/setup-buildx-action@v3
 
       - uses: docker/login-action@v3
@@ -60,11 +77,15 @@ jobs:
       # Cached: the slow part here is compiling whisper.cpp from source
       # (apt deps + git clone + cmake build), not something to redo from
       # scratch on every release if nothing upstream actually changed.
+      # Cross-compiling that same source for arm64 under QEMU emulation is
+      # meaningfully slower than the amd64 build alone, expect this job to
+      # take noticeably longer than before, not a sign anything's wrong.
       - uses: docker/build-push-action@v6
         with:
           context: ./transcription
           file: ./transcription/Dockerfile
           push: true
+          platforms: linux/amd64,linux/arm64
           cache-from: type=gha,scope=transcription-cpu
           cache-to: type=gha,mode=max,scope=transcription-cpu
           tags: |
