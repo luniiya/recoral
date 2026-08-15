@@ -32,6 +32,18 @@ ENV PATH="/root/.bun/bin:${PATH}"
 WORKDIR /app
 RUN git clone --depth 1 https://github.com/ggml-org/whisper.cpp.git whisper.cpp
 WORKDIR /app/whisper.cpp
+# ggml's HIP vendor shim (ggml-cuda/vendors/hip.h) unconditionally uses
+# __hip_fp8_e4m3 whenever HIP_VERSION >= 6.2, assuming every target that new
+# has real FP8 hardware support. It doesn't: AMD's own hip_fp8.h only
+# defines that class for gfx942/gfx1200/gfx1201/gfx950 (CDNA3, RDNA4), which
+# excludes gfx1100/gfx1101 (RDNA3, our actual AMDGPU_TARGETS above) even on
+# the newest ROCm. Compiling for those targets hits a hard "unknown type
+# name '__hip_fp8_e4m3'" with no build flag to opt out, so this patches
+# ggml's check to match AMD's own gating instead of blindly trusting the
+# HIP version.
+RUN sed -i \
+	's/#if HIP_VERSION >= 60200000/#if HIP_VERSION >= 60200000 \&\& (defined(__gfx942__) || defined(__gfx1200__) || defined(__gfx1201__) || defined(__gfx950__))/' \
+	ggml/src/ggml-cuda/vendors/hip.h
 RUN cmake -B build -DGGML_HIP=1 -DAMDGPU_TARGETS="${AMDGPU_TARGETS}" -DCMAKE_BUILD_TYPE=Release \
 	&& cmake --build build --config Release -j"$(nproc)"
 
