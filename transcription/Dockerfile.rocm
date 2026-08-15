@@ -13,13 +13,16 @@ FROM rocm/dev-ubuntu-22.04:6.2
 
 ARG AMDGPU_TARGETS="gfx1100;gfx1101"
 
-# hipblas-dev: ggml's HIP backend `find_package(hipblas)`s at configure time
-# (ggml-hip/CMakeLists.txt), but rocm/dev-ubuntu-22.04's "dev" image doesn't
-# actually bundle hipblas's CMake config despite the name, so without it
-# configure fails outright before any compilation even starts.
+# hipblas-dev/rocblas-dev: ggml's HIP backend `find_package(hipblas)`s and
+# `find_package(rocblas)`s at configure time (ggml-hip/CMakeLists.txt), but
+# rocm/dev-ubuntu-22.04's "dev" image doesn't actually bundle either
+# package's CMake config despite the name, so without them configure fails
+# outright before any compilation even starts. hipblas-dev alone got past
+# the hipblas check but then hit the same missing-package error for
+# rocblas, hipblas's own dependency.
 RUN apt-get update && apt-get install -y --no-install-recommends \
 		git cmake build-essential ffmpeg ca-certificates curl unzip \
-		hipblas-dev \
+		hipblas-dev rocblas-dev \
 	&& rm -rf /var/lib/apt/lists/*
 
 # Bun runs the thin HTTP wrapper (server.ts) around the whisper-cli binary.
