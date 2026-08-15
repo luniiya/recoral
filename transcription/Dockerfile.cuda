@@ -19,7 +19,16 @@ ENV PATH="/root/.bun/bin:${PATH}"
 WORKDIR /app
 RUN git clone --depth 1 https://github.com/ggml-org/whisper.cpp.git whisper.cpp
 WORKDIR /app/whisper.cpp
-RUN cmake -B build -DGGML_CUDA=1 -DCMAKE_BUILD_TYPE=Release \
+# GGML_CUDA_NO_VMM=1: ggml's CUDA backend links against libcuda (the driver
+# API, for its VMM pool allocator) by default. This image has no real GPU or
+# driver at build time, only the linker stub CUDA ships for exactly this
+# case, but on this base image that stub doesn't resolve every VMM symbol
+# ggml needs (cuMemCreate, cuMemAddressReserve, ...), so the final link fails
+# with "undefined reference" instead of falling back cleanly. VMM is a pool-
+# allocator optimization, not required for correctness, so disabling it here
+# sidesteps the link failure; the real driver is still what runs the built
+# binary at container-run time via the NVIDIA Container Toolkit.
+RUN cmake -B build -DGGML_CUDA=1 -DGGML_CUDA_NO_VMM=1 -DCMAKE_BUILD_TYPE=Release \
 	&& cmake --build build --config Release -j"$(nproc)"
 
 WORKDIR /app
